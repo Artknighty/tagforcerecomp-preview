@@ -4,6 +4,7 @@
  * gen/modulos.tsv (nome <tab> caminho no disco). Sem TF_JIT ou sem libtcc.dll o runtime usa os modulos ligados estaticamente (build normal). */
 #include "hle.h"
 #include "util.h"
+#include "gameid.h"
 #include <stdio.h>
 #include <string.h>
 #include <windows.h>
@@ -46,6 +47,7 @@ static void tcc_error(void *, const char *m) { fprintf(stderr, "[jit] %s\n", m);
 
 static void jit_selftest(void);
 bool jit_enabled(void) { return g_jit_on; }
+bool jit_generic(void) { return g_gen_nmodules == 0; }
 #include "hooks.h"
 void hook_skip_next(uint32_t addr); extern uint32_t g_hook_cur;
 static std::vector<std::pair<uint32_t, void (*)(CPU *)>> g_gccfn;
@@ -64,8 +66,8 @@ static void gccfn_install(void) {
     fclose(f); fprintf(stderr, "[jit] %d funcoes redirecionadas para a versao do gcc\n", n);
 }
 bool jit_init(void) {
-    const char *e = getenv("TF_JIT"); if (!e || !*e || *e == '0') return false;
-    std::wstring tccdir = exe_dir() + L"tcc\\", gen = exe_dir();   /* libtcc.dll, include/ e lib/ do TinyCC em tcc/; modulos .c em gen/ (aqui: ao lado do .exe) */
+    const char *e = getenv("TF_JIT"); if (!jit_generic() && (!e || !*e || *e == '0')) return false;   /* the release build always compiles the game code at start */
+    std::wstring tccdir = exe_dir() + L"tcc\\", gen = jit_generic() ? code_dir(game_id_built()) : exe_dir();   /* libtcc.dll, include/ e lib/ do TinyCC em tcc/; modulos .c em gen/ (aqui: ao lado do .exe) */
     if (const wchar_t *d = _wgetenv(L"TF_JIT_TCC")) tccdir = d;
     if (const wchar_t *g = _wgetenv(L"TF_JIT_GEN")) gen = g;
     if (!tccdir.empty() && tccdir.back() != L'\\') tccdir += L'\\';

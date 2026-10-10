@@ -5,9 +5,10 @@ experimental, what is missing, and what may change. If something is not listed h
 
 ## What you get (and do not get)
 
-- **Source code only.** There are no prebuilt binaries, and no game data of any kind. You build `run.exe` on your own machine from
-  your own legitimate copy of the game (see the [README](../README.md#build-and-play)). The translated C code is generated locally and
-  never distributed.
+- **A ready-to-run zip (Windows) and the source code.** Extract the zip, run `TagForceRecomp.exe`, pick your own ISO: nothing to
+  install (see the [README](../README.md#download-and-play)). The zip has **no game data and no game code**: the game's code is
+  translated from your copy on your machine the first time and compiled in memory at every start. Developers can also build
+  everything from source ([README](../README.md#build-from-source-developers)).
 - **A working PC port of the game, as far as it has been played.** The whole game has been played through the main modes (see
   [What works](../README.md#what-works)), but by a very small group of testers.
 - **A mod platform.** Behavior plugins ([`mods_sdk/tfmod.h`](../mods_sdk/tfmod.h)), file/texture/movie replacement and the example
@@ -44,9 +45,13 @@ experimental, what is missing, and what may change. If something is not listed h
 
 ## Known limitations of this preview
 
-- **Build needs a developer toolchain** (MSYS2 UCRT64, Python with Pillow and numpy, Git Bash) and takes a few minutes. The
+- **The release zip is large (~50 MB)** because it carries the FFmpeg DLLs of an MSYS2 build with many optional codecs; a slimmer
+  FFmpeg is on the roadmap. Only the European release (ULES-00600) is supported by the zip; other versions need a source build
+  ([VERSIONS.md](VERSIONS.md)). First-run preparation takes a few minutes; later starts take a few seconds (the translated code is
+  compiled in memory).
+- **Building from source needs a developer toolchain** (MSYS2 UCRT64, Python with Pillow and numpy, Git Bash). The
   one-click clean-machine test in [`tools/teste_ambiente_limpo`](../tools/teste_ambiente_limpo/README.md) exists but has **not
-  been run in a public CI**, so instructions may have gaps. Please report them.
+  been run in a public CI**, so those instructions may have gaps. Please report them.
 - **No automated test suite in CI.** Regression checking is done with recorded sessions that you generate by playing
   ([TESTING.md](TESTING.md)); the scripts that refer to the maintainers' own sessions need you to substitute yours.
 - **Research tools** (`tools/decks_*.py`, `tools/ia_*`, `tools/capturas_*`, parts of `tools/ia_treino`) expect a local module dump and

@@ -15,6 +15,10 @@ typedef struct {
 extern "C" const GenModule g_gen_modules[]; extern "C" const unsigned g_gen_nmodules;
 bool jit_init(void);   /* TF_JIT=1: compila os gen/ *.c em memoria com o TinyCC em vez de usar os modulos ligados (jit.cpp) */
 bool jit_enabled(void);
+bool jit_generic(void);   /* release build: no game code is linked in; it is translated from the installed game on first run and compiled in memory */
+std::wstring code_dir(const std::string &id);   /* where the translated C code of this game version lives (prepare.cpp) */
+bool code_ready(const std::string &id);
+bool code_prepare(const std::string &id, const std::wstring &data, void (*cb)(double, const wchar_t *, void *), void *ctx, std::wstring *err);
 const GenModule *gen_modules(unsigned *n);   /* tabela de modulos em uso (JIT ou estatica) */
 
 void hle_register(const char *name, HleFn fn);

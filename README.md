@@ -58,7 +58,25 @@ Texture, video and button packs (HD menus, HD opening movie, EU cards, Xbox butt
 The plugin API can read and write PSP memory and registers, call game functions, show message boxes over the screen and register
 slider settings in the menu. See [`docs/MODS.md`](docs/MODS.md) to build your own.
 
-## Build and play
+## Download and play
+
+1. Download `TagForceRecomp-<version>-win64.zip` from the [Releases](../../releases) page and extract it anywhere (not inside `Program Files`).
+2. Run `TagForceRecomp.exe`, click **Select ISO...** and pick **your own** copy of the game (European release, ULES-00600).
+3. Click **Install and play**. The first run copies the game files and translates the game's code on your machine (a few minutes,
+   only once; the ISO is not needed afterwards). From then on just click **Play**.
+
+Nothing needs to be installed: the zip carries the runtime, FFmpeg, a small C compiler (TinyCC) and the translator. It contains **no
+game data and no game code**: the game's code is translated from your copy on your computer (`gen/`) and compiled in memory each time
+the game starts (about 4 s).
+
+**Controls.** Keyboard: arrow keys; Z = ✕, X = ○, A = □, S = △; Q/W = L/R; Enter = START; Shift = SELECT. XInput controllers work too.
+F11 / Alt+Enter: fullscreen · F3: FPS · F9: graphics diagnostic capture on/off · F8: "this looks wrong" (asks for a note, then saves full-size screenshots and the last ~1.5 s of frames; Esc or an empty note discards it) · F7 / L3+R3: "the CPU made a mistake" (note + report) ·
+Esc: leave fullscreen / asks before closing. The **Help > Controls** menu lists the PC keyboard and mouse layout.
+
+Saves live in `ms0/` next to the executable. Each run writes a log, the key presses and a copy of the save to `logs/`; any session can be
+replayed with `tools/replay.sh` (developers).
+
+## Build from source (developers)
 
 Requirements: Windows 10/11, [MSYS2](https://www.msys2.org/) UCRT64 (`gcc`, `g++`, `windres`, `glslc`, FFmpeg and Vulkan headers),
 Python 3 with Pillow and numpy, Git Bash. **No Ghidra or any decompiler is needed.**
@@ -66,6 +84,7 @@ Python 3 with Pillow and numpy, Git Bash. **No Ghidra or any decompiler is neede
 ```sh
 sh tools/recomp_tudo.sh "D:/path/to/Tag Force.iso"   # first time: installs the data, translates the modules (Allegrex -> C) and builds (~2 min)
 sh tools/build_run.sh                                 # afterwards: incremental rebuild
+python tools/package_release.py                       # builds the release zip described above (gen/release/)
 ```
 
 ```powershell
@@ -76,13 +95,6 @@ To check that the documented build works on a **clean Windows**, there is a one-
 
 `run.exe` can also install by itself (`run.exe --install <iso>`) and verify the copy (`--verify <iso>`). What the project
 translates is the code **of your copy**, on your machine; none of it is distributed.
-
-**Controls.** Keyboard: arrow keys; Z = ✕, X = ○, A = □, S = △; Q/W = L/R; Enter = START; Shift = SELECT. XInput controllers work too.
-F11 / Alt+Enter: fullscreen · F3: FPS · F9: graphics diagnostic capture on/off · F8: "this looks wrong" (asks for a note, then saves full-size screenshots and the last ~1.5 s of frames; Esc or an empty note discards it) · F7 / L3+R3: "the CPU made a mistake" (note + report) ·
-Esc: leave fullscreen / asks before closing.
-
-Saves live in `gen/ms0/`. Each run writes a log, the key presses and a copy of the save to `gen/logs/`; any session can be replayed
-with `tools/replay.sh` (handy for reporting and debugging bugs).
 
 ## How it works
 

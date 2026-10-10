@@ -15,6 +15,7 @@
 #include "util.h"
 #include "gameid.h"
 #include "menu.h"
+#include "hle.h"
 
 typedef void (*InstProgress)(double frac, const wchar_t *msg, void *ctx);
 bool iso_install(const wchar_t *iso, const wchar_t *dest, InstProgress cb, void *ctx, std::wstring *err);
@@ -46,7 +47,7 @@ static bool check_installed() { g_installed = file_exists(g_data + L"\\_disco.ts
 static void refresh() {
     bool busy = g_installing;
     EnableWindow(g_play, !busy && (g_installed || iso_ok())); EnableWindow(g_bpick, !busy); EnableWindow(g_bdirect, !busy && !g_installed && iso_ok());
-    ShowWindow(g_bdirect, g_installed ? SW_HIDE : SW_SHOW);
+    ShowWindow(g_bdirect, g_installed || jit_generic() ? SW_HIDE : SW_SHOW);
     SetWindowTextW(g_play, g_installed ? L"Play" : L"Install and play"); SetWindowTextW(g_bpick, g_installed ? L"Reinstall from ISO..." : L"Select ISO...");
     InvalidateRect(g_wnd, nullptr, FALSE); for (HWND b : {g_bpick, g_play, g_bquit, g_bdirect}) InvalidateRect(b, nullptr, FALSE);
 }
@@ -59,12 +60,19 @@ static bool pick(HWND owner) {
     if (!GetOpenFileNameW(&of)) return false;
     g_path = buf; WritePrivateProfileStringW(L"geral", L"iso", buf, ini_path().c_str()); update_data_dir(); check_installed(); return true;
 }
-static void start_install() {
+static void start_install(bool install = true) {
     if (g_thr.joinable()) g_thr.join();
     g_installing = true; g_inst_done = false; g_inst_ok = false; g_prog = 0; { std::lock_guard<std::mutex> lk(g_mu); g_err.clear(); g_msg = L"preparing..."; }
-    g_thr = std::thread([] {
-        std::wstring err;
-        bool ok = iso_install(g_path.c_str(), g_data.c_str(), [](double f, const wchar_t *m, void *) { g_prog = (int)(f * 1000); std::lock_guard<std::mutex> lk(g_mu); g_msg = m; }, nullptr, &err);
+    g_thr = std::thread([install] {
+        std::wstring err; bool ok = true; const bool gen = jit_generic();
+        auto prog = [](double f, const wchar_t *m, void *c) { double lo = c ? *(double *)c : 0, hi = c ? ((double *)c)[1] : 1; g_prog = (int)((lo + f * (hi - lo)) * 1000); std::lock_guard<std::mutex> lk(g_mu); g_msg = m; };
+        double inst[2] = {0, gen ? 0.4 : 1}, code[2] = {gen && install ? 0.4 : 0, 1};
+        if (install) ok = iso_install(g_path.c_str(), g_data.c_str(), prog, inst, &err);
+        if (ok && gen) {   /* the release has no game code: translate it from the installed files (a few minutes, only once) */
+            std::string id = game_id_dir(g_data); if (id.empty()) id = game_id_built();
+            game_id_set_built(id);
+            ok = code_prepare(id, g_data, prog, code, &err);
+        }
         { std::lock_guard<std::mutex> lk(g_mu); g_err = err; } g_inst_ok = ok; g_inst_done = true;
     });
     refresh();
@@ -135,7 +143,7 @@ static void paint(HWND h) {
         if (!err.empty()) { SetTextColor(dc, C_ERR); DrawTextW(dc, err.c_str(), -1, &w, DT_LEFT | DT_WORDBREAK); }
         else if (g_installed) { SetTextColor(dc, C_OK); DrawTextW(dc, L"\x2713 Ready to play \x2014 the ISO is no longer needed", -1, &w, DT_LEFT | DT_SINGLELINE | DT_VCENTER); }
         else if (!g_path.empty() && !iso_ok()) { SetTextColor(dc, C_WARN); DrawTextW(dc, L"File not found \x2014 choose the ISO again.", -1, &w, DT_LEFT | DT_SINGLELINE | DT_VCENTER); }
-        else if (iso_ok()) { SetTextColor(dc, C_DIM); DrawTextW(dc, L"Installation copies the game files to the jogo/ folder (about 760 MB).", -1, &w, DT_LEFT | DT_SINGLELINE | DT_VCENTER); }
+        else if (iso_ok()) { SetTextColor(dc, C_DIM); DrawTextW(dc, jit_generic() ? L"First run: copies the game files (about 760 MB) and prepares the game. A few minutes, only once." : L"Installation copies the game files to the jogo/ folder (about 760 MB).", -1, &w, DT_LEFT | DT_SINGLELINE | DT_VCENTER); }
     }
     SelectObject(dc, of);
     BitBlt(wdc, 0, 0, cr.right, cr.bottom, dc, 0, 0, SRCCOPY);
@@ -149,7 +157,7 @@ static LRESULT CALLBACK proc(HWND h, UINT m, WPARAM w, LPARAM l) {
         switch (LOWORD(w)) {
         case ID_PICK: if (pick(h)) { { std::lock_guard<std::mutex> lk(g_mu); g_err.clear(); } if (g_installed && iso_ok()) { if (tf_msgbox(h, L"Rebuild the jogo/ folder from this ISO? The files currently in the folder will be replaced.", L"Reinstall", MB_YESNO | MB_ICONQUESTION) == IDYES) start_install(); } refresh(); } return 0;
         case ID_PLAY:
-            if (g_installed) { g_go = true; DestroyWindow(h); }
+            if (g_installed) { if (jit_generic() && !code_ready(game_id_dir(g_data))) start_install(false); else { g_go = true; DestroyWindow(h); } }
             else if (iso_ok()) start_install();
             return 0;
         case ID_DIRECT: if (iso_ok()) { g_go = true; g_direct = true; DestroyWindow(h); } return 0;

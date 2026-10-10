@@ -7,7 +7,9 @@
 #include <windows.h>
 #include <vector>
 
-std::string game_id_built(void) { return TF_GAME_ID; }
+static std::string g_built = TF_GAME_ID;
+std::string game_id_built(void) { return g_built; }
+void game_id_set_built(const std::string &id) { g_built = id; }
 
 static std::string id_from_umd(const char *buf, size_t n) {   /* 'ULUS-10136|AA86E435ABE8C363|0001|G ...' */
     std::string s(buf, strnlen(buf, n)); size_t p = s.find('|'); if (p == std::string::npos) return "";

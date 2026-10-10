@@ -6,6 +6,7 @@
 #define TF_GAME_ID "ULES-00600"
 #endif
 std::string game_id_built(void);                        /* a versao para a qual ESTE executavel foi recompilado */
+void game_id_set_built(const std::string &id);          /* generic (release) build only: the version is whatever game was installed */
 std::string game_id_iso(const std::wstring &iso);       /* id lido do UMD_DATA.BIN de uma ISO ("" se nao for possivel) */
 std::string game_id_dir(const std::wstring &dir);       /* idem, de uma pasta de dados instalada */
 std::wstring game_data_dir_name(const std::string &id); /* L"jogo" (europeia) ou L"jogo_ULUS10136" */
