@@ -4,7 +4,7 @@
 
 The package contains NO game data and no game code. It holds:
   TagForceRecomp.exe   the generic runtime (build with runtime/generic_index.cpp: no game modules linked in)
-  *.dll                FFmpeg (ATRAC audio, H.264 movies) from the MSYS2 UCRT64 install
+  avcodec/avutil.dll   slim LGPL-only FFmpeg with just the ATRAC3/3+ and H.264 decoders (tools/build_ffmpeg_lite.sh)
   mods/                the behavior mods of mods_src/ (plugin.dll), switched on or off in the Mods menu
   tcc/ include/        TinyCC (LGPL) and the one runtime header the generated code includes
   tools/               the Allegrex -> C translator (Python scripts) and the embedded Python that runs it
@@ -71,8 +71,10 @@ def main():
     elif not os.path.exists(exe):
         sys.exit('--no-build needs an exe; build once without it')
 
-    # 2. FFmpeg DLLs
-    run([sys.executable, 'tools/ffmpeg_dlls.py', pkg], env=env)
+    # 2. slim LGPL-only FFmpeg (tools/build_ffmpeg_lite.sh builds it once into gen/ffmpeg_lite)
+    if not glob.glob('gen/ffmpeg_lite/avcodec-*.dll'):
+        run([os.path.join(os.path.dirname(MSYS), 'usr', 'bin', 'bash.exe'), '-lc', 'sh tools/build_ffmpeg_lite.sh'], env=dict(env, MSYSTEM='UCRT64', CHERE_INVOKING='1'))
+    for f in glob.glob('gen/ffmpeg_lite/*'): shutil.copy(f, pkg)
 
     # 3. behavior mods
     mods = [d for d in sorted(os.listdir('mods_src')) if os.path.isdir(os.path.join('mods_src', d)) and d not in SKIP_MODS]

@@ -30,7 +30,7 @@ experimental, what is missing, and what may change. If something is not listed h
 | Area | Status |
 |---|---|
 | Story Mode, duels, Free Duel, Deck Edit, shop, Database, Options, Save Data | Works in testing |
-| Audio (SAS, ATRAC3/3+) and H.264 movies | Works (needs FFmpeg DLLs from your MSYS2 install) |
+| Audio (SAS, ATRAC3/3+) and H.264 movies | Works (a slim FFmpeg ships in the zip) |
 | Direct3D 11 / Vulkan renderers, 1x–8x resolution, MSAA, HD font | Works in testing |
 | HD replacement textures (PPSSPP-format packs) | Works; the packs themselves are not distributed |
 | **60 FPS by interpolation** | **Experimental.** Game logic stays at 30 FPS; visual glitches in rarely-seen scenes are possible (there is a menu switch to go back to 30) |
@@ -45,8 +45,8 @@ experimental, what is missing, and what may change. If something is not listed h
 
 ## Known limitations of this preview
 
-- **The release zip is large (~50 MB)** because it carries the FFmpeg DLLs of an MSYS2 build with many optional codecs; a slimmer
-  FFmpeg is on the roadmap. Only the European release (ULES-00600) is supported by the zip; other versions need a source build
+- **The release zip is ~9 MB** (a slim LGPL FFmpeg with only the ATRAC3/3+ and H.264 decoders).
+  Only the European release (ULES-00600) is supported by the zip; other versions need a source build
   ([VERSIONS.md](VERSIONS.md)). First-run preparation takes a few minutes; later starts take a few seconds (the translated code is
   compiled in memory).
 - **Building from source needs a developer toolchain** (MSYS2 UCRT64, Python with Pillow and numpy, Git Bash). The
@@ -81,5 +81,5 @@ can usually be replayed exactly.
 - More game versions (the process is described in [VERSIONS.md](VERSIONS.md)).
 - Porting the behavior mods to more versions.
 - More mods: text/card data tools, more behavior mods.
-- A settings window (video / audio / controls / mods) and smaller FFmpeg requirements for easier distribution.
+- A settings window (video / audio / controls / mods).
 - Translating the remaining Portuguese comments and names.
