@@ -1,0 +1,57 @@
+# Architecture
+
+```
+ISO ──(runtime reads)──> BOOT.BIN + gmodule/*.prx         tools/recomp.py (Allegrex -> C, one C function per MIPS function)
+                               │                                   │
+                  relocated image in memory                 gen/<module>.c (generated, NOT in Git)
+                               └──────────> runtime/ (C++): HLE kernel, software GE, VFPU, I/O, sound, fonts, UI, GPU backends
+```
+
+## Generator (`tools/`)
+
+- `allegrex.py` — instruction decoder; `pspmod.py` — module loader and relocations; `imports.py` — imports/exports and **variable
+  imports**; `recomp.py` — the translator; `build_modules.py` — all modules listed in `modules.tsv`; `merge.tsv` — regions of
+  hand-written assembly.
+- Function boundaries come from a function list (`_funcoes.tsv`, rebased) + `jal` targets + HI/LO16 pairs + exports + `e_entry` +
+  secondary entries (pointers in data, branches between functions).
+- **Fixed bases**: each module is compiled for a base address (`tools/modules.tsv`); a PRX can have **variants** (repeated rows, C
+  prefix `<mod>_<base>`) and the loader uses the first free one. Slots: BOOT `08804000`; scene `08EFCA00`
+  (libtitle/libstory/libduel_mgr/libdeck…); sub-scene `091C4600` (libfield/libshop); duel `09A15300`/`09E6B800`.
+
+## Runtime (`runtime/`)
+
+| File(s) | Role |
+|---|---|
+| `host.cpp` | 1 GiB virtual PSP memory, `psp_call` by address, crash handler, hook dispatch |
+| `kernel.cpp` | allocator, cooperative threads with **fibers**, semaphores/event flags/message boxes, virtual clock + vblank |
+| `modules.cpp` | LoadModule/StartModule, variants, variable import |
+| `hle_io.cpp`, `iso.cpp`, `isofolder.cpp`, `install.cpp` | disc and memory-stick file access (disc → ISO or installed folder; `ms0:` → `./ms0`) |
+| `hle_ge.cpp`, `raster_pool.cpp` | GE (graphics chip): software rasterizer and the command stream feeding the GPU backends |
+| `gpu.cpp`, `gpu_d3d11.cpp`, `gpu_vulkan.cpp`, `shaders/` | Direct3D 11 and Vulkan renderers (resolution scaling, MSAA, real stencil) |
+| `hle_audio.cpp`, `audio_out.cpp` | sceAudio/SAS/ATRAC, device output with a drift controller |
+| `hle_mpeg.cpp`, `ffmpeg_dec.cpp` | PSMF movies and ATRAC via FFmpeg (loaded dynamically) |
+| `hle_font.cpp`, `hdfont.cpp` | text from the game's font data, with a 4x high-resolution atlas |
+| `hle_utility.cpp`, `text_input.cpp` | savedata dialogs, native text entry |
+| `display.cpp`, `pacing.cpp`, `interp.cpp` | window, input, frame pacing, **60 FPS interpolation** |
+| `menu.cpp`, `dark_ui.cpp`, `slider_dialog.cpp` | menu bar and dark-themed native dialogs |
+| `mods.cpp`, `plugins.cpp`, `texrepl.cpp`, `modbox.cpp` | file/texture/movie mods, behavior plugins, in-game message box for mods |
+| `diag.cpp`, `capturas.inc` | session log, input recording, watchdog, graphics diagnostic capture |
+| `launcher.cpp`, `main_run.cpp` | launcher window and entry point |
+
+**System calls** are implemented as `HLE(name) { ... }` registered by name (NID → name from `tools/nids.tsv`-style tables); `ARG(0..7)`
+and `RET(v)`. An unimplemented one prints `[HLE] not implemented: lib::name` and the process exits — that is how missing pieces are found.
+
+## Mods and hooks
+
+Every recompiled function checks a bitmap on entry; a plugin hook gets the PSP registers and can observe, replace or wrap the function
+(see [`MODS.md`](MODS.md)). This is also how the AI and deck mods work without modifying any game file.
+
+## Where state lives (useful when writing hooks)
+
+Duel state is at fixed PSP addresses; see the end of [`AI.md`](AI.md). Decks and their reader are described in [`DECKS.md`](DECKS.md).
+
+## Note on the research tools
+
+Some tools (`decks_*.py`, `ia_*`, `capturas_*`) read a local module dump and card database that the maintainers generate with a
+decompiler workflow (`gen/ferramentas_decomp/`: `modulos/BOOT.BIN`, `dados/iso/cardinfo_eng.ehp`, Ghidra exports). The recompiler and
+runtime themselves **do not need any of that**; making the research tools work from the ISO alone is a open improvement.

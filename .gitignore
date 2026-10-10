@@ -1,0 +1,15 @@
+/build/
+/.vs/
+/.idea/
+*.user
+*.suo
+/gen/
+ref/
+/ms0/
+__pycache__/
+*.pyc
+*.bmp
+*.exe
+*.o
+/mods/
+/jogo/

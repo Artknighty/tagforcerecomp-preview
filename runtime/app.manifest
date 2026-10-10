@@ -1,0 +1,18 @@
+<?xml version="1.0" encoding="UTF-8" standalone="yes"?>
+<!-- Manifesto do run.exe: controles comuns versao 6 (botoes, caixas de texto e barras no estilo atual do Windows, e o tema
+     escuro dos controles; sem isso tudo saia no tema classico) e compatibilidade declarada com o Windows 10/11.
+     A consciencia de DPI NAO e declarada aqui: o processo continua sem DPI proprio (o jogo cuida da propria janela) e as
+     janelas que precisam (tela de abertura, caixas de mensagem) ligam o DPI por thread. -->
+<assembly xmlns="urn:schemas-microsoft-com:asm.v1" manifestVersion="1.0">
+  <assemblyIdentity type="win32" name="TagForceRecomp" version="1.0.0.0" processorArchitecture="*"/>
+  <dependency>
+    <dependentAssembly>
+      <assemblyIdentity type="win32" name="Microsoft.Windows.Common-Controls" version="6.0.0.0" processorArchitecture="*" publicKeyToken="6595b64144ccf1df" language="*"/>
+    </dependentAssembly>
+  </dependency>
+  <compatibility xmlns="urn:schemas-microsoft-com:compatibility.v1">
+    <application>
+      <supportedOS Id="{8e0f7a12-bfb3-4fe8-b9a5-48fd50a15a9a}"/>
+    </application>
+  </compatibility>
+</assembly>

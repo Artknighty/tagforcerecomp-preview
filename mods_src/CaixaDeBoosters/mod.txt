@@ -1,0 +1,4 @@
+name=Booster box
+author=Tag Force Recomp
+version=3.0
+description=In the shop, press R on the pack selection: the game's window asks whether to buy all remaining packs of the booster at once (limited by DP)

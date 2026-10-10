@@ -1,0 +1,4 @@
+name=Monsters on the field (experimental)
+author=Tag Force Recomp
+version=0.1
+description=EXPERIMENTAL, off by default (turn it on in the Mods menu): shows the art of your face-up monsters standing over their zone during duels (only the monsters of the starting Water deck for now)

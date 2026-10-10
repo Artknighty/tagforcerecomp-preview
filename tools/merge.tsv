@@ -1,0 +1,2 @@
+# modulo	inicio	fim (exclusivo)	-- regioes de assembly escrito a mao traduzidas como UMA funcao C (ver load_merges em recomp.py)
+BOOT	0881f9f0	0881ffb0	# inflate (sceGzipDecompress): sub-rotinas via bltzal/jal que voltam ao laco sem retornar; mthi/mfhi ra

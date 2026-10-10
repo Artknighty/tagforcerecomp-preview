@@ -1,0 +1,32 @@
+# nome	base (hex)	origem do arquivo (dentro do ISO)	dir de export do Ghidra (funcoes)
+BOOT	08804000	SYSDIR/BOOT.BIN	BOOT
+libtitle	08EFCA00	USRDIR/gmodule/libtitle.prx	libtitle
+libstory	08EFCA00	USRDIR/gmodule/libstory.prx	libstory
+libduel_mgr	08EFCA00	USRDIR/gmodule/libduel_mgr.prx	libduel_mgr
+libfield	091C4600	USRDIR/gmodule/libfield.prx	libfield
+libshop	091C4600	USRDIR/gmodule/libshop.prx	libshop
+libduel_draw	09A15300	USRDIR/gmodule/libduel_draw.prx	libduel_draw
+libduel_eng	09E6B800	USRDIR/gmodule/libduel_eng.prx	libduel_eng
+libcardalbum	08EFCA00	USRDIR/gmodule/libcardalbum.prx	libcardalbum
+libcharalist	08EFCA00	USRDIR/gmodule/libcharalist.prx	libcharalist
+libconv_machine	08EFCA00	USRDIR/gmodule/libconv_machine.prx	libconv_machine
+libdeck	08EFCA00	USRDIR/gmodule/libdeck.prx	libdeck
+libdeck_swap	08EFCA00	USRDIR/gmodule/libdeck_swap.prx	libdeck_swap
+libdeck_tutorial	08EFCA00	USRDIR/gmodule/libdeck_tutorial.prx	libdeck_tutorial
+libduelrecord	08EFCA00	USRDIR/gmodule/libduelrecord.prx	libduelrecord
+libhtml_view	08EFCA00	USRDIR/gmodule/libhtml_view.prx	libhtml_view
+liblabo	08EFCA00	USRDIR/gmodule/liblabo.prx	liblabo
+liblimitlist	08EFCA00	USRDIR/gmodule/liblimitlist.prx	liblimitlist
+libpassword	08EFCA00	USRDIR/gmodule/libpassword.prx	libpassword
+librecipe_viewer	08EFCA00	USRDIR/gmodule/librecipe_viewer.prx	librecipe_viewer
+libselect_card	08EFCA00	USRDIR/gmodule/libselect_card.prx	libselect_card
+libtutorial	08EFCA00	USRDIR/gmodule/libtutorial.prx	libtutorial
+libtutoriallist	08EFCA00	USRDIR/gmodule/libtutoriallist.prx	libtutoriallist
+# variantes: modulos pequenos do Database carregados JUNTO do libtitle (a vaga 08EFCA00 esta ocupada) -> o alocador
+# os poe no buraco abaixo dele (medido: 08EEB400, 0x11600 bytes). O loader usa a primeira base livre.
+libcardalbum	08EEB400	USRDIR/gmodule/libcardalbum.prx	libcardalbum
+libcharalist	08EEB400	USRDIR/gmodule/libcharalist.prx	libcharalist
+libduelrecord	08EEB400	USRDIR/gmodule/libduelrecord.prx	libduelrecord
+liblimitlist	08EEB400	USRDIR/gmodule/liblimitlist.prx	liblimitlist
+librecipe_viewer	08EEB400	USRDIR/gmodule/librecipe_viewer.prx	librecipe_viewer
+libtutoriallist	08EEB400	USRDIR/gmodule/libtutoriallist.prx	libtutoriallist
