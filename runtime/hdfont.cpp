@@ -16,12 +16,12 @@ namespace {
  * glifos que passam da janela (descendentes de g, y, p...) chegam cortados. Por isso o indice e feito sobre o recorte da janela. */
 const int WIN0 = 1;
 struct Rec {                       /* um glifo pedido pelo jogo */
-    uint32_t code; int xp, yp, gw, gh;   /* posicao do bitmap no rascunho (canto superior esquerdo) e tamanho */
+    uint32_t code; int xp, yp, top, gw, gh;   /* posicao do bitmap no rascunho (canto superior esquerdo) e tamanho */
     std::vector<uint8_t> nib;            /* gw*gh niveis 0..15 */
 };
 std::vector<Rec> g_recs;
 std::unordered_set<uint64_t> g_rec_seen;
-struct Hd { int w = 0, h = 0; std::vector<uint8_t> a8; bool tried = false; };
+struct Hd { int w = 0, h = 0, top = 0; std::vector<uint8_t> a8; bool tried = false; };
 std::unordered_map<uint32_t, Hd> g_hd;   /* codigo -> glifo desenhado em HDS x */
 struct Hit { int rec, cx, cy; };          /* glifo e onde fica o recorte justo na janela */
 std::map<uint32_t, std::unordered_map<uint64_t, Hit>> g_idx;   /* (rw<<8|rh) da janela -> hash do recorte justo -> glifo */
@@ -70,18 +70,18 @@ void index_rec(uint32_t wkey, int rw, int rh, int ri) {
 
 bool hdfont_enabled(void) {
     static const char *e = getenv("TF_HDFONT");
-    return e ? atoi(e) != 0 : g_gfx.hdfont != 0;
+    return e ? atoi(e) != 0 : !gfx_raw_psp();
 }
 
-void hdfont_record(uint32_t code, int xp, int yp, const uint8_t *nib, int w, int h) {
+void hdfont_record(uint32_t code, int xp, int yp, int top, const uint8_t *nib, int w, int h) {
     if (w <= 0 || h <= 0 || w > 64 || h > 64) return;   /* sempre guarda (mesmo desligada: ligar pelo menu no meio do jogo ja acha os glifos) */
     uint64_t k = fnv(fnv(1469598103934665603ull, (const uint8_t *)&code, 4), nib, (size_t)w * h) ^ ((uint64_t)(uint8_t)(xp + 64) << 40) ^ ((uint64_t)(uint8_t)(yp + 64) << 48) ^ ((uint64_t)w << 56);
     if (!g_rec_seen.insert(k).second) return;
-    Rec r; r.code = code; r.xp = xp; r.yp = yp; r.gw = w; r.gh = h; r.nib.assign(nib, nib + (size_t)w * h);
+    Rec r; r.code = code; r.xp = xp; r.yp = yp; r.top = top; r.gw = w; r.gh = h; r.nib.assign(nib, nib + (size_t)w * h);
     g_recs.push_back(std::move(r)); int ri = (int)g_recs.size() - 1;
     for (auto &kv : g_idx) index_rec(kv.first, (int)(kv.first >> 8), (int)(kv.first & 255), ri);
     Hd &hd = g_hd[code];
-    if (!hd.tried) { hd.tried = true; if (!font_hd_glyph(code, &hd.w, &hd.h, &hd.a8)) { hd.w = hd.h = 0; hd.a8.clear(); } }
+    if (!hd.tried) { hd.tried = true; if (!font_hd_glyph(code, &hd.w, &hd.h, &hd.top, &hd.a8)) { hd.w = hd.h = 0; hd.a8.clear(); } }
     if (g_dbg) { static int nr; if (nr++ < 4) fprintf(stderr, "[hdfont] glifo U+%04x guardado: bitmap %dx%d em (%d,%d) do rascunho, HD %dx%d\n", code, w, h, xp, yp, hd.w, hd.h); }
 }
 
@@ -98,7 +98,7 @@ uint32_t hdfont_texture(uint32_t addr, int W, int H, const uint8_t *tp, bool swz
         uint8_t b = tp[off]; return (x & 1) ? b >> 4 : b & 15;
     };
     const int PW = W * HDS;
-    uint8_t buf[64 * 64];
+    uint8_t buf[64 * 64]; int bx0 = 1 << 30, by0 = 1 << 30, bx1 = 0, by1 = 0;
     for (int i = 0; i < n; i++) {
         HdRect r = rects[i]; r.x0 = std::max(r.x0, 0); r.y0 = std::max(r.y0, 0); r.x1 = std::min(r.x1, W); r.y1 = std::min(r.y1, H);
         int rw = r.x1 - r.x0, rh = r.y1 - r.y0; if (rw <= 0 || rh <= 0 || rw > 64 || rh > 64) continue;
@@ -107,6 +107,7 @@ uint32_t hdfont_texture(uint32_t addr, int W, int H, const uint8_t *tp, bool swz
         uint64_t hn = fnv(1469598103934665603ull, buf, (size_t)rw * rh) ^ ((uint64_t)rw << 56);
         auto it = A.rects.find(key); if (it != A.rects.end() && it->second == hn) continue;
         A.rects[key] = hn; A.dirty = true;
+        bx0 = std::min(bx0, r.x0 * HDS); by0 = std::min(by0, r.y0 * HDS); bx1 = std::max(bx1, r.x1 * HDS); by1 = std::max(by1, r.y1 * HDS);   /* area trocada (HD) */
         for (int y = r.y0 * HDS; y < r.y1 * HDS; y++) memset(&A.px[(size_t)y * PW + r.x0 * HDS], 0, (size_t)rw * HDS * 4);   /* regiao HD do retangulo */
         int tx, ty, tw, th; if (!trim(buf, rw, rh, &tx, &ty, &tw, &th)) continue;   /* vazio */
         uint32_t wkey = ((uint32_t)rw << 8) | (uint32_t)rh;
@@ -117,8 +118,8 @@ uint32_t hdfont_texture(uint32_t addr, int W, int H, const uint8_t *tp, bool swz
             g_hits++; A.qualified = true;
             const Rec &rc = g_recs[gi->second.rec];
             int dx = tx - gi->second.cx, dy = ty - gi->second.cy;   /* origem da janela dentro do retangulo (0 se o retangulo e a janela) */
-            float cxn = (rc.xp - WIN0 + rc.gw * 0.5f + dx) * HDS, cyn = (rc.yp - WIN0 + rc.gh * 0.5f + dy) * HDS;
-            int hx = r.x0 * HDS + (int)floorf(cxn - hd->w * 0.5f + 0.5f), hy = r.y0 * HDS + (int)floorf(cyn - hd->h * 0.5f + 0.5f);
+            float cxn = (rc.xp - WIN0 + rc.gw * 0.5f + dx) * HDS, base = (rc.yp + rc.top - WIN0 + dy) * HDS;   /* horizontal: centro do glifo; vertical: linha de base (centralizar pela altura desalinhava as letras, cada uma com altura diferente) */
+            int hx = r.x0 * HDS + (int)floorf(cxn - hd->w * 0.5f + 0.5f), hy = r.y0 * HDS + (int)floorf(base - hd->top + 0.5f);
             for (int y = 0; y < hd->h; y++) {
                 int py = hy + y; if (py < r.y0 * HDS || py >= r.y1 * HDS) continue;
                 for (int x = 0; x < hd->w; x++) {
@@ -141,6 +142,7 @@ uint32_t hdfont_texture(uint32_t addr, int W, int H, const uint8_t *tp, bool swz
     }
     if (g_dbg) { static uint64_t last; if (g_hits + g_miss >= last + 100) { last = g_hits + g_miss; fprintf(stderr, "[hdfont] retangulos: %llu com glifo HD, %llu sem; glifos guardados %zu; atlas %08x %s\n", (unsigned long long)g_hits, (unsigned long long)g_miss, g_recs.size(), addr, A.qualified ? "qualificado" : "nao"); } }
     if (!A.qualified) return 0;   /* nenhum retangulo casou com um glifo: nao e um atlas de fonte */
+    if (A.dirty && A.gpu && bx1 > bx0 && by1 > by0 && gpu_tex_update(A.gpu, bx0, by0, bx1 - bx0, by1 - by0, A.px.data(), (uint32_t)PW)) A.dirty = false;   /* so a area trocada (Vulkan) */
     if (A.dirty || !A.gpu) {
         uint32_t id = gpu_tex_create(PW, H * HDS, A.px.data(), false);
         if (id) { static const bool leak = getenv("TF_HDF_LEAK") != nullptr; if (A.gpu && !leak) gpu_tex_release(A.gpu); A.gpu = id; A.dirty = false; }

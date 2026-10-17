@@ -33,7 +33,8 @@ description=Redrawn card thumbnails
 ```
 
 Some sub-folders are **not** treated as ISO files: `textures/`, `movie/`, `llm/` (model server of the Better AI mod), `decks/`
-(deck files of the Better Decks mod), `disabled`, `mod.txt` and any `readme*`.
+(deck files of the Better Decks mod), `sprites/` (Monsters on the field), and the files at the top of the mod folder (`disabled`,
+`mod.txt`, `plugin.dll`, `config.ini`, `readme*`...).
 
 ## Turning mods on and off, and order
 
@@ -82,10 +83,9 @@ is read in the background the first time the texture appears (the original is us
 - The aspect ratio of the replacement can differ (the texture is stretched), but keeping the original's is best. Mipmaps are
   generated automatically.
 - They do not apply to textures the game draws in real time (render-to-texture, movies) or to the software renderer.
-- For paletted textures (CLUT) the PPSSPP pack tells variants apart by palette; here the first matching one is used (in practice
-  almost all variants point to the same PNG).
-- **Built-in upscaling** (Graphics menu → *Textures without replacement*): 2x/4x Scale2x (EPX) on small textures that have no
-  replacement — it cleans up the stair-stepped edges of the UI without a pack.
+- For paletted textures (CLUT) the PPSSPP pack tells variants apart by palette. PPSSPP's palette hash is not reproduced here: when one
+  texture has several different PNGs (card frames per card type, for example), the one whose average colour is closest to the original
+  texture drawn with the current palette is used; in practice almost all variants point to the same PNG.
 
 ## Replacement HD movie video (`movie/*.pmf`)
 
@@ -117,7 +117,7 @@ mods/
 It is switched on and off in the **Mods** menu like any other mod (applies on restart). The game loads the `plugin.dll` of the
 enabled mods at start-up, in alphabetical folder order, and calls `tfmod_init(api)`.
 
-### The API (`mods_sdk/tfmod.h`, C only, version 4)
+### The API (`mods_sdk/tfmod.h`, C only, version 5)
 
 The game code is recompiled, so a code mod does not "patch" the ISO: it **intercepts game functions by their PSP address**. Every
 recompiled function checks a bitmap on entry; if there is a hook, it runs with the PSP registers (`reg(c, 4..7)` = arguments, `r2` =
@@ -136,7 +136,7 @@ result, `r31` = return address) and returns `0` = continue with the original (th
 | `log(fmt, ...)` | write to the session log, tagged with the mod name |
 | `guest_alloc(n)` (v2) | reserve PSP memory for data the game will read (for example UTF-16 text shown by the game's own message window) |
 | `add_slider(title, unit, min, max, def, get, set)` (v3) | register an integer setting; the runtime adds a **Mods** menu item that opens a dark modal slider dialog (`runtime/slider_dialog.cpp`) |
-| `add_toggle(title, vk, get, set)` (v4) | register an on/off setting: a checkable **Mods** menu item and, optionally, an in-game key (Windows virtual-key code, e.g. `VK_F6`; F3/F7–F11, Esc, Enter and the keyboard keys of the PSP buttons — arrows, Z X A S Q W, Shift — belong to the game) |
+| `add_toggle(title, vk, get, set)` (v4) | register an on/off setting: a checkable **Mods** menu item and, optionally, an in-game key (Windows virtual-key code, e.g. `VK_F6`). Keys that belong to the game are refused (the item stays menu-only): the window's F-keys (F3, F5, F7, F8, F9, F11, listed in Help > Controls), F10, Esc, Enter and the keyboard keys of the PSP buttons in both layouts (arrows, W A S D, Z X C E F R Q, Space, Backspace, Tab, Shift, Ctrl) |
 | `panel(corner, title, lines, n)` (v4) | information panel in a corner of the screen (0 top-left, 1 top-right, 2 bottom-left, 3 bottom-right); call it every frame it should stay visible; it never blocks the game. Plain text works; an optional markup (documented in `tfmod.h`) gives section headers with counters (`"#Hand\t5"`), colored card rows (`"@ed{M4}Drillago\t*4\tATK\|1600\tDEF\|1100"`: frame color, attribute dot, badge, table-aligned columns, level star) and a title icon/right text (`"@eOpponent\tLP 8000"`) |
 | `sprite(id, rgba, w, h, x, y, dw, dh, alpha)` (v5) | RGBA image over the game (GPU renderers only), in 480x272 PSP pixels; call every frame it should stay; redrawn on a thread (1-3 frames of latency). Example: `mods_src/MonstrosNoCampo` |
 | `quad_near(x, y, tol, wmin, wmax)` (v5) | 1 if the game drew a textured 3D quad (a card on the field...) centered near (x, y) in the frame on screen — tells whether a field slot is really visible (not hidden by a cut-in) |
@@ -163,8 +163,8 @@ base 0x091C4600) — check `module_loaded("libshop")` inside the hook.
 
 ### Bundled behavior mods
 
-- **Booster box** (`mods_src/CaixaDeBoosters`): in the card shop, on the pack selection screen, press **R** (W on the keyboard, RB on
-  a controller): the game's own message window asks "Buy all N packs for X DP?" and YES buys every remaining pack of that booster
+- **Booster box** (`mods_src/CaixaDeBoosters`): in the card shop, on the pack selection screen, press **R** (Tab on the keyboard, or W
+  in the classic layout; RB on a controller): the game's own message window asks "Buy all N packs for X DP?" and YES buys every remaining pack of that booster
   at once (limited by DP). The text is placed in PSP memory with `guest_alloc` and a hook on the game's string reader delivers it when
   the window is built.
 - **Cheats** (`mods_src/Cheats`, see its README): optional cheats, each off by default, in their own **Cheats** menu (separate from Mods).
@@ -183,3 +183,9 @@ base 0x091C4600) — check `module_loaded("libshop")` inside the hook.
   textures are generated by `python tools/mod_xbox_buttons.py` from images you place in the mod folder; the mod wins over a
   texture pack because it comes later in alphabetical order.
 - **Title screen (Press Start)**: `tools/mod_titulo_hd.py` redraws the "PRESS START BUTTON" text and its red bar at 8x (default: Arial Black on the original box; `original` keeps the original letter shapes). Input: the original textures dumped with `TF_TEX_DUMP` into `gen/dump_tex/titulo/`. Output: `gen/mods/TituloHD/textures/`; the name sorts after `PPSSPP_MikeyMK`, so it wins.
+
+## Texture packages (Original and Enhanced)
+
+- **Graphics > Textures** is the in-game selector. **Original** means the unmodified PSP textures (no package); **Enhanced** loads the external `mods/EnhancedTextures` package (next to the executable; `gen/mods/EnhancedTextures` in a source build). F5 is the PC shortcut for the same selector.
+- **Enhanced** (`gen/mods/EnhancedTextures`, built by `python tools/montar_enhanced.py`): 8201 PNGs, upscaled 2x with Real-ESRGAN (`realesrgan-x4plus-anime`, 4x then Lanczos to 2x; alpha is kept out of the network) and capped at 2048 px. It remains an external asset package; it is intentionally hidden from the host **Mods** menu because its enable/disable control is in the game's Graphics screen. The in-game switch reloads the index immediately; a replay switching from Original to Enhanced loaded all 14,163 indexed textures. Do not delete the folder if Enhanced visuals are wanted.
+- The legacy `TexturasPC` package name is also hidden from the host Mods menu; the built-in Original choice now uses the PSP textures directly. Keep texture packages separate from other enabled mods; later mods win over earlier ones in alphabetical order.

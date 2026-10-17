@@ -16,8 +16,18 @@
  *      libduel_mgr 08f08534 duel_reward_calculate: lets the original run, measures the gain (player_dp before/after, BOOT 0883d908), adds
  *      gain x (N-1) with player_dp_add (0883d938, respects the cap) and multiplies the 4 parts of the context (09a151a4: +08..+14) that the
  *      result screen draws; the detail screens draw with number_draw_decimal (08f0d7f4), multiplied only on the DP rows (by the return address).
- *   BOOT 08833fc4 ehsys_end_of_frame (every logical frame): panel and L + R + UP/DOWN. */
+ *   3. Unlock everything (Cheats menu, one-shot): edits the save the game keeps in RAM (BOOT save_estado 0883d698, the same 0xFCA8-byte block
+ *      the game writes to DATA0 on its next save). It adds every card to the collection (3 copies, marked as seen), makes every card pack
+ *      available in the shop and gives every duelist all of his real decks in the Free Duel opponent list. Nothing else (story progress, DP,
+ *      level and the save flags) is touched. Save layout (BOOT functions save_*, carta_*, pacote_*, and decomp/libtitle):
+ *        +0x0068 + character*0x12: duelist record (u16 state, u16 count, u16 deck[6] unlocked decks, u16 ...); characters 2..151
+ *                                  (the Free Duel opponent list shows the characters whose count is not zero: libcharalist BuildLists)
+ *        +0x0EC4 + character*8:    duel record against that duelist (u16 wins, u16 losses, u16 draws, u16 pad); not touched
+ *        +0x155C + card_index*4:   card entry (byte0 bit0 flag, bits 1-2 status 0 unseen / 1 new / 2 seen, byte1 bit7 flag + bits 0-6 copies)
+ *        +0x8FF4 + pack*0x2A:      pack (byte0 shop value, byte1 bits 0-1 state: 0 locked, 1 seen, 2 available), packs 0..47
+ *   BOOT 08833fc4 ehsys_end_of_frame (every logical frame): panel, L + R + UP/DOWN and the pending unlock. */
 #include "tfmod.h"
+#include "../../decomp/duelists.h"
 #include <windows.h>
 #include <algorithm>
 #include <map>
@@ -198,8 +208,74 @@ static void mult_quadro(void) {   /* L + R + CIMA/BAIXO em qualquer tela */
     }
 }
 
+/* ------------------------------------------------------------------ 3. Unlock everything */
+static const uint32_t SAVE = 0x08a65418, SAVE_VERSION = 0x10002, F_COLECAO_ENTRADA = 0x0883de3c;
+static const uint32_t SAVE_DUELIST_RECORDS = 0x68, DUELIST_RECORD_SIZE = 0x12, DUELIST_RECORD_DECKS = 6;
+static const uint32_t SAVE_PACKS = 0x8ff4, PACK_SIZE = 0x2a, PACK_COUNT = 0x30, PACK_AVAILABLE = 2;
+static const uint32_t CARD_ID_LAST = 0x2000, CARD_COPIES = 3, CARD_STATUS_SEEN = 2;
+static bool g_unlock_pending;
+static bool save_loaded(void) { return u32(SAVE) == SAVE_VERSION; }
+static int unlock_cards(TfCpu *c) {
+    int n = 0;
+    for (uint32_t id = 1; id < CARD_ID_LAST; id++) {
+        const uint32_t entry = chama(c, F_COLECAO_ENTRADA, id);   /* 0 for ids that are not collectable cards */
+        if (!entry) continue;
+        uint8_t &flags = *A->mem(entry), &copies = *A->mem(entry + 1);
+        flags = (uint8_t)((flags & 0xf9) | (CARD_STATUS_SEEN << 1));
+        if ((copies & 0x7f) < CARD_COPIES) copies = (uint8_t)((copies & 0x80) | CARD_COPIES);
+        n++;
+    }
+    return n;
+}
+static int unlock_packs(void) {
+    int n = 0;
+    for (uint32_t i = 0; i < PACK_COUNT; i++) {
+        uint8_t &state = *A->mem(SAVE + SAVE_PACKS + i * PACK_SIZE + 1);
+        if ((state & 3) == 0) { state = (uint8_t)((state & 0xfc) | PACK_AVAILABLE); n++; }
+    }
+    return n;
+}
+/* the decks of a duelist that the story really uses (the others are the placeholder deck): the game lists these in the Free Duel */
+static int duelist_real_decks(uint32_t character, uint16_t *decks) {
+    int n = 0;
+    if (duelist::HasLadder(character)) {
+        for (uint32_t level = 1; level <= duelist::kDecksPerLadder; level++)
+            if (duelist::LadderUsedMask(character) & (1u << (level - 1))) decks[n++] = (uint16_t)duelist::LadderDeck(character, level);
+    } else if (duelist::HasSingleDeck(character) && !duelist::IsPlaceholder(duelist::SingleDeck(character))) decks[n++] = (uint16_t)duelist::SingleDeck(character);
+    return n;
+}
+static int unlock_duelists(void) {
+    int n = 0;
+    for (uint32_t ch = duelist::kFirstCharacterId; ch <= duelist::kLastCharacterId; ch++) {
+        uint16_t decks[duelist::kDecksPerLadder];
+        const int count = duelist_real_decks(ch, decks);
+        if (!count) continue;
+        const uint32_t rec = SAVE + SAVE_DUELIST_RECORDS + ch * DUELIST_RECORD_SIZE;
+        *(uint16_t *)A->mem(rec + 2) = (uint16_t)count;
+        for (uint32_t i = 0; i < DUELIST_RECORD_DECKS; i++) *(uint16_t *)A->mem(rec + 4 + 2 * i) = i < (uint32_t)count ? decks[i] : 0;
+        n++;
+    }
+    return n;
+}
+static void unlock_all(TfCpu *c) {
+    const int cards = unlock_cards(c), packs = unlock_packs(), duelists = unlock_duelists();
+    A->log("Unlock everything: %d cards, %d packs newly available, %d duelists", cards, packs, duelists);
+    wchar_t l1[64], l2[64], l3[64]; swprintf(l1, 64, L"Cards in the collection: %d (3 copies each)", cards);
+    swprintf(l2, 64, L"Packs made available: %d", packs); swprintf(l3, 64, L"Duelists with all their decks: %d", duelists);
+    const wchar_t *lines[3] = {l1, l2, l3};
+    A->message_box(L"Everything unlocked", lines, 3, L"Save the game to keep it");
+}
+static int unlock_get(void) { return 0; }   /* a one-shot menu item: always shown unchecked */
+static void unlock_set(int v) { if (v) g_unlock_pending = true; }
+static void unlock_quadro(TfCpu *c) {
+    if (const char *e = getenv("TF_CHEAT_UNLOCK")) { static bool done; const int from = atoi(e); if (!done && from && save_loaded() && A->frame() > (uint64_t)(from > 1 ? from : 600)) { done = true; g_unlock_pending = true; } }   /* tests: the frame to apply at */
+    if (!g_unlock_pending) return;
+    if (!save_loaded()) { A->log("Unlock everything: no save is loaded yet"); g_unlock_pending = false; return; }
+    g_unlock_pending = false; unlock_all(c);
+}
+
 /* ------------------------------------------------------------------ */
-static int hk_quadro(TfCpu *c) { mult_quadro(); ver_cartas_quadro(c); return 0; }
+static int hk_quadro(TfCpu *c) { mult_quadro(); ver_cartas_quadro(c); unlock_quadro(c); return 0; }
 
 extern "C" __declspec(dllexport) int tfmod_init(const TfModApi *api) {
     A = api;
@@ -209,6 +285,7 @@ extern "C" __declspec(dllexport) int tfmod_init(const TfModApi *api) {
     A->add_toggle(L"&See the opponent's cards", VK_F6, ver_get, ver_set);
     A->add_slider(L"Card panel position (0 top left, 1 top right, 2 bottom left, 3 bottom right)", L"", 0, 3, 1, canto_get, canto_set);
     A->add_slider(L"&DP multiplier in duels", L"x", 1, MULT_MAX, 1, mult_get, mult_set);
+    A->add_toggle(L"&Unlock everything (cards, packs, duelists)", 0, unlock_get, unlock_set);
     A->hook(F_QUADRO, hk_quadro);
     A->hook(F_RECOMPENSA, hk_recompensa);
     A->hook(F_NUMERO, hk_numero);

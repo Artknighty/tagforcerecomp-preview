@@ -33,8 +33,9 @@ static HANDLE g_tee; static int g_efd = 2;
 void diag_flush(void) {
     fflush(stderr);
     if (!g_tee) return;
+    const HANDLE tee = g_tee; g_tee = nullptr;   /* uma vez so: fechar o descritor de novo (fim normal + erro fatal) cairia no handler de parametro invalido do CRT */
     _close(g_efd);
-    WaitForSingleObject(g_tee, 1000);
+    WaitForSingleObject(tee, 1000);
     if (g_logf) fflush(g_logf);
 }
 void k_dump_threads(void);

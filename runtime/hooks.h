@@ -11,7 +11,6 @@ typedef bool (*PspHook)(CPU *c);
  * instalou (plugins), ver g_hook_owner */
 void hook_install(uint32_t addr, PspHook fn, void *owner = nullptr);
 void hook_install_c(uint32_t addr, int (*fn)(CPU *), void *owner);   /* ganchos de plugins (ABI C: 1 = tratou) */
-void hook_remove(uint32_t addr);                  /* tira todos os ganchos do endereco */
 void hook_remove_owner(void *owner);              /* tira os ganchos de um dono (plugin que falhou no init) */
 /* roda o corpo original. Dentro de um gancho deste endereco, os ganchos seguintes da cadeia rodam antes do corpo */
 bool hook_call_original(CPU *c, uint32_t addr);

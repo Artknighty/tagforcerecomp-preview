@@ -46,7 +46,6 @@ static bool load_tcc(const std::wstring &dir) {
 static void tcc_error(void *, const char *m) { fprintf(stderr, "[jit] %s\n", m); }
 
 static void jit_selftest(void);
-bool jit_enabled(void) { return g_jit_on; }
 bool jit_generic(void) { return g_gen_nmodules == 0; }
 #include "hooks.h"
 void hook_skip_next(uint32_t addr); extern uint32_t g_hook_cur;
@@ -96,11 +95,15 @@ bool jit_init(void) {
         T.addsym(s, "vfpu_exec", (const void *)vfpu_exec); T.addsym(s, "psp_break", (const void *)psp_break); T.addsym(s, "psp_syscall", (const void *)psp_syscall);
         T.addsym(s, "__builtin_clz", (const void *)jit_clz); T.addsym(s, "__builtin_bswap32", (const void *)jit_bswap32); T.addsym(s, "isunordered", (const void *)jit_isunordered);
         T.addsym(s, "tf_nearbyint", (const void *)jit_nearbyint); T.addsym(s, "tf_sqrtf", (const void *)jit_sqrtf); T.addsym(s, "tf_floor", (const void *)jit_floor); T.addsym(s, "tf_trunc", (const void *)jit_trunc); T.addsym(s, "tf_ceil", (const void *)jit_ceil);
-        T.addsym(s, "psp_unimpl", (const void *)psp_unimpl); T.def(s, "TF_FTRACE", "1"); T.addsym(s, "tf_ftrace", (const void *)tf_ftrace); T.addsym(s, "tf_wlog", (const void *)tf_wlog); T.addsym(s, "g_trace", g_trace); T.addsym(s, "g_trace_i", &g_trace_i);
+        T.addsym(s, "psp_unimpl", (const void *)psp_unimpl);
+        if (getenv("TF_JIT_FTRACE")) T.def(s, "TF_FTRACE", "1");   /* bisection tool only (TF_FTRACE_FILE): it makes every function entry and every guest store a call */
+        T.addsym(s, "tf_ftrace", (const void *)tf_ftrace); T.addsym(s, "tf_wlog", (const void *)tf_wlog); T.addsym(s, "g_trace", g_trace); T.addsym(s, "g_trace_i", &g_trace_i);
         T.addsym(s, "g_watch", &g_watch); T.addsym(s, "g_watch_val", &g_watch_val); T.addsym(s, "g_hookbm", &g_hookbm); T.addsym(s, "g_hook_any", &g_hook_any);
         if (T.cstr(s, src.c_str()) < 0) { fprintf(stderr, "[jit] erro compilando %s\n", c.c_str()); return false; }
         if (T.reloc(s, (void *)1) < 0) { fprintf(stderr, "[jit] erro ligando %s\n", c.c_str()); return false; }   /* TCC_RELOCATE_AUTO */
         auto sym = [&](const char *suf) { return T.getsym(s, (c + "_" + suf).c_str()); };
+        for (const char *need : {"base", "gp", "memsz", "textsz", "datasz", "bsssz", "entry", "fns", "nfns", "imports", "nimports", "exports", "nexports"})
+            if (!sym(need)) { fprintf(stderr, "[jit] %s: o codigo gerado nao tem o simbolo %s_%s\n", c.c_str(), c.c_str(), need); return false; }   /* sem isto o ponteiro nulo era lido logo abaixo */
         g_names.push_back(c); g_names.push_back(iso);
         GenModule m = {};
         m.name = g_names[g_names.size() - 2].c_str(); m.iso_path = g_names.back().c_str();

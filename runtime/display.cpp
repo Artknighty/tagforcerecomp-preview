@@ -1,4 +1,8 @@
 /* Janela Win32 que mostra o framebuffer do PSP (480x272, ampliado 2x). Chamada a cada vblank pelo agendador. */
+#include <mutex>
+#include <condition_variable>
+#include <thread>
+#include <deque>
 #include "dark_ui.h"
 #include "hle.h"
 #include <windows.h>
@@ -9,12 +13,16 @@
 #include <vector>
 #include "menu.h"
 #include "gfx.h"
+#include "gfx_options.h"
+#include "hotkeys.h"
 #include "util.h"
 #include "gpu.h"
 #include "interp.h"
 #include "pacing.h"
 #include "modbox.h"
 #include "mouse_ui.h"
+#include "text_input.h"
+#include "ctl.h"
 
 static HWND g_wnd; static bool g_ready;
 static uint32_t g_pix[480 * 272];
@@ -25,7 +33,7 @@ static void latch_buttons(void);
 void display_set_frame(uint32_t addr, uint32_t stride, uint32_t fmt) { g_fb_addr = addr; g_fb_stride = stride ? stride : 512; g_fb_fmt = fmt; }
 uint64_t display_frames(void) { return g_frames; }
 HWND display_hwnd(void) { return g_wnd; }
-/* aviso curto no titulo da janela (ex.: "jogo salvo"): o PSP mostraria a tela de gravacao do sistema */
+/* aviso curto no titulo da janela (ex.: "Game saved"): o PSP mostraria a tela de gravacao do sistema */
 static uint64_t g_notify_until;
 /* titulo da janela; execucoes de teste (scripts de tools/ definem TF_LOG_DIR) ficam marcadas, para nao serem confundidas com o jogo do
  * jogador (ex.: o teste de New Game abre sem save e mostra o seletor de idioma) */
@@ -92,7 +100,7 @@ void display_set_iso(const char *utf8) {
 static const uint32_t *g_src = g_pix; static int g_sw = 480, g_sh = 272; static std::vector<uint32_t> g_hi;
 const uint32_t *ge_shadow_get(uint32_t addr, uint32_t fmt, int *w, int *h, uint32_t *stride);
 void ge_set_res(int n);
-int ge_gpu_frame(uint32_t addr, uint32_t fmt);
+int ge_gpu_frame(uint32_t addr, uint32_t fmt); void ge_gpu_frame_post(void);
 bool ge_gpu_skip_active(uint32_t addr);
 const uint32_t *ge_gpu_small(void);
 void ge_set_gpu(bool on);
@@ -132,9 +140,12 @@ static int start_gpu(int r) {
     return GFX_RENDER_SOFTWARE;
 }
 /* troca o renderizador em execucao (menu Graficos > Renderizacao); cai para o proximo disponivel se o pedido nao iniciar */
+void ge_set_texscale(void);
+void ge_set_msaa(void);
 void display_set_renderer(int r) {
     ge_set_gpu(false); gpu_release_swapchain();   /* solta o backend atual (quadros sombra, texturas, swapchain) */
     int got = start_gpu(r);
+    ge_set_texscale(); ge_set_msaa();   /* o backend novo comeca sem texturas nem quadros sombra: esvazia os caches do anterior (sem isso sobram quadrados brancos) */
     if (got != r) tf_msgbox(g_wnd, L"Could not start the chosen renderer; using another available one.", L"Tag Force Recomp", MB_ICONWARNING);
     g_gfx.renderer = got;
     gfx_save();
@@ -147,6 +158,24 @@ static void paint_frame(HDC dc) {   /* imagem 480x272 na janela: filtro/proporca
 }
 static void quit_process(void);
 static void toggle_fps_overlay(void);
+static bool g_pending_pack;   /* F5: pedido de troca Original <-> Enhanced; aplicado em display_present, entre dois quadros */
+static void request_texture_pack_switch(void) { g_pending_pack = true; }
+
+/* As teclas de funcao da janela, TODAS aqui (hotkeys.h): tecla, nome extra para a ajuda, descricao e acao. Para criar uma, basta uma linha. */
+struct Hotkey { int vk; const wchar_t *key, *also, *help; void (*run)(void); };
+static const Hotkey kHotkeys[] = {
+    {VK_F3,  L"F3",  L"",              L"show FPS",                                        toggle_fps_overlay},
+    {VK_F5,  L"F5",  L"",              L"switch textures Original / Enhanced",             request_texture_pack_switch},   /* compara com o visual do PSP original */
+    {VK_F7,  L"F7",  L" or L3 + R3",   L"same as F8",                                      marca_cpu},                     /* atalho antigo, mesma marca geral */
+    {VK_F8,  L"F8",  L"",              L"report a problem: graphics, CPU, anything (note + captures + duel state)", marca_graf},   /* marca geral: nota + quadros + estado do duelo */
+    {VK_F9,  L"F9",  L"",              L"turn the diagnostic captures on / off",           cap_toggle},
+    {VK_F11, L"F11", L" or Alt+Enter", L"fullscreen",                                      toggle_fullscreen},
+};
+static const Hotkey *find_hotkey(int vk) { for (const Hotkey &k : kHotkeys) if (k.vk == vk) return &k; return nullptr; }
+bool hotkey_run(int vk, bool fresh) { const Hotkey *k = find_hotkey(vk); if (!k) return false; if (fresh) k->run(); return true; }
+bool hotkey_reserved(int vk) { return find_hotkey(vk) != nullptr; }
+const wchar_t *hotkey_key(int vk) { const Hotkey *k = find_hotkey(vk); return k ? k->key : L""; }
+std::wstring hotkey_help_line(int vk) { const Hotkey *k = find_hotkey(vk); return k ? std::wstring(L"   ") + k->key + k->also + L": " + k->help + L"\n" : L""; }
 /* para explicar quadros lentos no log: tempo do laco de mensagens e da leitura do controle neste quadro, e se houve laco
  * modal (arrastar/redimensionar a janela, caixa "Sair?") desde o quadro anterior */
 static double g_pump_ms, g_pad_ms; static bool g_modal_seen;
@@ -163,11 +192,8 @@ static LRESULT CALLBACK wndproc(HWND h, UINT m, WPARAM w, LPARAM l) {
     if (m == WM_PRINTCLIENT) { paint_frame((HDC)w); return 0; }
     if (m == WM_CLOSE || m == WM_DESTROY) { quit_process(); }
     const bool novo = !(l & (1 << 30));   /* tecla recem-apertada, nao a repeticao automatica de quem a segura (segurar F11 alternava a tela cheia sem parar; F7/F8 criavam varias marcas) */
-    if (m == WM_KEYDOWN && w == VK_F3) { if (novo) toggle_fps_overlay(); return 0; }
-    if (m == WM_KEYDOWN && w == VK_F7) { if (novo) marca_cpu(); return 0; }   /* "a CPU errou" */
-    if (m == WM_KEYDOWN && w == VK_F9) { if (novo) cap_toggle(); return 0; }   /* liga/desliga as capturas de diagnostico */
-    if (m == WM_KEYDOWN && w == VK_F8) { if (novo) marca_graf(); return 0; }   /* "tem algo errado na tela": quadro inteiro + contexto grafico + nota */
-    if (m == WM_KEYDOWN && w == VK_F11) { if (novo) toggle_fullscreen(); return 0; }
+    if ((m == WM_KEYDOWN || m == WM_CHAR) && text_input_key(m, w)) return 0;   /* nome do jogador: a caixa e desenhada pelo jogo (text_input.cpp) */
+    if (m == WM_KEYDOWN && hotkey_run((int)w, novo)) return 0;   /* teclas de funcao da janela: tabela kHotkeys */
     if (m == WM_KEYDOWN && novo) {   /* tecla de um liga/desliga dos mods (ex.: cheats) */
         extern int plugin_toggle_by_key(int vk); extern bool plugin_toggle_on(int i); extern std::wstring plugin_toggle_label(int i);
         const int i = plugin_toggle_by_key((int)w);
@@ -211,12 +237,14 @@ static LRESULT CALLBACK wndproc(HWND h, UINT m, WPARAM w, LPARAM l) {
     return DefWindowProcA(h, m, w, l);
 }
 static bool confirm(const wchar_t *text) {   /* caixa Sim/Nao (o jogo fica pausado enquanto ela esta aberta) */
+    if (const char *t = getenv("TF_CONFIRM_AUTO")) return atoi(t) != 0;   /* testes automaticos: responde sem abrir a caixa (1 = Sim, 0 = Nao) */
     extern volatile int g_diag_paused;
     g_diag_paused++; g_modal_seen = true;
     int r = tf_msgbox(g_wnd, text, L"Tag Force Recomp", MB_YESNO | MB_ICONQUESTION | MB_DEFBUTTON2);
     g_diag_paused--;
     return r == IDYES;
 }
+bool display_confirm(const wchar_t *text) { return confirm(text); }   /* Yes/No box for other modules (the game is paused while it is open) */
 void display_ask_exit(void) {
     if (confirm(L"Quit the game? Anything not saved inside the game will be lost.")) quit_process();
 }
@@ -311,6 +339,15 @@ static void perf_report(bool final) {
     if (final) raster_stats_print();
     fflush(stderr);
 }
+static int g_last_tex_n; static double g_last_tex_mb;   /* texturas criadas na GPU no ultimo quadro (frame_stats) */
+/* divisao do quadro pesado: GE (hle_ge.cpp), apresentacao (do fim de display_present ate o proximo quadro, sem o sono do limitador) e o resto = jogo (CPU) */
+extern double g_ge_frame_us; double pace_slept_peek_ms(void);
+static double g_tail_ms, g_tail_slept0, g_div_ge_ms, g_div_tail_ms; static bool g_tail_on; static LARGE_INTEGER g_tail0;
+static void tail_end(void) {   /* fim da apresentacao (antes do sono da saida): guarda o tempo dela para a divisao do quadro seguinte */
+    if (!g_tail_on) return; g_tail_on = false;
+    LARGE_INTEGER t, f; QueryPerformanceCounter(&t); QueryPerformanceFrequency(&f);
+    g_tail_ms = std::max(0.0, (double)(t.QuadPart - g_tail0.QuadPart) * 1000.0 / (double)f.QuadPart - (pace_slept_peek_ms() - g_tail_slept0));
+}
 static void frame_stats(void) {
     static LARGE_INTEGER freq, last, ov0; static bool init; static int ovn; static double ovsum;
     LARGE_INTEGER now; QueryPerformanceCounter(&now);
@@ -318,6 +355,7 @@ static void frame_stats(void) {
     double ms = (double)(now.QuadPart - last.QuadPart) * 1000.0 / (double)freq.QuadPart - pace_take_slept_ms();
     last = now;
     if (ms < 0) ms = 0;
+    g_div_ge_ms = g_ge_frame_us / 1000.0; g_ge_frame_us = 0; g_div_tail_ms = g_tail_ms;   /* a janela deste quadro inclui a apresentacao do anterior */
     if (g_modal_seen && g_pump_ms > 100) {   /* menu/caixa aberta ou janela arrastada: pausa pedida pelo jogador, nao lentidao */
         fprintf(stderr, "[perf] jogo pausado %.0f ms no quadro %llu (menu, caixa ou janela arrastada)\n", g_pump_ms, (unsigned long long)g_frames);
         ms = std::max(0.0, ms - g_pump_ms);
@@ -329,6 +367,15 @@ static void frame_stats(void) {
     if (ms > 100)   /* travadas visiveis: onde foi o tempo (o resto e emulacao + desenho) */
         fprintf(stderr, "[perf] quadro lento %llu: %.0f ms (mensagens da janela %.0f ms, controle %.0f ms%s%s)\n", (unsigned long long)g_frames, ms,
                 g_pump_ms, g_pad_ms, g_modal_seen ? ", janela arrastada/redimensionada ou caixa aberta" : "", GetForegroundWindow() != g_wnd ? ", janela sem foco" : "");
+    {   /* quadro pesado (passa de 1 vblank): quanto foi criar texturas na GPU e esperar PNGs substitutos (o resto e o jogo + desenho) */
+        extern void ge_frame_cost(int *, double *, double *, double *, double *, double *); int tn; double tmb, tms, wms, ams, cms; ge_frame_cost(&tn, &tmb, &tms, &wms, &ams, &cms);
+        g_last_tex_n = tn; g_last_tex_mb = tmb;
+        static double pipe0, gw0; const double pms = g_gpu_pipe_ms - pipe0, gwms = g_gpu_wait_ms - gw0; pipe0 = g_gpu_pipe_ms; gw0 = g_gpu_wait_ms;
+        static const double div_min = getenv("TF_DIV_MIN") ? atof(getenv("TF_DIV_MIN")) : 25.0;   /* teste: TF_DIV_MIN=0 mede todos os quadros */
+        static int told; if (ms > div_min && told < 3000) { told++; fprintf(stderr, "[perf] quadro pesado %llu: %.1f ms (texturas criadas na GPU: %d, %.0f MB, %.1f ms = memoria %.1f + copia %.1f; esperando PNGs: %.1f ms; pipelines %.1f ms; esperando a GPU %.1f ms)%c", (unsigned long long)g_frames, ms, tn, tmb, tms, ams, cms, wms, pms, gwms, 10);
+            const double cpu = std::max(0.0, ms - g_div_ge_ms - g_pump_ms - g_pad_ms - g_div_tail_ms);   /* o resto da janela: emulacao da CPU do jogo e o que mais estiver nela */
+            fprintf(stderr, "[perf] divisao %llu: jogo (CPU) %.1f ms | GE %.1f | janela %.1f | controle %.1f | apresentacao do quadro anterior %.1f ms (inclui a espera do vblank)%c", (unsigned long long)g_frames, cpu, g_div_ge_ms, g_pump_ms, g_pad_ms, g_div_tail_ms, 10); }
+    }
     g_modal_seen = false;
     { extern void ge_res_feedback(double); ge_res_feedback(ms); }
     g_pw[g_pn++] = (float)ms; g_wsum += ms; if (ms > g_wmax) g_wmax = ms;
@@ -341,7 +388,10 @@ static void frame_stats(void) {
     ovn++; ovsum += ms;
     if (ovn >= 30) {   /* overlay: atualiza a cada 30 quadros */
         double el = (double)(now.QuadPart - ov0.QuadPart) / (double)freq.QuadPart;
-        if (el > 0) g_ov_fps = ovn / el;
+        /* com a GPU: imagens apresentadas por segundo (o 120 FPS apresenta duas por vblank); senao, vblanks por segundo */
+        extern uint64_t g_gpu_presents; static uint64_t pres0;
+        if (el > 0) g_ov_fps = gpu_mode() && g_gpu_presents != pres0 ? (double)(g_gpu_presents - pres0) / el : ovn / el;
+        pres0 = g_gpu_presents;
         g_ov_ms = ovsum / ovn; ovn = 0; ovsum = 0; ov0 = now;
     }
     if (g_pn >= 600) perf_report(false);
@@ -423,7 +473,7 @@ void ge_marca_texturas(int n);
 static void marcas_processar(void) {
     { static const char *mq = getenv("TF_MARCA_QUADRO"); if (mq && quadro_na_lista(mq, g_frames)) marca_cpu(); }    /* testes: marca nestes quadros (como F7) */
     { static const char *mg = getenv("TF_MARCAG_QUADRO"); if (mg && quadro_na_lista(mg, g_frames)) marca_graf(); }  /* testes: F8 nestes quadros */
-    if (!g_marcag_pedida && !g_marca_pedida) return;
+    if (!g_marcag_pedida) return;
     if (text_input_busy()) return;   /* a caixa de texto do jogo (nome do jogador) esta aberta: a marca espera ela fechar */
     const unsigned long long q = g_frames;
     if (g_marcag_pedida) {
@@ -438,27 +488,60 @@ static void marcas_processar(void) {
             {   /* saida: janela e o monitor onde ela esta */
                 RECT cr = {}; GetClientRect(g_wnd, &cr); DEVMODEW dm = {}; dm.dmSize = sizeof dm; MONITORINFOEXW mi = {}; mi.cbSize = sizeof mi;
                 if (!GetMonitorInfoW(MonitorFromWindow(g_wnd, MONITOR_DEFAULTTOPRIMARY), &mi) || !EnumDisplaySettingsW(mi.szDevice, ENUM_CURRENT_SETTINGS, &dm)) EnumDisplaySettingsW(nullptr, ENUM_CURRENT_SETTINGS, &dm);
-                fprintf(stderr, "[marca-graf] #%d saida: janela %ldx%ld (imagem interna %dx%d), filtro=%d proporcao=%d escala_inteira=%d sync=%d fps60=%d, monitor %lux%lu a %lu Hz, %s\n", n, cr.right, cr.bottom,
-                        g_sw, g_sh, (int)g_gfx.filter, (int)g_gfx.aspect, (int)g_gfx.integer, (int)g_gfx.sync, (int)g_gfx.fps60, dm.dmPelsWidth, dm.dmPelsHeight, dm.dmDisplayFrequency, pace_mid_suspended() ? "60 FPS SUSPENSO agora" : "60 FPS ativo");
+                fprintf(stderr, "[marca-graf] #%d saida: janela %ldx%ld (imagem interna %dx%d), filtro=%d proporcao=%d escala_inteira=%d sync=%d fps=%d, monitor %lux%lu a %lu Hz, %s\n", n, cr.right, cr.bottom,
+                        g_sw, g_sh, (int)g_gfx.filter, (int)g_gfx.aspect, (int)g_gfx.integer, (int)g_gfx.sync, (int)g_gfx.fps, dm.dmPelsWidth, dm.dmPelsHeight, dm.dmDisplayFrequency, pace_mid_suspended() ? "60 FPS SUSPENSO agora" : "60 FPS ativo");
             }
             ge_marca_texturas(n);
             if (!nota.empty()) marca_nota_log(n, nota, "marca-graf");
-            char t[64]; snprintf(t, sizeof t, "Graphics issue #%d saved", n); display_notify(t);
-        }
-    }
-    if (g_marca_pedida) {
-        g_marca_pedida = false; std::string nota;
-        if (!marca_nota_modal(false, &nota)) { fprintf(stderr, "[marca-cpu] descartada no quadro %llu (Esc ou nota vazia)\n", q); display_notify("CPU mark discarded"); }
-        else {
-            const int n = ++g_marca_n;
-            fprintf(stderr, "[marca-cpu] #%d quadro %llu (marcado pelo jogador: erro da CPU)\n", n, q);
-            cap_marcar();
+            /* marca geral: a mesma marca tambem grava o lado da CPU (mesmo numero e mesma nota; fora de duelo os plugins nao despejam nada util) */
+            fprintf(stderr, "[marca-cpu] #%d quadro %llu (marca geral do jogador)\n", n, q);
             plugins_marca(n);   /* os plugins despejam o estado do duelo (CPUvsCPU: tabuleiro; IAAprimorada: ultimas decisoes) */
             if (!nota.empty()) marca_nota_log(n, nota, "marca-cpu");
-            char t[64]; snprintf(t, sizeof t, "CPU mistake #%d saved", n); display_notify(t);
+            char t[64]; snprintf(t, sizeof t, "Mark #%d saved", n); display_notify(t);
         }
     }
 }
+static int g_pending_renderer = -1;
+static bool g_q3_pending;
+/* THREAD DE APRESENTACAO (120 FPS, Vulkan; 2026-10-15). Com uma thread so, as quatro imagens de cada quadro do jogo (Q1, Q2, Q3 e o real, a cada
+ * 8,3 ms) so podiam sair dentro das chamadas de display_present; quando o jogo levava mais de ~8 ms entre elas (mapa, partes do duelo: 9-13 ms
+ * na sessao 193658 do jogador) o 120 caia para o ritmo de 60. Agora, no quadro novo, a thread do jogo desenha os tres intermediarios (cada um no
+ * seu buffer) e uma copia do real e entrega as quatro apresentacoes, com hora marcada, a esta thread; o jogo segue. O backend tem uma trava
+ * (gpu.cpp). Antes de qualquer apresentacao feita pela thread do jogo a fila e esvaziada (pres_drain). TF_APRESENTADOR=0 desliga. */
+struct PresJob { int64_t due; int fb; int tag; bool q1; };
+static std::mutex g_pq_mu; static std::condition_variable g_pq_cv; static std::deque<PresJob> g_pq; static bool g_pq_started;
+static void pres_wait(HANDLE tm, int64_t target) {
+    for (;;) {
+        const double ms = pace_ms(target - pace_now());
+        if (ms <= 0) return;
+        if (ms > 2.0 && tm) { LARGE_INTEGER due; due.QuadPart = -(LONGLONG)((ms - 1.5) * 10000.0); SetWaitableTimer(tm, &due, 0, nullptr, nullptr, FALSE); WaitForSingleObject(tm, 50); }
+        else YieldProcessor();
+    }
+}
+static void pres_thread(void) {
+    SetThreadPriority(GetCurrentThread(), THREAD_PRIORITY_HIGHEST);
+    HANDLE tm = CreateWaitableTimerExW(nullptr, nullptr, 0x2 /* HIGH_RESOLUTION */, TIMER_ALL_ACCESS);
+    for (;;) {
+        PresJob j;
+        { std::unique_lock<std::mutex> lk(g_pq_mu); g_pq_cv.wait(lk, [] { return !g_pq.empty(); }); j = g_pq.front(); }
+        pres_wait(tm, j.due);
+        if (j.q1) pace_async_late(gpu_wait_kicked_for(0) < 0);   /* a GPU ainda desenhando os intermediarios: a fase sobe */
+        gpu_present_fb_tag(j.fb, j.tag);
+        { std::lock_guard<std::mutex> lk(g_pq_mu); g_pq.pop_front(); }
+        g_pq_cv.notify_all();
+    }
+}
+static void pres_push(int64_t due, int fb, int tag, bool q1 = false) {
+    if (!g_pq_started) { g_pq_started = true; std::thread(pres_thread).detach(); }
+    { std::lock_guard<std::mutex> lk(g_pq_mu); g_pq.push_back({due, fb, tag, q1}); }
+    g_pq_cv.notify_all();
+}
+static void pres_drain(void) { if (!g_pq_started) return; std::unique_lock<std::mutex> lk(g_pq_mu); g_pq_cv.wait(lk, [] { return g_pq.empty(); }); }
+/* modo adiado (pacing.cpp): intermediario (ou, sem ele, o real) preparado na chamada do quadro novo e mostrado na seguinte, na hora g_def_due;
+ * g_def_exit: o modo acabou e o real adiado sai no inicio da proxima chamada de quadro novo (esse quadro fica sem intermediario) */
+static bool g_def_mid, g_def_real, g_def_exit, g_def_real_armed; static int g_def_fb = -1; static int64_t g_def_due, g_def_ws;
+static int g_real_fb_shown = -1; static uint32_t g_real_ver_shown;   /* ultimo quadro real apresentado e a versao dele (interp_fb_version) */   /* 120 FPS: falta o 3o intermediario do quadro (t = 0,75); sai no inicio da chamada seguinte, antes do real */
+void display_request_renderer(int r) { g_pending_renderer = r; }   /* a troca de renderizador reinicia a GPU: so entre quadros (display_present) */
 void display_present(void) {
     static const bool ge_stats = getenv("GE_STATS") != nullptr, no_pace = getenv("NO_PACE") != nullptr, load_dbg = getenv("TF_LOAD_DEBUG") != nullptr;
     if (ge_stats && (g_frames % 60) == 0) fprintf(stderr, "[stats] frame %llu prims=%llu fbwrites=%llu fb=%08x fmt=%u stride=%u", (unsigned long long)g_frames, (unsigned long long)g_prims, (unsigned long long)g_fb_writes, g_fb_addr, g_fb_fmt, g_fb_stride), fputc(10, stderr);
@@ -466,8 +549,13 @@ void display_present(void) {
     LARGE_INTEGER q0, q1, q2, qf; QueryPerformanceCounter(&q0);
     /* a saida da chamada (a hora em que o jogo e o audio voltam a rodar) e regulada por pace_exit */
     bool call_timed = false;
-    struct ExitMark { bool &timed; ~ExitMark() { pace_exit(timed); } } exit_mark{call_timed};
+    struct ExitMark { bool &timed; ~ExitMark() { tail_end(); pace_exit(timed); } } exit_mark{call_timed};
     MSG msg; while (PeekMessageA(&msg, nullptr, 0, 0, PM_REMOVE)) { TranslateMessage(&msg); DispatchMessageA(&msg); }
+    if (g_pending_pack) {
+        g_pending_pack = false; const int to = gfx_option_get(GFXOPT_TEXTURE_PACK) ? 0 : 1;
+        gfx_option_set(GFXOPT_TEXTURE_PACK, to); display_notify(to ? "Textures: Enhanced" : "Textures: Original (PSP)");
+    }
+    if (g_pending_renderer >= 0) { const int r = g_pending_renderer; g_pending_renderer = -1; pres_drain(); display_set_renderer(r); }   /* pedido pela tela Graphics do jogo: trocado aqui, entre dois quadros */
     {   /* esconde o cursor depois de 5 s sem mexer o mouse (so com a janela do jogo ativa e o cursor sobre a area do jogo) */
         static POINT last; static ULONGLONG moved = GetTickCount64(); POINT pt; GetCursorPos(&pt);
         if (pt.x != last.x || pt.y != last.y) { last = pt; moved = GetTickCount64(); g_cursor_hidden = false; }
@@ -494,17 +582,31 @@ void display_present(void) {
     { static const char *df = getenv("DUMP_FRAME"); if (df && g_frames == (uint64_t)atoi(df)) k_dump_threads(); }
     profiler_start();
     frame_stats();
+    { QueryPerformanceCounter(&g_tail0); g_tail_slept0 = pace_slept_peek_ms(); g_tail_on = true; }   /* inicio da apresentacao deste quadro (tail_end, no fim da chamada) */
     marcas_processar();   /* F7/F8: caixa de nota (pausa o jogo) e, se confirmada, a marca; a pausa sai das estatisticas do quadro seguinte (g_pausa_ms) */
     static bool ff_off = getenv("TF_NO_LOADING_FF") != nullptr;
     audio_out_skip(g_loading_run >= 12 && !ff_off);
-    /* quadro real pendente do modo 'apresentar antes' (ver abaixo): sai 1/60 s depois do intermediario */
+    /* quadro real pendente do modo 'apresentar antes' (ver abaixo): sai 1/60 s depois do intermediario; no 120 FPS o terceiro intermediario sai
+     * meio passo antes dele (desenhado aqui: a GPU tem a fase inteira para ele). Sem limitador (testes) o terceiro sai na hora. */
     bool real_flushed = false;
     { int fb; int64_t due, start;
-      if (pace_real_take(&fb, &due, &start) && gpu_mode() && fb >= 0) {
-          pace_wait_until(due); gpu_present_fb(fb); real_flushed = true;
+      const bool armed = pace_real_take(&fb, &due, &start);
+      const int64_t h = pace_step_ticks() / 2;
+      if (g_q3_pending) {
+          g_q3_pending = false;
+          if (interp_extra(0.75f, g_gfx.res)) { if (armed) { pace_wait_until(due - h); gpu_wait_kicked(); } interp_show(); }
+          interp_extra_done();
+      }
+      if (armed && gpu_mode() && fb >= 0) {
+          /* real do modo adiado: o quadro novo seguinte ja esta retido na fila (gpu_hold); a apresentacao passa na frente dele, como o intermediario
+           * (soltando-o antes ela esperava a GPU desenhar o quadro seguinte e perdia a atualizacao do monitor: intervalos 25/8 ms na tela) */
+          static const bool no_ahead = getenv("TF_ADIADO_FRENTE") && atoi(getenv("TF_ADIADO_FRENTE")) == 0;   /* A/B */
+          const bool ahead = g_def_real_armed && !no_ahead; g_def_real_armed = false;
+          pace_wait_until(pace_fit_call(due, due - h * 7 / 10)); if (ahead) gpu_mid_scope(true); gpu_present_fb(fb); if (ahead) gpu_mid_scope(false); real_flushed = true; g_real_fb_shown = fb; g_real_ver_shown = interp_fb_version(fb);
           pace_stat(PACE_STAT_REAL, pace_ms(pace_now() - start)); } }
     const bool gpu = gpu_mode(); int gfb = -1;
     if (gpu && g_fb_addr) gfb = ge_gpu_frame(g_fb_addr, g_fb_fmt);   /* renderizador por GPU: id do quadro sombra na GPU, ou -1 (quadro nativo) */
+    struct CkPost { ~CkPost() { ge_gpu_frame_post(); } } ck_post;   /* a reducao do quadro para a comparacao com o nativo, no fim desta chamada (depois do intermediario) */
     /* Latencia do 60 FPS: o quadro novo ja esta pronto (o jogo termina em poucos ms) mas era segurado ate o vblank (~13 ms de espera) e o real
      * ainda um vblank depois. Com quadro novo + intermediario, o intermediario sai logo que a "fase" do jogo permite (ultima saida + phi, o tempo de
      * trabalho tipico) e o real 1/60 s depois; a grade de vblanks so avanca. O teclado e lido DEPOIS da espera (antes o jogo via o controle de ~13 ms atras). */
@@ -522,10 +624,38 @@ void display_present(void) {
     const bool mid_ok = pace_mid_allowed();
     { static uint32_t sn; const uint32_t n = pace_susp_n(); if (n != sn) { sn = n; fprintf(stderr, "[perf] 60 FPS suspenso no quadro %llu (saidas atrasadas em mais da metade dos quadros; %u vez(es) na sessao): ~2,5 s a 30 quadros reais por segundo%c", (unsigned long long)g_frames, n, 10); } }
     const bool early = !no_early && pace_on && pace_have_exit() && gfb >= 0 && interp_mid_ready(gfb, g_frames, mid_ok);
+    /* 120 FPS: tres intermediarios (t = 0,25 / 0,5 / 0,75) a cada meio passo, se o monitor e o tempo do jogo deixam (pace_mid_target decide);
+     * senao o quadro vai no ritmo do 60. Sem limitador (replays) tambem, para testar as imagens. */
+    const bool fps120 = g_gfx.fps == GFX_FPS_120 && gfb >= 0;
+    bool quarter = fps120 && !early && no_pace && interp_mid_ready(gfb, g_frames, mid_ok);
     const int64_t work_start = pace_last_exit(); int64_t mid_target = 0;
-    if (early) { mid_target = pace_mid_target(q0.QuadPart); pace_grid(false); }   /* a espera fica para logo antes de apresentar */
+    /* quadro novo que NAO ganha intermediario (cena trocou, par que nao se interpola): sai na hora em que o intermediario sairia, no mesmo compasso
+     * de 1/60 s. Antes ia pela grade antiga, ~7 ms depois do real anterior; a chamada seguinte o apresentava de novo e o driver segurava essa 2a
+     * apresentacao 15-18 ms (intervalos 7/25/28 ms em vez de 16,7; sessao 205658 inteira medida em 2026-10-15). TF_COMPASSO=0 desliga (A/B). */
+    static const bool no_slot = getenv("TF_COMPASSO") && atoi(getenv("TF_COMPASSO")) == 0;
+    const bool slot = !early && !quarter && !no_early && !no_slot && pace_on && pace_have_exit() && gfb >= 0 && interp_enabled() && interp_has_new(gfb);
+    /* modo adiado (cut-in pesado; pacing.cpp): defer = quadro novo cujo intermediario sai na chamada seguinte; def_show = esta e a chamada seguinte;
+     * def_exit = 1o quadro novo depois do modo; def_flush = chegou quadro novo com um adiado ainda pendente (o jogo saiu do compasso de 30) */
+    static const bool no_async = getenv("TF_APRESENTADOR") && atoi(getenv("TF_APRESENTADOR")) == 0;
+    const bool async = !no_async && fps120 && pace_on && pace_have_exit() && gfb >= 0 && g_gfx.renderer == GFX_RENDER_VULKAN && pace_monitor_hz() >= 100 && interp_enabled()
+                       && !real_flushed && !g_q3_pending && !g_def_mid && !g_def_exit;
+    if (async) pace_defer_reset("120 FPS pela thread de apresentacao");
+    else pres_drain();   /* daqui em diante a thread do jogo apresenta: o que estava na fila sai antes */
+    if (!(pace_on && gfb >= 0)) { pace_defer_reset("limitador desligado ou sem GPU"); g_def_mid = false; g_def_exit = false; }
+    const bool async_new = async && interp_has_new(gfb), async_mid = async_new && interp_mid_ready(gfb, g_frames, mid_ok);
+    const bool fresh = !async && (early || slot);
+    const bool def_flush = g_def_mid && fresh;
+    if (def_flush) pace_defer_reset("quadro novo fora do compasso");
+    const bool defer = fresh && !def_flush && pace_defer_active(), def_show = g_def_mid && !fresh, def_exit = fresh && !defer && !def_flush && g_def_exit;
+    if (async) { if (async_new) mid_target = pace_async_target(q0.QuadPart); pace_grid(false); pace_set_sub(2); quarter = false; }
+    else if (defer) { mid_target = pace_defer_target(q0.QuadPart); pace_grid(false); pace_set_sub(1); quarter = false; }
+    else if (def_exit) { pace_grid(false); pace_set_sub(1); quarter = false; }
+    else if (early) { mid_target = pace_mid_target(q0.QuadPart, fps120, &quarter); pace_grid(false); pace_set_sub(quarter ? 2 : 1); }   /* a espera fica para logo antes de apresentar */
+    else if (slot) { mid_target = pace_mid_target(q0.QuadPart); pace_grid(false); pace_set_sub(1); }
+    else if (def_show) { pace_w2_sample(); pace_grid(false); }
     else if (pace_on) pace_grid(true);
     call_timed = pace_on;
+    if (ctl_frame(g_frames)) quit_process();   /* TF_CTL: o agente comanda o jogo quadro a quadro (runtime/ctl.cpp) */
     latch_buttons();
     if (!g_fb_addr) return;
     /* sem raster nativo o quadro nativo da VRAM esta invalido (e protegido): a deteccao da tela de carregamento usa a reducao da GPU */
@@ -556,6 +686,7 @@ void display_present(void) {
           for (int y = 0; y < hh; y++) { const uint32_t *r = hi + (size_t)y * hs; uint32_t *o = &g_hi[(size_t)y * hw]; for (int x = 0; x < hw; x++) { uint32_t p = r[x]; o[x] = ((p & 255) << 16) | (p & 0xff00) | ((p >> 16) & 255); } }
           g_src = g_hi.data(); g_sw = hw; g_sh = hh;
       } }
+    bool ov_new = false;   /* o overlay (F3, caixas dos mods) mudou nesta chamada: a imagem precisa ser apresentada de novo */
     if (gpu) {   /* overlay num quadro 480x272 proprio (caixa translucida + texto), composto pela GPU */
         /* a imagem do overlay (1920x1088, 8 MB) so vai para a GPU quando muda: o texto do fps muda a cada 30 quadros e a caixa dos mods
          * quando o texto dela muda (antes era reenviada a cada quadro enquanto aparecia) */
@@ -580,7 +711,7 @@ void display_present(void) {
             src = comb.data();
         } else if (mb) { key = (1ull << 62) | modbox_version(); src = mb; }
         else if (g_show_fps) { key = fkey; src = ov4.data(); }
-        if (key != sent_key || g_gpu_gen != sent_gen) { gpu_set_overlay(src); sent_key = key; sent_gen = g_gpu_gen; }   /* backend novo: reenvia */
+        if (key != sent_key || g_gpu_gen != sent_gen) { gpu_set_overlay(src); sent_key = key; sent_gen = g_gpu_gen; ov_new = true; }   /* backend novo: reenvia */
     } else {
         g_ov_buf = g_hi.empty() || g_src == g_pix ? g_pix : g_hi.data(); g_ov_w = g_sw; g_ov_h = g_sh; g_ov_n = g_sw / 480;
         if (g_show_fps) draw_fps_overlay();
@@ -589,7 +720,8 @@ void display_present(void) {
     if (g_burst_n && g_frames >= g_burst_next) { g_burst_n--; g_burst_next = g_frames + 10; g_cap_marca = true; }   /* F8: mais 2 quadros, para pegar piscadas */
     seq_quadro();   /* TF_SEQ_FRAME (replays): grava a caixa-preta dos quadros apresentados */
     const char *cap_tag = cap_tag_devida(g_frames);   /* modo de diagnostico grafico: nullptr = nada a gravar neste quadro */
-    const bool snap_want = snap && quadro_na_lista(snap, g_frames);
+    const char *ctl_shot = ctl_shot_path();
+    const bool snap_want = ctl_shot || (snap && quadro_na_lista(snap, g_frames));
     const bool want = snap_want || cap_tag;
     if (want) {   /* depuracao: SNAP_FRAME="n1,n2,..." grava gen/snap_<n>.bmp */
         int hw2, hh2; const uint32_t *hd2 = gpu ? mpeg_hd_present(&hw2, &hh2, nullptr) : nullptr;
@@ -613,7 +745,7 @@ void display_present(void) {
         }
         if (cap_tag) cap_salvar(cap_tag, g_src, g_sw, g_sh);
         if (snap_want) {
-        char fn[64]; snprintf(fn, sizeof fn, "gen/snap_%llu.bmp", (unsigned long long)g_frames);
+        char fn[512]; snprintf(fn, sizeof fn, "gen/snap_%llu.bmp", (unsigned long long)g_frames); if (ctl_shot) snprintf(fn, sizeof fn, "%s", ctl_shot);
         const bool saved = write_bmp24(fn, g_sw, g_sh, [&](int y, uint8_t *row) {
             const uint32_t *r = g_src + (size_t)y * g_sw;
             for (int x = 0; x < g_sw; x++) { row[x * 3] = (uint8_t)r[x]; row[x * 3 + 1] = (uint8_t)(r[x] >> 8); row[x * 3 + 2] = (uint8_t)(r[x] >> 16); }
@@ -640,19 +772,104 @@ void display_present(void) {
         }   /* fim de snap_want */
     }
     if (gpu) { int hw, hh; uint32_t hv; static uint32_t hlast; static bool hdon;
-      if (const uint32_t *hd = mpeg_hd_present(&hw, &hh, &hv)) {   /* filme com video substituto HD (mod): so reenvia a imagem (8 MB) quando o quadro muda */
+      if (const uint32_t *hd = mpeg_hd_present(&hw, &hh, &hv)) {
+          pres_drain();   /* filme com video substituto HD (mod): so reenvia a imagem (8 MB) quando o quadro muda */
           if (hv != hlast || !hdon) { gpu_present_pixels(hd, hw, hh); hlast = hv; hdon = true; } else gpu_present_last();
           return; }
       hdon = false;
       if (gfb >= 0) {
-          if (early) pace_wait_until(mid_target);
-          const bool skip_repeat = real_flushed && !interp_has_new(gfb);   /* o real ja saiu no inicio desta chamada e nao ha quadro novo: nao repete (era um segundo passe de escala 4K + espera da GPU) */
+          /* nao repete uma imagem que ja esta na tela: o real ja saiu no inicio desta chamada, ou (60/120 FPS) o ultimo real apresentado e este mesmo quadro
+           * e nada foi desenhado nele desde entao (repetir custava um passe de escala 4K e, a ~7 ms da apresentacao anterior, o driver segurava 15-18 ms) */
+          const bool same_img = g_real_fb_shown == gfb && g_real_ver_shown == interp_fb_version(gfb) && !ov_new;
+          const bool skip_repeat = !interp_has_new(gfb) && (real_flushed || (same_img && pace_on && interp_enabled() && !no_slot));
+          const bool allow = mid_ok && !(g_loading_run >= 12 && !ff_off);
           const int64_t t0 = pace_now();
-          const bool shown = interp_present(gfb, g_frames, mid_ok && !(g_loading_run >= 12 && !ff_off), g_gfx.res);
-          pace_stat(PACE_STAT_PRESENT, pace_ms(pace_now() - t0));
-          if (shown && early) pace_real_arm(gfb, work_start);   /* o real sai 1/60 s depois, no inicio da proxima chamada (a grade de saidas do jogo continua regular: o audio depende dela) */
-          else if (!shown && !skip_repeat) gpu_present_fb(gfb);
-          if (early) latch_buttons();   /* entrada o mais fresca possivel para quando o jogo voltar a rodar */
+          bool shown, slot_deferred = false; int64_t q1 = 0;   /* q1: hora em que o (1o) intermediario comecou a ser apresentado; os seguintes e o real contam dela (a duracao de cada
+                                         * apresentacao varia 0,2-1,2 ms: contar do fim esticava o quadro e a malha de fase se perdia no 120 FPS) */
+          if (async) {   /* 120 FPS pela thread de apresentacao: no quadro novo desenha tudo e marca as horas; nas outras chamadas nada a apresentar */
+              if (async_new) {
+                  /* CONTRAPRESSAO: os intermediarios e a copia do real usam buffers reaproveitados (3 de rascunho, 2 de copia). Se a thread de apresentacao
+                   * atrasou mais de um grupo (engasgo: textura nova, troca de mensagem, personagem entrando), desenhar o grupo seguinte nesses buffers
+                   * apagaria o que ainda nao foi mostrado: imagens velhas/novas misturadas dentro do grupo (a piscada). So o ultimo job (o real) pode estar
+                   * pendente. TF_PRES_BACKPRESSURE=0 desliga (A/B). */
+                  static const bool bp = !(getenv("TF_PRES_BACKPRESSURE") && atoi(getenv("TF_PRES_BACKPRESSURE")) == 0);
+                  if (bp && g_pq_started) { std::unique_lock<std::mutex> lk(g_pq_mu); g_pq_cv.wait(lk, [] { return g_pq.size() <= 1; }); }
+                  extern void interp_use_scratch(int); extern int interp_take_fb(void); extern int interp_real_copy(int);
+                  const int64_t h = pace_step_ticks() / 2; int q[3] = {-1, -1, -1};
+                  interp_use_scratch(0); const bool m1 = interp_prepare(gfb, g_frames, async_mid && allow, g_gfx.res, 0.25f); if (m1) q[0] = interp_take_fb();
+                  const bool parado = m1 && interp_mid_static();
+                  if (m1 && !parado) {
+                      interp_use_scratch(1); if (interp_extra(0.5f, g_gfx.res)) q[1] = interp_take_fb();
+                      interp_use_scratch(2); if (interp_extra(0.75f, g_gfx.res)) q[2] = interp_take_fb();
+                  }
+                  interp_extra_done(); interp_use_scratch(0);
+                  if (!m1) gpu_kick();   /* sem intermediario: solta o quadro real retido */
+                  int rc = interp_real_copy(gfb); if (rc < 0) rc = gfb;   /* o jogo pode redesenhar o mesmo quadro sombra antes da hora do real */
+                  if (m1 && !parado) { pres_push(mid_target, q[0], 1, true); for (int k = 1; k < 3; k++) if (q[k] >= 0) pres_push(mid_target + k * h, q[k], 1); pres_push(mid_target + 3 * h, rc, 0); }
+                  else for (int k = 0; k < 4; k++) pres_push(mid_target + k * h, rc, k < 3, k == 0 && m1);   /* par parado ou cena trocou: a imagem real nas 4 horas (contador F3 e malha de fase seguem a 120) */
+              }
+              latch_buttons(); return;
+          }
+          if (def_flush) {   /* o adiado pendente sai ja (atrasado), antes de o quadro novo preparar outro intermediario */
+              gpu_wait_kicked();
+              if (g_def_real) { gpu_present_fb(g_def_fb); g_real_fb_shown = g_def_fb; g_real_ver_shown = interp_fb_version(g_def_fb); } else interp_show();
+              g_def_mid = false; g_def_exit = false;
+          }
+          if (def_show) {   /* modo adiado, chamada seguinte ao quadro novo: o intermediario na hora marcada e o real 1/60 s depois (inicio da chamada do proximo quadro novo) */
+              pace_wait_until(g_def_due); gpu_wait_kicked(); const int64_t qs = pace_now();
+              if (g_def_real) { gpu_present_fb(g_def_fb); g_real_fb_shown = g_def_fb; g_real_ver_shown = interp_fb_version(g_def_fb); }
+              else { interp_show(); pace_real_arm(g_def_fb, g_def_ws, qs + pace_step_ticks(), false); g_def_real_armed = true; }
+              g_def_mid = false; g_def_exit = !pace_defer_active() && !g_def_real;
+              latch_buttons(); return;
+          }
+          if (defer) {   /* modo adiado, chamada do quadro novo: desenha o intermediario agora e so mede quando a GPU terminou (para saber quando sair do modo) */
+              if (!early) gpu_kick();   /* sem intermediario (cena trocou): solta o quadro real retido */
+              shown = interp_prepare(gfb, g_frames, allow, g_gfx.res, 0.5f);
+              if (shown && !interp_mid_static()) {
+                  const int64_t xt = pace_exit_target(); const double left = xt ? pace_ms(xt - pace_now()) - 0.3 : 0.0;
+                  const double w = gpu_wait_kicked_for(std::max(0.0, left));
+                  pace_defer_need(w >= 0 ? pace_ms(pace_now() - work_start) : 99.0);
+              } else pace_defer_need(pace_ms(pace_now() - work_start));
+              int rfb = gfb;
+              if (shown) { extern int interp_real_copy(int); const int c = interp_real_copy(gfb); if (c >= 0) rfb = c; }   /* o real sai so na chamada do proximo quadro novo: copia (o jogo pode redesenhar o mesmo quadro) */
+              g_def_mid = true; g_def_real = !shown; g_def_fb = rfb; g_def_due = mid_target; g_def_ws = work_start;
+              latch_buttons(); return;
+          }
+          if (def_exit) {   /* fim do modo adiado: o real adiado saiu no inicio desta chamada, na hora em que este intermediario sairia; este quadro vai sem ele */
+              gpu_kick(); interp_prepare(gfb, g_frames, false, g_gfx.res, 0.5f);   /* consome o quadro (o proximo intermediario parte dele) sem desenhar */
+              pace_real_arm(gfb, work_start, 0); g_def_exit = false;
+              latch_buttons(); return;
+          }
+          if (early || quarter) {   /* o intermediario e desenhado e enviado a GPU ja; aparece na hora marcada, depois de a GPU terminar */
+              shown = interp_prepare(gfb, g_frames, allow, g_gfx.res, quarter ? 0.25f : 0.5f);
+              int64_t t_gpu = 0;
+              if (early) { pace_stat(PACE_STAT_PRESENT, pace_ms(pace_now() - t0)); if (shown && !interp_mid_static()) { gpu_wait_kicked(); pace_gpu_done(); } t_gpu = pace_now(); pace_wait_until(mid_target); }   /* par parado: nada foi para a GPU (e a fase da GPU nao aprende com ele) */
+              q1 = pace_now(); interp_show();
+              if (early) pace_mid_result(pace_ms(q1 - mid_target));
+              if (early && pace_ms(q1 - mid_target) > 2.0) {   /* intermediario que saiu depois da hora: por que (o jogo chegou tarde ou a GPU terminou tarde) */
+                  static int nlate; if (nlate++ < 300) fprintf(stderr, "[ritmo] intermediario atrasado no quadro %llu: %.1f ms (hora %.1f ms depois da saida; o jogo chegou em %.1f, montar %.1f, GPU pronta em %.1f; texturas criadas: %d, %.0f MB)%c", (unsigned long long)g_frames,
+                      pace_ms(q1 - mid_target), pace_ms(mid_target - work_start), pace_ms(q0.QuadPart - work_start), pace_ms(t0 - q0.QuadPart), pace_ms(t_gpu - work_start), g_last_tex_n, g_last_tex_mb, 10);
+              }
+          } else if (slot) {   /* quadro novo sem intermediario: no compasso (ver 'slot' acima) */
+              gpu_kick();   /* solta o quadro real retido na fila (gpu_hold): ele e que vai aparecer */
+              shown = interp_prepare(gfb, g_frames, allow, g_gfx.res, 0.5f);
+              if (!shown && pace_mid_suspended() && pace_exit_target()) {   /* intermediarios suspensos por atraso (pace_mid_result): o real sai no inicio da chamada
+                                                                           * seguinte, a hora fixa (30 constantes); aqui ele ainda nao estaria pronto */
+                  slot_deferred = true; pace_real_arm(gfb, work_start, pace_exit_target() + pace_ticks(2.5));
+              } else {
+                  pace_wait_until(mid_target); q1 = pace_now();
+                  if (shown) interp_show(); else { gpu_present_fb(gfb); g_real_fb_shown = gfb; g_real_ver_shown = interp_fb_version(gfb); }
+              }
+          } else { shown = interp_present(gfb, g_frames, allow, g_gfx.res); pace_stat(PACE_STAT_PRESENT, pace_ms(pace_now() - t0)); }
+          if (shown && quarter) {   /* 120 FPS: o 2o intermediario meio passo depois do 1o; o 3o e o real saem na proxima chamada */
+              const int64_t h = pace_step_ticks() / 2;
+              if (interp_extra(0.5f, g_gfx.res)) { if (early) { pace_wait_until(pace_fit_call(q1 + h, q1 + h * 3 / 10)); gpu_wait_kicked(); } interp_show(); }
+              g_q3_pending = true;   /* desenhar o 3o aqui atrasava a saida desta chamada (~0,5 ms de CPU) e o ciclo inteiro derivava em relacao ao monitor */
+              if (early) pace_real_arm(gfb, work_start, q1 + 3 * h);
+          } else if (shown && (early || slot)) pace_real_arm(gfb, work_start, q1 + pace_step_ticks());
+          else if (slot_deferred) {}   /* ja armado para a proxima chamada */   /* o real sai 1/60 s depois, no inicio da proxima chamada (a grade de saidas do jogo continua regular: o audio depende dela) */
+          else if (!shown && !skip_repeat && !slot) { gpu_present_fb(gfb); g_real_fb_shown = gfb; g_real_ver_shown = interp_fb_version(gfb); }
+          if (early || slot) latch_buttons();   /* entrada o mais fresca possivel para quando o jogo voltar a rodar */
       } else gpu_present_pixels(g_pix, 480, 272);
       return; }
     HDC dc = GetDC(g_wnd); paint_frame(dc); ReleaseDC(g_wnd, dc);
@@ -707,11 +924,18 @@ static uint32_t read_pad(void) {
     return b;
 }
 static uint32_t read_keys(void);
+static uint32_t g_src_keys, g_src_pad;   /* so para o log: de onde veio cada botao */
 static uint32_t read_keyboard(void) {
     if (!g_ready || GetForegroundWindow() != g_wnd) return 0;
-    uint32_t keys = read_keys();
+    /* digitando o nome (caixa dentro do jogo): o teclado e so texto; ao fechar, o Enter que confirmou nao vira START */
+    static bool typing_before; const bool typing = text_input_in_game();
+    if (typing_before && !typing) g_keys_held_after_menu = true;
+    typing_before = typing;
+    uint32_t keys = typing ? 0 : read_keys();
     if (g_keys_held_after_menu) { if (keys) keys = 0; else g_keys_held_after_menu = false; }
-    return keys | read_pad();
+    const uint32_t pad = read_pad();
+    g_src_keys = keys; g_src_pad = pad;
+    return keys | pad;
 }
 /* Esquema de PC (menu Exibir > Teclado e mouse de PC; ligado por padrao): WASD = direcional; Espaco/E... ver read_keys_pc. A roda do mouse vira
  * cima/baixo em pulsos de 2 quadros (uma entalhe = um passo na lista). */
@@ -815,6 +1039,7 @@ static void load_script(void) {
     }
 }
 static void latch_buttons(void) {   /* chamado a cada quadro */
+    if (ctl_active()) { g_latched = ctl_buttons(); return; }
     load_script();
     if (g_scripted) {
         static size_t i; static uint32_t smask; while (i < g_script.size() && g_script[i].first <= g_frames) smask = g_script[i++].second;
@@ -831,6 +1056,9 @@ static void latch_buttons(void) {   /* chamado a cada quadro */
         return;
     }
     uint32_t b = read_keyboard();
-    if (b != g_latched) { g_latched = b; diag_record_buttons(g_frames, b); }
+    if (b != g_latched) {
+        g_latched = b; diag_record_buttons(g_frames, b);
+        static int nlog; if (nlog < 40) { nlog++; fprintf(stderr, "[entrada] quadro %llu: botoes %X (teclado/mouse %X, controle %X)\n", (unsigned long long)g_frames, b, g_src_keys, g_src_pad); }
+    }
 }
 uint32_t display_buttons(void) { return g_latched; }

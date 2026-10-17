@@ -12,9 +12,9 @@ the game's AI plays and which decks the duelists use.
 
 > **Preview release.** This is an early public preview, not a finished product. It plays the game from start to finish in our
 > testing, but it has had limited testing (mostly one machine, one game version and one save), some features are marked
-> *experimental*, and **APIs, file formats, settings and folder names may still change without notice**. There are no prebuilt
-> binaries: you build it yourself from your own ISO (see [Build and play](#build-and-play)). Expect rough edges and please
-> [report them](CONTRIBUTING.md#reporting-a-bug). See [`docs/PREVIEW.md`](docs/PREVIEW.md) for what is and is not covered.
+> *experimental*, and **APIs, file formats, settings and folder names may still change without notice**. A ready-to-run zip is on
+> the Releases page (see [Download and play](#download-and-play)); developers can also [build from source](#build-from-source-developers).
+> Expect rough edges and please [report them](CONTRIBUTING.md#reporting-a-bug). See [`docs/PREVIEW.md`](docs/PREVIEW.md) for what is and is not covered.
 
 ## What works
 
@@ -25,9 +25,10 @@ ATRAC3/3+) and H.264 movies through FFmpeg. Network/ad-hoc modes are not support
 **Built as a PC game, not an imitation of the PSP UI:**
 - Resizable window, fullscreen (F11 or Alt+Enter), dark theme, XInput controller, keyboard, native text box instead of the virtual keyboard.
 - **Renderers**: Software (CPU), **Direct3D 11** or **Vulkan**, with **internal resolution from 1x to 8x**, **MSAA** up to 8x, configurable filter and aspect ratio.
-- **High-resolution textures** (PPSSPP-format packs) and a **high-resolution font**.
-- **60 FPS by interpolation** (game logic stays at 30; the runtime creates the in-between frames) with **early presentation** to cut
-  latency, precise frame pacing and stable audio. Experimental.
+- **High-resolution textures** (PPSSPP-format packs, compressed to BC7 on the GPU for a quarter of the memory), a **high-resolution font**
+  and redrawn menu/dialog boxes in the **Enhanced Textures** pack. **F5** switches Original / Enhanced.
+- **60 or 120 FPS by interpolation** (game logic stays at 30; the runtime creates the in-between frames) with a dedicated
+  presentation thread (Vulkan), precise frame pacing and stable audio. Experimental.
 - Configurable **sync mode** (default, VSync or lowest latency).
 - Atomic saves, a log plus input recording of every session so problems can be replayed, and an optional
   **graphics diagnostic mode** that records screenshots during play (see [`docs/TESTING.md`](docs/TESTING.md)).
@@ -50,7 +51,7 @@ Behavior mods in this repository (sources in [`mods_src/`](mods_src/)):
 | **Better Decks** (`DecksAprimorados`) | replaces the decks of duelists with edited ones, without touching the game files. See [`docs/DECKS.md`](docs/DECKS.md) |
 | **CPU vs CPU** (`CPUvsCPU`) | lets the CPU play your side too; also the engine of the AI/deck test arena |
 | **Booster box** (`CaixaDeBoosters`) | buy all remaining packs of a booster at once in the shop |
-| **Cheats** (`Cheats`) | optional cheats in their own **Cheats** menu: see the CPU's cards (F6), DP multiplier (1x to 10x) |
+| **Cheats** (`Cheats`) | optional cheats in their own **Cheats** menu: see the CPU's cards (F6), DP multiplier (1x to 10x), unlock everything (cards, packs and Free Duel duelists) |
 | **Monsters on the field** (`MonstrosNoCampo`) | *experimental prototype*: shows your face-up monsters larger over their zone |
 
 Texture, video and button packs (HD menus, HD opening movie, EU cards, Xbox buttons) are separate mods distributed outside the repository.
@@ -69,12 +70,14 @@ Nothing needs to be installed: the zip carries the runtime, FFmpeg, a small C co
 game data and no game code**: the game's code is translated from your copy on your computer (`gen/`) and compiled in memory each time
 the game starts (about 4 s).
 
-**Controls.** Keyboard: arrow keys; Z = ✕, X = ○, A = □, S = △; Q/W = L/R; Enter = START; Shift = SELECT. XInput controllers work too.
-F11 / Alt+Enter: fullscreen · F3: FPS · F9: graphics diagnostic capture on/off · F8: "this looks wrong" (asks for a note, then saves full-size screenshots and the last ~1.5 s of frames; Esc or an empty note discards it) · F7 / L3+R3: "the CPU made a mistake" (note + report) ·
-Esc: leave fullscreen / asks before closing. The **Help > Controls** menu lists the PC keyboard and mouse layout.
+**Controls.** Keyboard and mouse (default PC layout): WASD or arrows; Space, E or left click = ✕; Backspace, C or right click = ○;
+F = □; R = △; Q / Tab = L / R; Enter = START; Ctrl = SELECT; Shift = run; mouse wheel = up/down. The classic layout (arrows, Z = ✕,
+X = ○, A = □, S = △, Q/W = L/R, Shift = SELECT) is used when **View > PC keyboard and mouse** is off. XInput controllers work too.
+F11 / Alt+Enter: fullscreen · F3: FPS · F5: textures Original / Enhanced · F9: graphics diagnostic capture on/off · F8 (or F7 / L3+R3): report a problem (asks for a note, then saves full-size screenshots, the last ~1.5 s of frames and the duel state; Esc or an empty note discards it) ·
+Esc: leave fullscreen / asks before closing. The **Help > Controls** menu lists all of this in the game.
 
 Saves live in `ms0/` next to the executable. Each run writes a log, the key presses and a copy of the save to `logs/`; any session can be
-replayed with `tools/replay.sh` (developers).
+replayed with `tools/replay.sh` (developers). `tools/tf.py` plays the game by itself (buttons, screenshots, memory peek) for automated tests.
 
 ## Build from source (developers)
 
@@ -111,6 +114,7 @@ More detail in [`docs/ARCHITECTURE.md`](docs/ARCHITECTURE.md).
 |---|---|
 | `tools/` | generator (Allegrex → C), build, test, AI-training and deck tools |
 | `runtime/` | C++ runtime: HLE kernel, GE, GPU backends, audio, video, window, mods |
+| `decomp/` | hand-written readable C++ replacing translated game functions one by one: title, story mode, map, duel result screen and more (see [`docs/DECOMP.md`](docs/DECOMP.md)) |
 | `mods_sdk/` | plugin API (`tfmod.h`) |
 | `mods_src/` | sources of behavior mods |
 | `docs/` | documentation ([preview status](docs/PREVIEW.md), [mods](docs/MODS.md), [AI](docs/AI.md), [decks](docs/DECKS.md), [testing](docs/TESTING.md), [architecture](docs/ARCHITECTURE.md), [game versions](docs/VERSIONS.md)) |

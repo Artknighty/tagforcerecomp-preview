@@ -66,7 +66,7 @@ For texture/scene bugs, the runtime can record screenshots **during normal play*
 |---|---|
 | `F9` or `TF_CAPTURAS=<seconds>` | toggle the mode (default interval 4 s) |
 | `F8` | "this looks wrong": first pauses the game with a text box for a note (**Esc or an empty note discards the mark**, nothing is saved); with a note it saves the current frame **full size** (PNG, never deleted by the ring) plus two more 10 and 20 frames later (to catch flicker), the black box of the ~1.5 s presented before F8 (`seq_<n>/`, see `tools/seq_analisar.py`), the graphics settings and the textures drawn in the last 3 frames (hash, size, replacement pending/none). `python tools/capturas_analisar.py` writes `gen/marcas/<session>_graf.md` with all of it. Env `TF_MARCAG_QUADRO=<frames>` triggers it in replays, `TF_MARCA_NOTA_AUTO="text"` answers the box (empty = discard), `TF_MARCA_SEM_NOTA=1` saves without asking |
-| `F7` / L3+R3 | "the CPU made a mistake": same idea for the duel logic (note first, Esc/empty discards; `TF_MARCA_QUADRO=<frames>` in replays), see `tools/marcas_cpu.py` (note, board state, last turns, plugin decisions) |
+| `F7` / L3+R3 | the same general mark as F8: one note saves the graphics side above **and** the duel side (board state, last turns, plugin decisions; `tools/marcas_cpu.py`). `TF_MARCA_QUADRO=<frames>` triggers it in replays |
 | automatic | periodic (JPEG ≤ 960 px; static scenes are skipped, at most one per minute), on scene change (module load), on a frame slower than 250 ms |
 | `TF_CAPTURAS_MAX` | size of the ring (default 900 images) |
 

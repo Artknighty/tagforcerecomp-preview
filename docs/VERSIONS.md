@@ -44,4 +44,8 @@ Tests: `RUN_EXE=./gen/run_ULUS10136.exe TF_ISO=<ISO> sh tools/play.sh ...` (use 
 * Code, module bases, function addresses: generated per version (above).
 * Plugins/mods (`mods_src/*`) hook function addresses of the **European** build. On other versions they must not be used
   until their addresses are ported (see `mods_sdk/tfmod.h`).
-* `runtime/pc_text.cpp` replaces the English "Memory Stick" texts by PC texts; other languages keep the original text.
+* The C++ decomp swaps (`decomp/`) name **European** function addresses: on other versions they are switched off at start-up
+  (log line `[decomp] disabled: ...`), so those versions run the translated code only and miss the PC changes made there (the in-game
+  Graphics screen, the title menu changes...).
+* `runtime/pc_text.cpp` replaces the English "Memory Stick" texts by PC texts; other languages keep the original text. Hiding the
+  loading icon (`hle_ge.cpp`) is European-only too.

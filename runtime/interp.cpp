@@ -42,8 +42,26 @@ struct Rec {
 std::unordered_map<int, Rec> g_pend;
 std::unordered_map<int, std::pair<uint32_t, std::shared_ptr<Rec>>> g_lastlist;   /* ultima lista congelada de cada alvo (por versao) */   /* desenhos de cada quadro sombra exibido desde a ultima apresentacao dele */
 Rec g_prev; bool g_have_prev;          /* ultimo quadro novo apresentado */
-uint64_t g_last_fresh;
+Rec g_old; bool g_have_old;            /* 120 FPS: o quadro antes de g_prev, guardado ate o ultimo intermediario do par (g_old, g_prev) */
+uint64_t g_last_fresh, g_old_vb;
 int g_scratch = -1, g_scratch_res;
+/* 120 FPS com a thread de apresentacao: Q1, Q2 e Q3 desenhados de uma vez, cada um no seu buffer (interp_use_scratch troca o g_scratch ativo) */
+static int g_scr[3] = {-1, -1, -1}, g_scr_res[3], g_scr_k;
+void scratch_use(int k) { g_scr[g_scr_k] = g_scratch; g_scr_res[g_scr_k] = g_scratch_res; g_scr_k = k; g_scratch = g_scr[k]; g_scratch_res = g_scr_res[k]; }
+bool g_mid_ready;                      /* interp_prepare desenhou um intermediario em g_scratch que ainda nao foi mostrado */
+/* par parado: o quadro novo e igual ao anterior (mesmos desenhos, estados, texturas e vertices; sem alvos de textura): todo intermediario seria a
+ * propria imagem real, entao ela e apresentada no lugar (nenhum desenho a mais na GPU; menus e telas de texto paradas). -1 = par em movimento */
+int g_static_fb = -1; uint64_t g_st_static;
+bool static_pair(const Rec &a, const Rec &b) {
+    static const bool off = getenv("TF_INTERP_SEM_PARADO") != nullptr;   /* A/B: desenha o intermediario sempre */
+    if (off || a.taint || b.taint || a.d.size() != b.d.size() || a.v.size() != b.v.size() || a.d.empty() || !a.fzmap.empty() || !b.fzmap.empty()) return false;
+    for (size_t i = 0; i < a.d.size(); i++) {
+        const Draw &x = a.d[i], &y = b.d[i];
+        if (x.off != y.off || x.n != y.n || x.otex != y.otex || x.cull != y.cull || (x.s.tex & GPU_FBTEX)) return false;
+        GpuState u = x.s, w = y.s; u.fb = w.fb = 0; if (memcmp(&u, &w, sizeof u)) return false;   /* o quadro de destino muda com o buffer duplo */
+    }
+    return !memcmp(a.v.data(), b.v.data(), a.v.size() * sizeof(GpuVtx));
+}
 uint64_t g_st_mid, g_st_skip, g_st_tris, g_st_tris_ok, g_st_nomatch, g_st_loop; double g_st_us;   /* g_st_us: tempo de CPU montando os quadros do meio (TF_INTERP_DEBUG); g_st_loop: triangulos no laco de uma rolagem (extrapolados) */
 const bool g_dbg = getenv("TF_INTERP_DEBUG") != nullptr;
 const long long g_dump_vb = getenv("TF_INTERP_DUMP") ? atoll(getenv("TF_INTERP_DUMP")) : -1;   /* quadro cujo pareamento e listado (TF_INTERP_DUMP) */
@@ -53,12 +71,15 @@ const size_t MAX_DRAWS = 60000, MAX_VERTS = 3000000;
 
 bool interp_enabled(void) {
     static const char *e = getenv("TF_INTERP");
-    return e ? atoi(e) != 0 : g_gfx.fps60 != 0;
+    return e ? atoi(e) != 0 : g_gfx.fps != GFX_FPS_30;
 }
 
 void interp_fb_drawn(int fb) { if (interp_enabled()) g_fbver[fb]++; }
+uint32_t interp_fb_version(int fb) { auto it = g_fbver.find(fb); return it == g_fbver.end() ? 0 : it->second; }
 /* copia congelada da imagem atual do quadro sombra `src` (nw x nh nativos) para o quadro `r`; -1 = sem quadro livre na GPU */
+static bool g_froze;   /* houve desenho com alvo de textura (copia congelada) desde o ultimo quadro novo: o intermediario le o que o quadro real copiou */
 static int freeze_fbtex(Rec &r, int src, int nw, int nh) {
+    g_froze = true;
     const uint32_t ver = g_fbver[src];
     for (const auto &e : r.fzmap) if ((int)e.src == src && e.ver == ver) return e.fb;
     static const bool off = getenv("TF_INTERP_NOFREEZE") != nullptr;   /* depuracao: amostra o alvo vivo (comportamento antigo) */
@@ -110,19 +131,42 @@ void interp_record(const GpuState &s, const GpuVtx *v, int n, bool rtt, int cull
     r.v.insert(r.v.end(), v, v + n);
 }
 void interp_taint(int fb) { g_fbver[fb]++; Rec &r = g_pend[fb]; const bool a = r.any; r.clear(); r.any = a; r.taint = true; }
-static std::vector<uint32_t> g_dead, g_dead_old;   /* texturas liberadas durante o quadro: os desenhos gravados ainda apontam para elas */
-bool interp_defer_release(uint32_t h) { static const bool nd = getenv("TF_NO_DEFER") != nullptr; if (nd || !interp_enabled() || g_dead.size() > 4000) return false; for (uint32_t d : g_dead) if (d == h) { fprintf(stderr, "[interp] AVISO: textura %u liberada duas vezes\n", h); return true; }   /* ja adiada: guardar de novo a liberaria duas vezes */
-    g_dead.push_back(h); return true; }
-static void free_dead(bool all = false) {   /* libera as de 2 quadros atras (as do quadro atual ainda podem estar nas listas gravadas); all = tudo */
-    for (uint32_t h : g_dead_old) gpu_tex_release_now(h);
-    g_dead_old.clear(); g_dead_old.swap(g_dead);
-    if (all) { for (uint32_t h : g_dead_old) gpu_tex_release_now(h); g_dead_old.clear(); }
+/* texturas liberadas durante o quadro: os desenhos gravados ainda apontam para elas. g_dead[0] = desde a ultima apresentacao de quadro novo,
+ * [1] e [2] = as duas anteriores. Uma textura liberada enquanto o jogo desenhava o quadro N pode estar nas listas de N, que ainda servem de
+ * "quadro anterior" no par (N, N+1); no 120 FPS o ultimo intermediario desse par (t = 0,75) so e desenhado no vblank DEPOIS do quadro N+1
+ * chegar, por isso ela vive 3 apresentacoes (com 2, o par (N, N+1) do 60 FPS ja terminou; uma a mais nao muda nada la) */
+static std::vector<uint32_t> g_dead[3];
+bool interp_defer_release(uint32_t h) { static const bool nd = getenv("TF_NO_DEFER") != nullptr; if (nd || !interp_enabled() || g_dead[0].size() > 4000) return false; for (uint32_t d : g_dead[0]) if (d == h) { fprintf(stderr, "[interp] AVISO: textura %u liberada duas vezes\n", h); return true; }   /* ja adiada: guardar de novo a liberaria duas vezes */
+    g_dead[0].push_back(h); return true; }
+static void free_dead(bool all = false) {   /* libera as de 3 apresentacoes atras (as mais novas ainda podem estar nas listas gravadas); all = tudo */
+    for (uint32_t h : g_dead[2]) gpu_tex_release_now(h);
+    g_dead[2].clear(); g_dead[2].swap(g_dead[1]); g_dead[1].swap(g_dead[0]);
+    if (all) for (int i = 1; i < 3; i++) { for (uint32_t h : g_dead[i]) gpu_tex_release_now(h); g_dead[i].clear(); }
+}
+/* modo adiado (display.cpp): o quadro real F so aparece no inicio da chamada do quadro F+1, e o jogo pode ter redesenhado o MESMO quadro sombra
+ * (mapa: um buffer so) - apresentar o sombra mostrava F+1 antes do intermediario (F, F+1) e a imagem ia e voltava 2-4 px a cada quadro. Uma copia
+ * na GPU (dois quadros alternados) guarda F. */
+static int g_rcopy[2] = {-1, -1}, g_rcopy_res[2], g_rcopy_k;
+int interp_real_copy(int src) {
+    const int k = g_rcopy_k ^= 1;
+    if (g_rcopy[k] >= 0 && g_rcopy_res[k] != g_ge_res) { gpu_fb_destroy(g_rcopy[k]); g_rcopy[k] = -1; }
+    if (g_rcopy[k] < 0) { g_rcopy[k] = gpu_fb_create(480, 272, g_ge_res); g_rcopy_res[k] = g_ge_res; if (g_rcopy[k] < 0) return -1; }
+    GpuState c; memset(&c, 0, sizeof c);   /* copia 1:1, como freeze_fbtex */
+    c.fb = g_rcopy[k]; c.tex = (uint32_t)GPU_FBTEX | (uint32_t)src; c.tw = 480; c.th = 272; c.tfn = 3; c.talpha = 1; c.clampu = c.clampv = 1;
+    c.sx2 = 479; c.sy2 = 271; c.cmask = 15;
+    const float W = 480.f, H = 272.f;
+    const GpuVtx q[6] = {{0, 0, 0, 0, 0, 1, 0xffffffffu}, {W, 0, 0, W, 0, 1, 0xffffffffu}, {W, H, 0, W, H, 1, 0xffffffffu},
+                         {0, 0, 0, 0, 0, 1, 0xffffffffu}, {W, H, 0, W, H, 1, 0xffffffffu}, {0, H, 0, 0, H, 1, 0xffffffffu}};
+    gpu_draw(c, q, 6); gpu_kick();
+    return g_rcopy[k];
 }
 void interp_reset(void) {
+    for (int &f : g_rcopy) { if (f >= 0) gpu_fb_destroy(f); f = -1; }
     free_dead(true);
-    g_pend.clear(); g_prev.clear(); g_have_prev = false; g_last_fresh = 0;
+    g_pend.clear(); g_prev.clear(); g_have_prev = false; g_old.clear(); g_have_old = false; g_mid_ready = false; g_last_fresh = 0;
     g_lastlist.clear();
     g_fgen++; for (const Frozen &x : g_fpool) gpu_fb_destroy(x.fb); g_fpool.clear(); g_fbver.clear();   /* copias ainda presas (autoteste) nao voltam ao pool */
+    for (int k = 0; k < 3; k++) { if (k != g_scr_k && g_scr[k] >= 0) gpu_fb_destroy(g_scr[k]); g_scr[k] = -1; }
     if (g_scratch >= 0) gpu_fb_destroy(g_scratch);
     g_scratch = -1;
 }
@@ -131,12 +175,23 @@ namespace {
 /* mesma "forma" de desenho nos dois quadros (estado e textura iguais, exceto o quadro de destino e o scissor) */
 bool same_kind(const Draw &a, const Draw &b) {
     if (a.n != b.n || a.cull != b.cull) return false;
-    GpuState x = a.s, y = b.s; x.fb = y.fb = 0; x.tex = a.otex; y.tex = b.otex; x.sx1 = y.sx1 = x.sy1 = y.sy1 = x.sx2 = y.sx2 = x.sy2 = y.sy2 = 0; /* a textura tem que ser a mesma: sprites de personagens diferentes usam o mesmo recorte de UV em texturas distintas */
+    GpuState x = a.s, y = b.s; x.fb = y.fb = 0; x.tex = a.otex; y.tex = b.otex; x.sx1 = y.sx1 = x.sy1 = y.sy1 = x.sx2 = y.sx2 = x.sy2 = y.sy2 = 0; x.uvclamp = y.uvclamp = 0; x.cu0 = y.cu0 = x.cv0 = y.cv0 = x.cu1 = y.cu1 = x.cv1 = y.cv1 = 0; /* a textura tem que ser a mesma: sprites de personagens diferentes usam o mesmo recorte de UV em texturas distintas */
     return !memcmp(&x, &y, sizeof x);
 }
 inline uint32_t avg_col(uint32_t a, uint32_t b) { return ((a & 0xfefefefeu) >> 1) + ((b & 0xfefefefeu) >> 1) + (a & b & 0x01010101u); }
 
 uint64_t g_cur_vb; float g_T_mul = 1.f;   /* g_T_mul = 2 no autoteste (F0->F2 anda o dobro) */
+/* fracao do caminho entre o quadro anterior (0) e o novo (1) que o quadro intermediario mostra: 0,5 no 60 FPS; 0,25 / 0,5 / 0,75 no 120 FPS.
+ * Em 0,5 as contas sao as de sempre, bit a bit (o 60 FPS nao muda). */
+float g_t = 0.5f;
+inline float mix_f(float a, float b) { return g_t == 0.5f ? (a + b) * 0.5f : a + (b - a) * g_t; }
+inline int32_t mix_i(int32_t a, int32_t b) { return g_t == 0.5f ? (b + a) / 2 : a + (int32_t)lroundf((float)(b - a) * g_t); }
+inline uint32_t mix_col(uint32_t a, uint32_t b) {
+    if (g_t == 0.5f) return avg_col(a, b);
+    const uint32_t w = (uint32_t)lroundf(g_t * 256.f); uint32_t r = 0;
+    for (int s = 0; s < 32; s += 8) { const uint32_t x = (a >> s) & 255, y = (b >> s) & 255; r |= ((x * (256 - w) + y * w) >> 8) << s; }
+    return r;
+}
 std::vector<GpuVtx> g_outs[2];
 /* posicao final de cada vertice do quadro novo, pela chave da posicao: enderecamento aberto, reaproveitado entre quadros (o unordered_map
  * fazia uma alocacao por vertice a cada quadro do meio). A "marca" de cada quadro dispensa limpar a tabela. */
@@ -372,8 +427,8 @@ bool interp_lists(const Rec &pv, Rec &cur, int target, int depth, std::vector<Fr
                 const float tdx = (b[0].x + b[1].x + b[2].x - a[0].x - a[1].x - a[2].x) / 3.f, tdy = (b[0].y + b[1].y + b[2].y - a[0].y - a[1].y - a[2].y) / 3.f;
                 float defo = 0; for (int q = 0; q < 3; q++) defo = std::max(defo, fabsf(b[q].x - a[q].x - tdx) + fabsf(b[q].y - a[q].y - tdy));
                 if (defo <= 1.f * g_T_mul && fabsf(tdx - ex) + fabsf(tdy - ey) <= 2.f * g_T_mul + 0.05f * hypotf(ex, ey)) {
-                    const float h = 0.5f * g_T_mul;   /* no autoteste o quadro do meio fica um passo inteiro a frente de F0 */
-                    for (int q = 0; q < 3; q++) { o[q] = a[q]; o[q].x = a[q].x + pvx * h; o[q].y = a[q].y + pvy * h; o[q].col = avg_col(a[q].col, b[q].col); }
+                    const float h = g_t * g_T_mul;   /* no autoteste o quadro do meio fica um passo inteiro a frente de F0 */
+                    for (int q = 0; q < 3; q++) { o[q] = a[q]; o[q].x = a[q].x + pvx * h; o[q].y = a[q].y + pvy * h; o[q].col = mix_col(a[q].col, b[q].col); }
                     if (c.cull) face[(c.off + k) / 3] = front(a, c.cull) ? 1 : 2;
                     if (dump_now) fprintf(stderr, "[idump2] cur %zu tri %u: laco de rolagem (salto %.1f,%.1f contra o passo anterior %.1f,%.1f): meio passo extrapolado%c", j, k / 3, tdx, tdy, pvx, pvy, 10);
                     g_st_tris_ok++; g_st_loop++;
@@ -401,9 +456,9 @@ bool interp_lists(const Rec &pv, Rec &cur, int target, int depth, std::vector<Fr
             if (!ok) { if (g_v1) commit(b, o); else pinned.push_back(c.off + k); if (dump_now) fprintf(stderr, "[idump2] cur %zu tri %u: NAO interpolado (par %d, md %.1f, e %.1f, prev_disp %.1f)%c", j, k / 3, bestmi, md, e, prev_disp, 10); continue; }
             g_st_tris_ok++;
             for (int q = 0; q < 3; q++) {
-                o[q].x = (a[q].x + b[q].x) * 0.5f; o[q].y = (a[q].y + b[q].y) * 0.5f; o[q].z = (a[q].z + b[q].z) * 0.5f;
-                o[q].u = (a[q].u + b[q].u) * 0.5f; o[q].v = (a[q].v + b[q].v) * 0.5f; o[q].rw = (a[q].rw + b[q].rw) * 0.5f;
-                o[q].col = avg_col(a[q].col, b[q].col);
+                o[q].x = mix_f(a[q].x, b[q].x); o[q].y = mix_f(a[q].y, b[q].y); o[q].z = mix_f(a[q].z, b[q].z);
+                o[q].u = mix_f(a[q].u, b[q].u); o[q].v = mix_f(a[q].v, b[q].v); o[q].rw = mix_f(a[q].rw, b[q].rw);
+                o[q].col = mix_col(a[q].col, b[q].col);
             }
             commit(b, o);
         }
@@ -422,7 +477,7 @@ bool interp_lists(const Rec &pv, Rec &cur, int target, int depth, std::vector<Fr
         bool world = scroll_unmatched && scroll && cur.v[cur.d[j].off].z >= 1000.f;   /* desenho 3D sem par (recortado na borda: o numero de vertices mudou): anda a metade da rolagem, como o resto do cenario */
         for (uint32_t q = 0; q < cur.d[j].n; q++) {
             const GpuVtx &b = cur.v[cur.d[j].off + q]; GpuVtx &o = g_out[cur.d[j].off + q];
-            if (world) { o.x = b.x - 0.5f * scx; o.y = b.y - 0.5f * scy; }
+            if (world) { o.x = b.x - (1.f - g_t) * scx; o.y = b.y - (1.f - g_t) * scy; }
             follow(b, o);
         }
     }
@@ -439,7 +494,7 @@ bool interp_lists(const Rec &pv, Rec &cur, int target, int depth, std::vector<Fr
     }
     std::vector<std::pair<int, int>> rtt_mid;   /* copia congelada -> alvo refeito interpolado neste quadro do meio */
     for (size_t j = 0; j < cn; j++) { GpuState s = cur.d[j].s; s.fb = target;
-        if (match[j] >= 0) { const GpuState &ps = pv.d[match[j]].s; s.sx1 = (s.sx1 + ps.sx1) / 2; s.sy1 = (s.sy1 + ps.sy1) / 2; s.sx2 = (s.sx2 + ps.sx2) / 2; s.sy2 = (s.sy2 + ps.sy2) / 2; }   /* o recorte (scissor) tambem anda */
+        if (match[j] >= 0) { const GpuState &ps = pv.d[match[j]].s; s.sx1 = mix_i(ps.sx1, s.sx1); s.sy1 = mix_i(ps.sy1, s.sy1); s.sx2 = mix_i(ps.sx2, s.sx2); s.sy2 = mix_i(ps.sy2, s.sy2); }   /* o recorte (scissor) tambem anda */
         /* textura = alvo congelado (ex.: reflexo do chao da loja): refaz o alvo a partir das listas dos dois quadros, interpolado, senao o reflexo
          * ficaria meio passo atras do resto do quadro do meio */
         if (depth == 0 && match[j] >= 0 && (s.tex & GPU_FBTEX) && s.tex != cur.d[j].otex) {
@@ -470,20 +525,22 @@ int mid_rtt(const FzEntry &ec, const FzEntry &ep, std::vector<Frozen> &tmp) {
     if (g_dbg) { static int nd; if (nd++ < 10) fprintf(stderr, "[interp] alvo %u refeito no quadro do meio: %s (%zu/%zu desenhos)\n", ec.src, ok ? "ok" : "sem par", ep.list->d.size(), ec.list->d.size()); }
     return ok ? t.fb : -1;
 }
-bool render_mid(Rec &cur, int gfb, int res) {
+/* um quadro so de rascunho basta: cada intermediario e desenhado depois que o anterior ja foi apresentado (a fila da GPU respeita a ordem) */
+bool render_mid(const Rec &pv, Rec &cur, int res) {
     if (g_scratch >= 0 && g_scratch_res != res) { gpu_fb_destroy(g_scratch); g_scratch = -1; }
     if (g_scratch < 0) { g_scratch = gpu_fb_create(480, 272, res); g_scratch_res = res; if (g_scratch < 0) return false; }
     std::vector<Frozen> tmp;
-    bool ok = interp_lists(g_prev, cur, g_scratch, 0, tmp);
+    bool ok = interp_lists(pv, cur, g_scratch, 0, tmp);
     for (const Frozen &f : tmp) g_fpool.push_back(f);
-    (void)gfb;
     return ok;
 }
 
-void dump_bmp(int fb, uint64_t vb) {
+void dump_bmp(int fb, uint64_t vb) {   /* t = 0,5: gen/interp_<vb>.bmp (como sempre); 120 FPS: gen/interp_<vb>_25.bmp e _75.bmp */
     std::vector<uint32_t> px; int w, h;
     if (!gpu_fb_readback(fb, px, &w, &h)) return;
-    char fn[64]; snprintf(fn, sizeof fn, "gen/interp_%llu.bmp", (unsigned long long)vb);
+    char fn[64];
+    if (g_t == 0.5f) snprintf(fn, sizeof fn, "gen/interp_%llu.bmp", (unsigned long long)vb);
+    else snprintf(fn, sizeof fn, "gen/interp_%llu_%d.bmp", (unsigned long long)vb, (int)lroundf(g_t * 100.f));
     const bool ok = write_bmp24(fn, w, h, [&](int y, uint8_t *row) {
         for (int x = 0; x < w; x++) { uint32_t p = px[(size_t)y * w + x]; row[x * 3] = (uint8_t)(p >> 16); row[x * 3 + 1] = (uint8_t)(p >> 8); row[x * 3 + 2] = (uint8_t)p; }
     });
@@ -507,9 +564,8 @@ void selftest_dump(const std::vector<uint32_t> &m, const std::vector<char> &bad,
     });
 }
 void selftest_run(Rec &cur, int gfb, uint64_t vb, int res) {   /* chamado ao chegar F2 (cur), com g_prev = F1 e g_prev2 = F0 */
-    Rec save = std::move(g_prev); g_prev = g_prev2; g_T_mul = 2.f;
-    bool ok = render_mid(cur, gfb, res); g_T_mul = 1.f;
-    g_prev = std::move(save);
+    g_T_mul = 2.f; g_t = 0.5f;
+    bool ok = render_mid(g_prev2, cur, res); g_T_mul = 1.f;
     if (!ok || g_real1.empty()) return;
     std::vector<uint32_t> m, h2; int w, h, w2, hh2;
     if (!gpu_fb_readback(g_scratch, m, &w, &h) || !gpu_fb_readback(gfb, h2, &w2, &hh2) || w != g_r1w || h != g_r1h || w2 != w) return;
@@ -540,11 +596,13 @@ bool interp_mid_ready(int gfb, uint64_t vb, bool allow) {
     return it != g_pend.end() && it->second.any && !it->second.taint && !g_prev.taint && !it->second.d.empty();
 }
 
-bool interp_present(int gfb, uint64_t vb, bool allow, int res) {
+bool interp_prepare(int gfb, uint64_t vb, bool allow, int res, float t) {
+    g_mid_ready = false; g_static_fb = -1;
     if (!interp_enabled()) { free_dead(true); if (g_have_prev || !g_pend.empty()) interp_reset(); return false; }
     auto it = g_pend.find(gfb);
     if (it == g_pend.end() || !it->second.any) return false;   /* nada novo: o chamador mostra o quadro real (o 2o vblank do quadro) */
     Rec cur = std::move(it->second); it->second = Rec();
+    g_old.clear(); g_have_old = false;   /* intermediarios do par anterior que nao sairam (troca de modo, quadro novo antes da hora) */
     const uint64_t gap = vb - g_last_fresh; g_last_fresh = vb;
     bool done = false;
     static const bool trace = getenv("TF_INTERP_TRACE") != nullptr;
@@ -555,18 +613,50 @@ bool interp_present(int gfb, uint64_t vb, bool allow, int res) {
     static const bool selftest = getenv("TF_INTERP_SELFTEST") != nullptr;
     if (selftest && allow && gap == 2 && g_gap_prev == 2 && g_have_prev && g_have_prev2 && !cur.taint && !g_prev.taint && !g_prev2.taint && !cur.d.empty()) { g_cur_vb = vb; selftest_run(cur, gfb, vb, res); }
     if (allow && gap == 2 && g_have_prev && !cur.taint && !g_prev.taint && !cur.d.empty()) {   /* jogo a 30 fps: o vblank do meio ganha o quadro intermediario */
-        g_cur_vb = vb; const double t0 = gpu_now_us(); const uint64_t loops0 = g_st_loop; done = render_mid(cur, gfb, res); g_st_us += gpu_now_us() - t0;
+        g_cur_vb = vb; g_t = t; const double t0 = gpu_now_us(); const uint64_t loops0 = g_st_loop; const bool parado = static_pair(g_prev, cur);
+        if (parado) { g_static_fb = gfb; done = true; g_st_static++; gpu_kick(); /* solta o quadro real retido (gpu_hold): e ele que vai aparecer */ } else { g_static_fb = -1; gpu_mid_scope(true); done = render_mid(g_prev, cur, res); if (done) { g_gpu_prof_tag = 'M'; gpu_kick(); } gpu_mid_scope(false); }
+        g_st_us += gpu_now_us() - t0;
         if (trace && g_st_loop != loops0) fprintf(stderr, "[itrace] vb %llu: %llu triangulo(s) no laco de rolagem (meio passo extrapolado)\n", (unsigned long long)vb, (unsigned long long)(g_st_loop - loops0));
         if (done) {
-            static const char *snap = getenv("TF_INTERP_SNAP");
-            if (quadro_na_lista(snap, vb)) dump_bmp(g_scratch, vb);
-            gpu_seq_tag(1); gpu_present_fb(g_scratch); g_st_mid++;
+            if (quadro_na_lista(getenv("TF_INTERP_SNAP"), vb)) dump_bmp(parado ? gfb : g_scratch, vb);
+            /* (o intermediario ja foi enviado a GPU acima, na frente do quadro real retido: ela o desenha enquanto o chamador espera a hora de mostrar) */
+            g_mid_ready = true; g_st_mid++;
         } else g_st_skip++;
     } else g_st_skip++;
     if (g_dbg && (g_st_mid + g_st_skip) % 300 == 0)
-        fprintf(stderr, "[interp] quadros novos %llu: intermediarios %llu, sem interpolar %llu (cena trocou %llu); triangulos interpolados %llu de %llu (laco de rolagem %llu); CPU %.2f ms por quadro do meio\n", (unsigned long long)(g_st_mid + g_st_skip), (unsigned long long)g_st_mid, (unsigned long long)g_st_skip, (unsigned long long)g_st_nomatch, (unsigned long long)g_st_tris_ok, (unsigned long long)g_st_tris, (unsigned long long)g_st_loop, g_st_mid ? g_st_us / 1000.0 / (double)g_st_mid : 0.0);
+        fprintf(stderr, "[interp] quadros novos %llu: intermediarios %llu (%llu parados: a imagem real no lugar), sem interpolar %llu (cena trocou %llu); triangulos interpolados %llu de %llu (laco de rolagem %llu); CPU %.2f ms por quadro do meio\n", (unsigned long long)(g_st_mid + g_st_skip), (unsigned long long)g_st_mid, (unsigned long long)g_st_static, (unsigned long long)g_st_skip, (unsigned long long)g_st_nomatch, (unsigned long long)g_st_tris_ok, (unsigned long long)g_st_tris, (unsigned long long)g_st_loop, g_st_mid ? g_st_us / 1000.0 / (double)g_st_mid : 0.0);
     free_dead();
     if (selftest) { g_prev2 = g_prev; g_have_prev2 = g_have_prev; g_gap_prev = gap; g_real1.clear(); if (!gpu_fb_readback(gfb, g_real1, &g_r1w, &g_r1h)) g_real1.clear(); }
+    g_froze = false;
+    if (done && t != 0.5f) { g_old = std::move(g_prev); g_have_old = true; g_old_vb = vb; }   /* 120 FPS: os outros intermediarios do par saem de interp_extra */
     g_prev = std::move(cur); g_have_prev = true;
     return done;
 }
+void interp_show(void) {
+    if (!g_mid_ready) return;
+    g_mid_ready = false; gpu_seq_tag(1); gpu_present_fb(g_static_fb >= 0 ? g_static_fb : g_scratch);
+}
+bool interp_mid_static(void) { return g_static_fb >= 0; }
+int interp_take_fb(void) { if (!g_mid_ready) return -1; g_mid_ready = false; return g_static_fb >= 0 ? g_static_fb : g_scratch; }   /* o intermediario pronto (sem apresentar) */
+bool interp_hold_ok(void) { return !g_froze; }
+bool interp_present(int gfb, uint64_t vb, bool allow, int res) {
+    if (!interp_prepare(gfb, vb, allow, res, 0.5f)) return false;
+    interp_show(); return true;
+}
+/* 120 FPS: mais um intermediario do par (g_old, g_prev) na fracao t, desenhado e enviado a GPU agora; aparece com interp_show. Os contadores do
+ * TF_INTERP_DEBUG ficam como os do primeiro intermediario (o pareamento e o mesmo; contar de novo so inflaria os numeros) */
+bool interp_extra(float t, int res) {
+    g_mid_ready = false;
+    if (!g_have_old || !g_have_prev || !interp_enabled()) return false;
+    const uint64_t s[6] = {g_st_tris, g_st_tris_ok, g_st_nomatch, g_st_loop, g_st_mid, g_st_skip};
+    if (g_static_fb >= 0) { g_mid_ready = true; return true; }   /* par parado (interp_prepare): a imagem real de novo */
+    g_t = t; g_cur_vb = g_old_vb;
+    const bool ok = render_mid(g_old, g_prev, res);
+    g_st_tris = s[0]; g_st_tris_ok = s[1]; g_st_nomatch = s[2]; g_st_loop = s[3]; g_st_mid = s[4]; g_st_skip = s[5];
+    if (!ok) return false;
+    if (quadro_na_lista(getenv("TF_INTERP_SNAP"), g_old_vb)) dump_bmp(g_scratch, g_old_vb);
+    g_gpu_prof_tag = 'M'; gpu_kick(); g_mid_ready = true;
+    return true;
+}
+void interp_extra_done(void) { g_old.clear(); g_have_old = false; }   /* devolve as copias congeladas de g_old ao pool */
+void interp_use_scratch(int k) { scratch_use(k); }   /* (scratch_use fica no namespace anonimo, junto do g_scratch) */

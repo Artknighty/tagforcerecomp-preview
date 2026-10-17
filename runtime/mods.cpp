@@ -19,7 +19,7 @@
 #include <algorithm>
 
 struct ModFile { std::wstring host; uint64_t size; uint32_t lba, iso_size; int mod; std::string iso_path; };
-struct Mod { std::wstring dir, label, detail, texext; std::string name; bool enabled; int files = 0; };   /* label = nome, detail = "v1.0 . autor"; texext: pasta externa de texturas (mod.txt: textures=) */
+struct Mod { std::wstring dir, label, detail, texext; std::string name, folder; bool enabled; int files = 0; };   /* label = nome, detail = "v1.0 . autor"; texext: pasta externa de texturas (mod.txt: textures=) */
 static std::vector<Mod> g_mods;
 static std::map<uint32_t, ModFile> g_by_lba;   /* LBA inicial do arquivo na ISO -> arquivo do mod */
 
@@ -81,7 +81,7 @@ void mods_init(void) {
     FindClose(h);
     std::sort(dirs.begin(), dirs.end(), [](const std::wstring &a, const std::wstring &b) { return _wcsicmp(a.c_str(), b.c_str()) < 0; });
     for (auto &d : dirs) {
-        Mod m; m.dir = mods_root() + L"\\" + d; m.name = to_utf8(d); m.enabled = !exists(m.dir + L"\\disabled");
+        Mod m; m.dir = mods_root() + L"\\" + d; m.name = m.folder = to_utf8(d); m.enabled = !exists(m.dir + L"\\disabled");
         std::string author, version; read_meta(m, &author, &version);
         m.label = to_wide(m.name);
         m.detail = to_wide(version.empty() ? "" : "v" + version); if (!author.empty()) m.detail += (m.detail.empty() ? L"" : L" \x00B7 ") + to_wide(author);
@@ -91,7 +91,7 @@ void mods_init(void) {
         int n = 0;
         for (auto &fp : files) {
             std::wstring low = fp.first; for (auto &ch : low) ch = (wchar_t)towlower(ch);
-            if (low.rfind(L"textures\\", 0) == 0 || low.rfind(L"movie\\", 0) == 0 || low.rfind(L"llm\\", 0) == 0 || low.rfind(L"decks\\", 0) == 0 || low == L"mod.txt" || low == L"disabled" || low.rfind(L"leia-me", 0) == 0 || low.rfind(L"readme", 0) == 0 || low.find(L'\\') == std::wstring::npos) continue;
+            if (low.rfind(L"textures\\", 0) == 0 || low.rfind(L"movie\\", 0) == 0 || low.rfind(L"llm\\", 0) == 0 || low.rfind(L"decks\\", 0) == 0 || low.rfind(L"sprites\\", 0) == 0 || low == L"mod.txt" || low == L"disabled" || low.rfind(L"leia-me", 0) == 0 || low.rfind(L"readme", 0) == 0 || low.find(L'\\') == std::wstring::npos) continue;
             std::string iso = to_utf8(fp.first); for (auto &ch : iso) if (ch == '\\') ch = '/';
             std::string isolow = iso; for (auto &ch : isolow) ch = (char)tolower((unsigned char)ch);
             if (isolow.size() > 4 && (isolow.compare(isolow.size() - 4, 4, ".prx") == 0 || isolow.find("boot.bin") != std::string::npos || isolow.find("eboot.bin") != std::string::npos)) {
@@ -164,6 +164,12 @@ bool mods_size(uint32_t lba, uint64_t *size) {
 }
 
 int mods_count(void) { return (int)g_mods.size(); }
+int mods_find(const char *folder) { for (int i = 0; i < (int)g_mods.size(); i++) if (g_mods[i].folder == folder) return i; return -1; }   /* by folder name (mods/<folder>); -1 if absent */
+bool mods_menu_visible(int i) {
+    if (i < 0 || i >= (int)g_mods.size()) return false;
+    const std::string &folder = g_mods[i].folder;
+    return folder != "EnhancedTextures" && folder != "TexturasPC";
+}
 void mods_plugin_dirs(std::vector<std::pair<std::string, std::wstring>> &out) { for (auto &m : g_mods) if (m.enabled) out.push_back({m.name, m.dir}); }   /* mods ligados, na ordem de carga (plugins.cpp) */
 const wchar_t *mods_label(int i) { return i >= 0 && i < (int)g_mods.size() ? g_mods[i].label.c_str() : L""; }
 const wchar_t *mods_detail(int i) { return i >= 0 && i < (int)g_mods.size() ? g_mods[i].detail.c_str() : L""; }
@@ -172,22 +178,22 @@ void mods_set_enabled(int i, bool on) {
     if (i < 0 || i >= (int)g_mods.size()) return;
     std::wstring marker = g_mods[i].dir + L"\\disabled";
     if (on) DeleteFileW(marker.c_str());
-    else if (FILE *f = _wfopen(marker.c_str(), L"wb")) { fputs("Mod desligado pelo menu Mods. Apague este arquivo (ou use o menu) para ligar.\n", f); fclose(f); }
+    else if (FILE *f = _wfopen(marker.c_str(), L"wb")) { fputs("Mod switched off in the Mods menu. Delete this file (or use the menu) to switch it on.\n", f); fclose(f); }
     g_mods[i].enabled = on;
 }
 void mods_open_folder(void) {
     std::wstring root = mods_root();
     if (!exists(root)) {
         CreateDirectoryW(root.c_str(), nullptr);
-        if (FILE *f = _wfopen((root + L"\\LEIA-ME.txt").c_str(), L"wb")) {
-            fputs("Mods do Tag Force Recomp\r\n\r\n"
-                  "Cada mod e uma pasta aqui dentro. Os arquivos do mod ficam no mesmo caminho que tem na ISO, por exemplo:\r\n"
-                  "    mods\\MeuMod\\PSP_GAME\\USRDIR\\card\\cardm_e.cip\r\n\r\n"
-                  "Opcional: mods\\MeuMod\\mod.txt com linhas name=, author=, version=, description=\r\n"
-                  "Ligar/desligar: menu Mods (vale depois de reiniciar o jogo).\r\n"
-                  "Texturas: mods\\MeuMod\\textures\\ (formato do PPSSPP). Videos: mods\\MeuMod\\movie\\<nome>.h264\r\n"
-                  "Comportamento (plugins): mods\\MeuMod\\plugin.dll com a API de mods_sdk/tfmod.h (exemplo: mods_src/CaixaDeBoosters).\r\n"
-                  "Modulos de codigo do jogo (BOOT.BIN, *.prx) nao podem ser trocados.\r\n", f);
+        if (FILE *f = _wfopen((root + L"\\README.txt").c_str(), L"wb")) {
+            fputs("Tag Force Recomp mods\r\n\r\n"
+                  "Each mod is a folder in here. Its files go at the same path they have on the ISO, for example:\r\n"
+                  "    mods\\MyMod\\PSP_GAME\\USRDIR\\card\\cardm_e.cip\r\n\r\n"
+                  "Optional: mods\\MyMod\\mod.txt with the lines name=, author=, version=, description=\r\n"
+                  "On/off: Mods menu (applies after restarting the game).\r\n"
+                  "Textures: mods\\MyMod\\textures\\ (PPSSPP format). Videos: mods\\MyMod\\movie\\<name>.h264\r\n"
+                  "Behavior (plugins): mods\\MyMod\\plugin.dll with the API in mods_sdk/tfmod.h (example: mods_src/CaixaDeBoosters).\r\n"
+                  "The game's code modules (BOOT.BIN, *.prx) cannot be replaced. Full guide: docs/MODS.md.\r\n", f);
             fclose(f);
         }
     }
@@ -205,6 +211,11 @@ void mods_movie_hd_files(std::vector<std::wstring> &out) {
         do out.push_back(m.dir + L"\\movie\\" + fd.cFileName); while (FindNextFileW(h, &fd));
         FindClose(h);
     }
+}
+bool mods_enabled_has_file(const char *relative) {
+    const std::wstring rel = to_wide(relative);
+    for (auto &m : g_mods) if (m.enabled && exists(m.dir + L"\\" + rel)) return true;
+    return false;
 }
 void mods_texture_dirs(std::vector<std::wstring> &out) {
     for (auto &m : g_mods) {

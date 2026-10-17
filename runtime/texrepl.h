@@ -10,12 +10,22 @@
 #include <memory>
 #include <vector>
 
-struct TexReplImg { int w, h; std::vector<uint32_t> px; };   /* RGBA (0xAABBGGRR) */
+struct TexReplImg { int w, h; std::vector<uint32_t> px; std::vector<uint32_t> mips; std::vector<uint8_t> bc; int levels = 0; uint32_t sig = 0xffffffffu;
+    size_t bytes() const { return (px.size() + mips.size()) * 4 + bc.size(); } };   /* RGBA (0xAABBGGRR); mips: niveis 1..n
+   * em sequencia (media 2x2, como o blit linear da GPU), feitos nas threads de leitura: a GPU so copia (gerar na GPU custava ~5 ms por 2048x2048).
+   * bc nao vazio = textura ja comprimida em BC7 (bc7.h; `levels` niveis em sequencia; px/mips vazios), vinda do cache em disco; sig = cor media (variantes) */
+void texrepl_make_mips(TexReplImg &img);
+/* proxima textura pre-carregada (texturas_recentes.txt) pronta na RAM e ainda nao oferecida, para ja subir para a GPU antes de a cena pedir;
+ * so as sem variante por cor (a chave e o hash dos dados). false = nenhuma agora */
+bool texrepl_take_preupload(uint32_t *hash, std::shared_ptr<TexReplImg> &img);
 void texrepl_init(void);
+void texrepl_reload(void);   /* os mods de textura ligados mudaram (Graphics > Textures): refaz o indice e descarta o que veio do pacote anterior; o cache da GPU fica com quem chama */
 void texrepl_stats(int *queued, int *ready, uint64_t *loaded, uint64_t *failed, uint64_t *dropped);   /* fila, prontas nao consumidas, e totais da sessao (TF_GPU_DEBUG) */                       /* depois do mods_init */
 void texrepl_stats2(uint64_t *ram_mb, uint64_t *ram_hits, uint64_t *decode_ms, int *threads);   /* cache em RAM (MB, acertos), tempo total de decodificacao, threads */
 void texrepl_save_recent(void);   /* grava texturas_recentes.txt (pre-carregamento da proxima execucao) */
 uint64_t texrepl_prefetched(void);   /* quantas o pre-carregamento ja colocou no cache */
+void texrepl_bc_stats(uint64_t *done, uint64_t *ms, size_t *pending, uint64_t *disk_mb, uint64_t *sync);   /* compressao BC7: feitas, tempo total, fila de fundo, tamanho do cache em disco, lidas direto no pedido */
+void texrepl_no_bc(void);                      /* a GPU recusou uma textura BC7: volta a ler os PNGs (RGBA) */
 bool texrepl_active(void);                     /* ha substituicoes indexadas? */
 uint32_t texrepl_hash(const void *data, size_t n);
 /* 0 = sem substituicao; 1 = carregando (use o original e pergunte de novo depois); 2 = pronta (out; consumida: pedir de novo recarrega) */

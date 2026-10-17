@@ -28,6 +28,8 @@ copiar_mod() { src="${1%/}"; dst="$2/$(basename "$src")"; mkdir -p "$dst"
 if [ -z "$TF_MODS_DIR" ]; then rm -rf gen/plugins_teste; mkdir -p gen/plugins_teste; for d in gen/mods/*/; do [ -f "$d/plugin.dll" ] && [ ! -f "$d/disabled" ] && copiar_mod "$d" gen/plugins_teste; done; export TF_MODS_DIR="$(cygpath -m "$PWD/gen/plugins_teste" 2>/dev/null || echo "$PWD/gen/plugins_teste")"; fi
 # janela escondida e sem som, como no replay.sh (the player uses the PC enquanto os testes rodam; as capturas vem do framebuffer). PRIMEIRO_PLANO=1 mostra.
 [ -z "$PRIMEIRO_PLANO" ] && export TF_SEGUNDO_PLANO=1
+# janela escondida: caixa Sim/Nao (ex.: sair do jogo) respondida com Nao, senao o teste fica parado esperando um clique
+[ -z "$PRIMEIRO_PLANO" ] && [ -z "$TF_CONFIRM_AUTO" ] && export TF_CONFIRM_AUTO=0
 AUTO_TEXT="${AUTO_TEXT:-Player}" NO_PACE=1 AUTO_PRESS="$1" SNAP_FRAME="$2" timeout "${3:-300}" "${RUN_EXE:-./gen/run.exe}" --iso "$ISO" > /dev/null 2>&1
 echo "exit=$?"
 cat gen/logs_teste/*.log > gen/log_play.txt 2>/dev/null

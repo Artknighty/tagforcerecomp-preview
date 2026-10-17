@@ -77,7 +77,6 @@ CPU *host_create(void) {
     { extern void hooks_dev_init(void); hooks_dev_init(); }
     return c;
 }
-CPU *host_main_cpu(void) { return g_main_cpu; }
 void host_load(uint32_t addr, const void *p, size_t n) { memcpy(g_mem + MA(addr), p, n); }
 
 void display_capture_event(const char *tag);
@@ -100,7 +99,6 @@ bool host_resolve_export(uint32_t nid, uint32_t *addr) {
         if (m->exps[i].nid == nid && m->exps[i].lib && m->exps[i].lib[0]) { *addr = m->exps[i].addr; return true; }
     return false;
 }
-const char *host_import_name(uint32_t addr) { auto it = g_imports.find(addr); return it == g_imports.end() ? nullptr : it->second.name; }
 
 static void (*find_fn(uint32_t addr))(CPU *) {
     auto ci = g_fn_cache.find(addr);
@@ -117,7 +115,19 @@ static void (*find_fn(uint32_t addr))(CPU *) {
     return nullptr;
 }
 
+/* ferramenta de pesquisa da decomp: TF_CALL_TRACE=lo-hi (hex) registra toda chamada a um endereco desse intervalo (os stubs de import de um modulo),
+ * com os oito argumentos inteiros e f12..f17; sp mascarado nos scripts de comparacao (tools/decomp_calls.sh) */
+extern uint64_t display_frames(void);
+static void call_trace(CPU *c, uint32_t addr) {
+    fprintf(stderr, "[call] %llu %08x(%08x %08x %08x %08x %08x %08x %08x %08x) f=%08x %08x %08x %08x %08x %08x\n", (unsigned long long)display_frames(), addr,
+            c->r[4], c->r[5], c->r[6], c->r[7], c->r[8], c->r[9], c->r[10], c->r[11], c->f[12].u, c->f[13].u, c->f[14].u, c->f[15].u, c->f[16].u, c->f[17].u);
+}
+
 void psp_call(CPU *c, uint32_t addr) {
+    static uint32_t trace_lo, trace_hi;
+    static const bool trace_init = [] { if (const char *e = getenv("TF_CALL_TRACE")) sscanf(e, "%x-%x", &trace_lo, &trace_hi); return true; }();
+    (void)trace_init;
+    if (trace_hi && addr >= trace_lo && addr < trace_hi) call_trace(c, addr);
     auto b = g_bound.find(addr);
     if (b != g_bound.end()) {
         static const bool trace = getenv("HLE_TRACE") != nullptr;
@@ -146,6 +156,12 @@ void psp_call(CPU *c, uint32_t addr) {
         if (host_resolve_export(im->second.nid, &target)) {          /* import de outro modulo do jogo (ex.: libehsys) */
             if (auto fn = find_fn(target)) { g_fn_cache[addr] = fn; fn(c); return; }
             fprintf(stderr, "\nexport %s::%08x aponta para 0x%08x, que nao e inicio de funcao recompilada\n", im->second.lib, im->second.nid, target); host_fatal(2);
+        }
+        /* Modo Rede/ad-hoc ainda nao existe: qualquer funcao das bibliotecas sceNet e sceWlan sem implementacao devolve erro (SCE_NET_ERROR_*), para o
+         * jogo mostrar a falha de conexao dele em vez de o executavel fechar. */
+        if (!strncmp(im->second.lib, "sceNet", 6) || !strncmp(im->second.lib, "sceWlan", 7)) {
+            static int avisos; if (avisos++ < 20) fprintf(stderr, "[rede] %s::%s sem suporte: devolvendo erro\n", im->second.lib, im->second.name);
+            c->r[2] = 0x80410001; return;
         }
         fprintf(stderr, "\n[HLE] nao implementado: %s::%s (nid %08x) a0=%08x a1=%08x a2=%08x a3=%08x ra=%08x\n",
                 im->second.lib, im->second.name, im->second.nid, c->r[4], c->r[5], c->r[6], c->r[7], c->r[31]);
@@ -185,7 +201,6 @@ static void hook_add(uint32_t addr, const HookEnt &e) {
 }
 void hook_install(uint32_t addr, PspHook fn, void *owner) { if (fn) hook_add(addr, HookEnt{fn, nullptr, owner}); }
 void hook_install_c(uint32_t addr, int (*fn)(CPU *), void *owner) { if (fn) hook_add(addr, HookEnt{nullptr, fn, owner}); }
-void hook_remove(uint32_t addr) { if (g_hooks.erase(addr)) hook_bit(addr, false); }
 void hook_remove_owner(void *owner) {
     for (auto it = g_hooks.begin(); it != g_hooks.end();) {
         auto &v = it->second; for (size_t i = v.size(); i-- > 0;) if (v[i].owner == owner) v.erase(v.begin() + (ptrdiff_t)i);

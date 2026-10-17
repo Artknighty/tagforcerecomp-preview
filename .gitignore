@@ -13,3 +13,6 @@ __pycache__/
 *.o
 /mods/
 /jogo/
+texcache/
+texturas_recentes.txt
+texturas_despejo/

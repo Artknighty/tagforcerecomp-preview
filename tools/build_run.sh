@@ -23,7 +23,26 @@ python tools/spv2h.py   # sombreadores do Vulkan (GLSL -> SPIR-V, gen/gpu_spv.h)
 echo '1 24 "runtime/app.manifest"' > gen/app.rc
 [ -f gen/app.ico ] && echo '1 ICON "gen/app.ico"' >> gen/app.rc
 RES=""; windres gen/app.rc -O coff -o gen/app_res.o && RES=gen/app_res.o
-g++ -std=c++17 ${OPT:--O2} -g -DPSP_TRACE "-DTF_GAME_ID=\"$GAMEID\"" -Wall -Wno-misleading-indentation -Iruntime -o "${OUT:-$EXE_DEF}" runtime/main_run.cpp runtime/gameid.cpp runtime/host.cpp runtime/kernel.cpp runtime/iso.cpp runtime/isofolder.cpp runtime/install.cpp runtime/hle_misc.cpp runtime/hle_io.cpp runtime/hle_ge.cpp runtime/hle_audio.cpp runtime/modules.cpp runtime/vfpu.cpp runtime/hle_utility.cpp runtime/display.cpp runtime/hle_mpeg.cpp runtime/hle_font.cpp runtime/launcher.cpp runtime/text_input.cpp runtime/diag.cpp runtime/audio_out.cpp runtime/raster_pool.cpp runtime/ffmpeg_dec.cpp runtime/menu.cpp runtime/mouse_ui.cpp runtime/gfx.cpp runtime/imgio.cpp runtime/texrepl.cpp runtime/plugins.cpp runtime/modbox.cpp runtime/gpu.cpp runtime/interp.cpp runtime/pacing.cpp runtime/hdfont.cpp runtime/jit.cpp runtime/gpu_d3d11.cpp runtime/gpu_vulkan.cpp runtime/pc_text.cpp runtime/mods.cpp runtime/util.cpp runtime/prepare.cpp runtime/dark_ui.cpp runtime/slider_dialog.cpp $GV/module_index.cpp $OBJS $RES -static -mwindows -ldwmapi -lgdi32 -luser32 -lcomdlg32 -lshell32 -lwinmm -lsynchronization -ld3d11 -ldxgi -ld3dcompiler -lole32 -loleaut32 -luuid -lwindowscodecs -lgdiplus
+# Build incremental do runtime: cada .cpp vira um .o em $GV/obj (tools/cc_one.sh), em paralelo, e so recompila o que mudou
+# (fonte ou algum header listado no .d, gerado com -MMD). Mudou OPT ou o id do jogo: refaz tudo.
+CPPSRCS="runtime/ctl.cpp runtime/main_run.cpp runtime/gameid.cpp runtime/host.cpp runtime/kernel.cpp runtime/iso.cpp runtime/isofolder.cpp runtime/install.cpp runtime/hle_misc.cpp runtime/hle_io.cpp runtime/hle_ge.cpp runtime/hle_audio.cpp runtime/modules.cpp runtime/vfpu.cpp runtime/hle_utility.cpp runtime/display.cpp runtime/hle_mpeg.cpp runtime/hle_font.cpp runtime/launcher.cpp runtime/text_input.cpp runtime/diag.cpp runtime/audio_out.cpp runtime/raster_pool.cpp runtime/ffmpeg_dec.cpp runtime/menu.cpp runtime/mouse_ui.cpp runtime/gfx.cpp runtime/imgio.cpp runtime/texrepl.cpp runtime/bc7.cpp runtime/plugins.cpp runtime/modbox.cpp runtime/gpu.cpp runtime/interp.cpp runtime/pacing.cpp runtime/hdfont.cpp runtime/jit.cpp runtime/gpu_d3d11.cpp runtime/gpu_vulkan.cpp runtime/pc_text.cpp runtime/mods.cpp runtime/util.cpp runtime/prepare.cpp runtime/dark_ui.cpp runtime/slider_dialog.cpp decomp/decomp.cpp decomp/libduelrecord/records.cpp decomp/libduelrecord/duelrecord.cpp decomp/libduelrecord/draw.cpp decomp/libduelrecord/swaps.cpp decomp/libtitle/*.cpp decomp/libcharalist/*.cpp decomp/libstory/*.cpp decomp/libfield/*.cpp decomp/libduel_eng/*.cpp decomp/libduel_mgr/*.cpp decomp/libduel_draw/*.cpp decomp/boot/window.cpp decomp/boot/window_content.cpp decomp/boot/window_layout.cpp decomp/boot/window_update.cpp $GV/module_index.cpp"
+OD=$GV/obj; mkdir -p $OD
+STAMP="${OPT:--O2} $GAMEID"
+[ "$(cat $OD/flags.txt 2>/dev/null)" = "$STAMP" ] || { rm -f $OD/*.o $OD/*.d; echo "$STAMP" > $OD/flags.txt; }
+export CXXOPT="${OPT:--O2}" GAMEID
+TODO=""; CPPOBJS=""
+for s in $CPPSRCS; do
+  o=$OD/$(echo "${s%.cpp}" | tr '/' '_').o; CPPOBJS="$CPPOBJS $o"
+  need=0
+  if [ ! -f "$o" ] || [ ! -f "${o%.o}.d" ] || [ "$s" -nt "$o" ]; then need=1
+  else for h in $(sed -e 's/^[^:]*://' -e 's/\\$//' "${o%.o}.d" | tr ' ' '\n' | grep .); do
+    if [ ! -e "$h" ] || [ "$h" -nt "$o" ]; then need=1; break; fi
+  done; fi
+  [ $need = 1 ] && TODO="$TODO $s:$o"
+done
+if [ -n "$TODO" ]; then printf '%s\n' $TODO | tr ':' ' ' | xargs -P ${JOBS:-$(nproc)} -L1 sh tools/cc_one.sh; fi
+g++ -o "${OUT:-$EXE_DEF}" $CPPOBJS $OBJS $RES -static -mwindows -ldwmapi -lgdi32 -luser32 -lcomdlg32 -lshell32 -lwinmm -lsynchronization -ld3d11 -ldxgi -ld3dcompiler -lole32 -loleaut32 -luuid -lwindowscodecs -lgdiplus
+if [ -f yugioh.png ]; then cp yugioh.png "$(dirname "${OUT:-$EXE_DEF}")/yugioh.png"; fi
 # os replays (tools/replay.sh) usam gen/run_bg.exe (o gen/run.exe pode estar aberto pelo jogador): no build padrao ele acompanha o run.exe
 if [ -z "$OUT" ] && [ -z "$TF_VER" ]; then cp gen/run.exe gen/run_bg.exe 2>/dev/null || echo "aviso: gen/run_bg.exe em uso (replay rodando?): os replays continuam com o build anterior"; fi
 python tools/ffmpeg_dlls.py gen   # DLLs do FFmpeg ao lado do run.exe (ATRAC: musica, vozes, efeitos do duelo)

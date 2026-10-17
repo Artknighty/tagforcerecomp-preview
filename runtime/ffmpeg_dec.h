@@ -2,6 +2,7 @@
  * filmes) e H.264 (video dos filmes PSMF). Sem as DLLs, os *_open devolvem nullptr. */
 #pragma once
 #include <stdint.h>
+void ffmpeg_preload(void);   /* carrega as DLLs numa thread (inicio do jogo) */
 struct AtracDec;
 /* nullptr se o FFmpeg nao estiver disponivel ou o formato nao abrir */
 AtracDec *atracdec_open(bool plus, int chans, int block_align, const uint8_t *extra, int extra_len);

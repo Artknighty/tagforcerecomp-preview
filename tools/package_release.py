@@ -25,7 +25,7 @@ PY_KEEP = ['python.exe', 'python311.dll', 'python3.dll', 'vcruntime140.dll', 'vc
 SKIP_MODS = {'MonstrosNoCampo'}   # prototype that needs art generated from the game; not part of the first release
 RUNTIME = ['main_run', 'gameid', 'host', 'kernel', 'iso', 'isofolder', 'install', 'hle_misc', 'hle_io', 'hle_ge', 'hle_audio', 'modules', 'vfpu',
            'hle_utility', 'display', 'hle_mpeg', 'hle_font', 'launcher', 'text_input', 'diag', 'audio_out', 'raster_pool', 'ffmpeg_dec', 'menu', 'mouse_ui',
-           'gfx', 'imgio', 'texrepl', 'plugins', 'modbox', 'gpu', 'interp', 'pacing', 'hdfont', 'jit', 'gpu_d3d11', 'gpu_vulkan', 'pc_text', 'mods', 'util',
+           'gfx', 'imgio', 'texrepl', 'bc7', 'plugins', 'modbox', 'gpu', 'interp', 'pacing', 'hdfont', 'jit', 'gpu_d3d11', 'gpu_vulkan', 'pc_text', 'mods', 'util',
            'prepare', 'dark_ui', 'slider_dialog', 'generic_index']
 
 
@@ -70,6 +70,8 @@ def main():
              '-lole32', '-loleaut32', '-luuid', '-lwindowscodecs', '-lgdiplus'], env=env)
     elif not os.path.exists(exe):
         sys.exit('--no-build needs an exe; build once without it')
+    if os.path.isfile('yugioh.png'):
+        shutil.copy('yugioh.png', pkg)
 
     # 2. slim LGPL-only FFmpeg (tools/build_ffmpeg_lite.sh builds it once into gen/ffmpeg_lite)
     if not glob.glob('gen/ffmpeg_lite/avcodec-*.dll'):

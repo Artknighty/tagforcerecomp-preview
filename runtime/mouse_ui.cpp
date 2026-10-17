@@ -150,7 +150,7 @@ bool g_pending;                       /* clique esperando a selecao chegar na ba
 uint64_t g_pending_until, g_next_tap, g_pulse_end; uint32_t g_pulse; int g_taps;
 int g_lmx = -1, g_lmy = -1;
 int g_burst_n, g_burst_dir; uint64_t g_burst_start, g_burst_end;
-const int g_period = getenv("TF_MOUSE_PERIOD") ? atoi(getenv("TF_MOUSE_PERIOD")) : 4;   /* quadros por passo (metade apertado, metade solto) */
+const int g_period = std::max(2, getenv("TF_MOUSE_PERIOD") ? atoi(getenv("TF_MOUSE_PERIOD")) : 4);   /* quadros por passo (metade apertado, metade solto) */
 }
 
 void mui_prim(uint32_t fb, int x0, int y0, int x1, int y1, float u0, float v0, float u1, float v1, uint32_t tex, uint32_t col) {
@@ -175,58 +175,10 @@ void mui_set_frame(uint32_t fb) {
 }
 
 namespace {
-/* Pulo direto: o jogo guarda o indice do cursor de cada lista numa variavel (byte baixo). Ela e descoberta em tempo de execucao: quando a selecao
- * muda de a para b enquanto este modulo aperta o direcional, os enderecos que valiam a antes (copia da RAM tirada antes do aperto) e b depois sao
- * candidatos; a proxima mudanca filtra (valor atual == indice selecionado). Com um candidato so, as proximas trocas escrevem o indice direto,
- * sem passar por cada item. Cada uso confere que a variavel ainda vale a selecao exibida; se nao, esquece e reaprende. */
-const uint32_t RAM0 = 0x08800000, RAMN = 0x1800000;
-std::vector<uint8_t> g_ram0;                  /* RAM antes do aperto (so enquanto aprende) */
-std::vector<uint32_t> g_cands; bool g_cands_init; int g_obs;
-std::map<uint64_t, uint32_t> g_addr;          /* chave da lista -> endereco do cursor */
-uint64_t g_key; int g_last_sel = -1, g_ram0_sel = -1, g_stab_sel = -2, g_stab_n; int g_tap_from = -1; uint64_t g_tap_at;
-uint64_t list_key() {
-    uint64_t h = mix(0x9e3779b97f4a7c15ull, g_list.size()); const Bar &b = g_list[0];
-    h = mix(h, b.x0); h = mix(h, b.y0); h = mix(h, b.x1 - b.x0); h = mix(h, b.y1 - b.y0); return h;
-}
-inline uint8_t *ram(uint32_t a) { return mem_ptr(a); }
+int g_stab_sel = -2, g_stab_n;   /* selecao vista no quadro anterior e ha quantos quadros ela nao muda */
 /* a cada quadro: quanto tempo a selecao ficou igual (o desenho atrasa em relacao ao aperto) */
 void stab_update() {
     if (g_sel != g_stab_sel) { g_stab_sel = g_sel; g_stab_n = 0; } else g_stab_n++;
-}
-/* (nao usado: o pulo direto escrevendo o cursor na memoria nao toca o som do jogo; ficou so como referencia) a cada quadro com selecao conhecida: aprende com as mudancas */
-void learn() {
-    if (g_sel < 0) return;
-    if (g_sel != g_stab_sel) { g_stab_sel = g_sel; g_stab_n = 0; return; }   /* so aprende com a selecao estavel: o desenho atrasa um pouco em relacao a variavel */
-    if (++g_stab_n < 3) return;
-    const uint64_t key = list_key();
-    if (key != g_key) { g_key = key; g_cands.clear(); g_cands_init = false; g_obs = 0; g_ram0.clear(); g_last_sel = -1; }
-    if (g_last_sel >= 0 && g_sel != g_last_sel && !g_addr.count(key)) {
-        if (!g_cands_init && !g_ram0.empty() && g_ram0_sel == g_last_sel) {
-            for (uint32_t o = 0; o < RAMN; o++) if (g_ram0[o] == (uint8_t)g_last_sel && *ram(RAM0 + o) == (uint8_t)g_sel) g_cands.push_back(RAM0 + o);
-            g_cands_init = true; g_obs = 1;
-        } else if (g_cands_init) {
-            std::vector<uint32_t> k; for (uint32_t a : g_cands) if (*ram(a) == (uint8_t)g_sel) k.push_back(a);
-            g_cands.swap(k); g_obs++;
-        }
-        if (g_mtrace && g_cands_init && g_cands.size() <= 600) { fprintf(stderr, "[mouse]   sel %d->%d:", g_last_sel, g_sel); for (size_t i = 0; i < g_cands.size() && i < 600; i++) fprintf(stderr, " %x", g_cands[i]); fprintf(stderr, "\n"); }
-        if (g_mtrace && g_cands_init) fprintf(stderr, "[mouse] cursor: %zu candidato(s) apos %d mudanca(s)\n", g_cands.size(), g_obs);
-        if (g_cands_init && g_obs >= 2 && g_cands.size() == 1) { g_addr[key] = g_cands[0]; if (g_mtrace) fprintf(stderr, "[mouse] cursor da lista em %08x\n", g_cands[0]); }
-        g_ram0.clear();
-    }
-    g_last_sel = g_sel;
-}
-/* antes de apertar o direcional: guarda a RAM para aprender com a mudanca (so se ainda precisa) */
-void learn_snapshot() {
-    if (g_sel < 0 || g_addr.count(g_key) || (g_cands_init && g_cands.size() <= 1 && g_obs >= 2)) return;
-    if (g_cands_init) return;   /* ja tem candidatos: o filtro usa so a memoria atual */
-    g_ram0.assign(ram(RAM0), ram(RAM0) + RAMN); g_ram0_sel = g_sel;
-}
-/* escreve o indice direto; false = nao sabe o endereco (ou ele nao vale mais) */
-bool jump_to(int idx) {
-    auto it = g_addr.find(g_key); if (it == g_addr.end()) return false;
-    if (*ram(it->second) != (uint8_t)g_sel) { g_addr.erase(it); g_cands.clear(); g_cands_init = false; g_obs = 0; return false; }
-    *ram(it->second) = (uint8_t)idx;
-    return true;
 }
 }
 
@@ -235,7 +187,7 @@ uint32_t mui_update(uint64_t frame, bool inside, int mx, int my, bool l_edge, bo
     const bool moved = inside && (mx != g_lmx || my != g_lmy);
     if (inside) { g_lmx = mx; g_lmy = my; }
     uint32_t out = frame < g_pulse_end ? g_pulse : 0;
-    if (g_burst_n && frame >= g_burst_start && frame < g_burst_start + (uint64_t)g_burst_n * g_period && (frame - g_burst_start) % g_period < g_period / 2) out |= g_burst_dir;
+    if (g_burst_n && frame >= g_burst_start && frame < g_burst_start + (uint64_t)g_burst_n * g_period && (frame - g_burst_start) % (uint64_t)g_period < (uint64_t)g_period / 2) out |= g_burst_dir;
     if (g_list.empty()) { g_tkx = g_tky = -1; g_pending = false; return out; }
     stab_update();
     int hover = -1;

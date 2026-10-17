@@ -12,13 +12,21 @@
  * em 8 + ASC, entao ASC + DESC precisa caber em 24. Tamanho/peso calibrados contra capturas do PPSSPP (menu principal):
  * FONT_PX (altura em pixels do em) e FONT_W (peso GDI) permitem ajustar sem recompilar. */
 static int CELL = 20, ASC = 16, DESC = 4;
+
+/* Os numeros da fonte, com nome (cada um continua ajustavel por variavel de ambiente, sem recompilar). */
+constexpr int kNativeFontPx = 21;          /* Segoe UI Semibold de 21 px imita a NewRodin DB do PSP (calibrado contra o PPSSPP) */
+constexpr int kGameGlyphCellRows = 24;     /* o jogo desenha cada glifo numa celula 32x32 com a linha de base em 8 + ASC: ASC + DESC cabe em 24 */
+constexpr int kHdFontShrinkPx = 3;         /* a fonte HD e 3 px menor que a nativa (18 px): descendentes (g, y, p...) batiam no limite do retangulo do atlas */
+constexpr float kCapitalCentreEm = 0.35f;  /* o centro de uma maiuscula fica ~0,35 em acima da linha de base */
+constexpr uint32_t kCjkFirstCode = 0x2e80; /* daqui para cima o glifo vem da fonte japonesa (MS Gothic) */
+static int env_int(const char *name, int fallback) { const char *v = getenv(name); return v ? atoi(v) : fallback; }
 static HDC g_dc; static HFONT g_latin, g_cjk;
 static uint32_t g_uid = 0x7000;
 
 static void init_gdi() {
     if (g_dc) return;
     g_dc = CreateCompatibleDC(nullptr);
-    int px = getenv("FONT_PX") ? atoi(getenv("FONT_PX")) : 21, wt = getenv("FONT_W") ? atoi(getenv("FONT_W")) : FW_SEMIBOLD;
+    int px = env_int("FONT_PX", kNativeFontPx), wt = env_int("FONT_W", FW_SEMIBOLD);
     wchar_t face[64] = L"Segoe UI";   /* NewRodin DB do PSP ~ Segoe UI Semibold 21px (calibrado vs PPSSPP) */
     if (const char *ff = getenv("FONT_FACE")) MultiByteToWideChar(CP_UTF8, 0, ff, -1, face, 64);
     g_latin = CreateFontW(-px, 0, 0, 0, wt, FALSE, FALSE, FALSE, DEFAULT_CHARSET, OUT_DEFAULT_PRECIS, CLIP_DEFAULT_PRECIS, ANTIALIASED_QUALITY, DEFAULT_PITCH, face);
@@ -26,7 +34,7 @@ static void init_gdi() {
     SelectObject(g_dc, g_latin);
     TEXTMETRICW tm; if (GetTextMetricsW(g_dc, &tm)) {
         ASC = tm.tmAscent - tm.tmInternalLeading + 1; DESC = tm.tmDescent;
-        if (ASC + DESC > 24) ASC = 24 - DESC;
+        if (ASC + DESC > kGameGlyphCellRows) ASC = kGameGlyphCellRows - DESC;
         CELL = ASC + DESC;
     }
 }
@@ -35,7 +43,7 @@ static std::map<uint32_t, Glyph> g_cache;
 static Glyph &glyph(uint32_t code) {
     auto it = g_cache.find(code); if (it != g_cache.end()) return it->second;
     init_gdi(); Glyph &g = g_cache[code];
-    SelectObject(g_dc, code >= 0x2e80 ? g_cjk : g_latin);
+    SelectObject(g_dc, code >= kCjkFirstCode ? g_cjk : g_latin);
     GLYPHMETRICS gm; MAT2 m = {{0, 1}, {0, 0}, {0, 0}, {0, 1}};
     DWORD sz = GetGlyphOutlineW(g_dc, code, GGO_GRAY8_BITMAP, &gm, 0, nullptr, &m);
     g.adv = gm.gmCellIncX ? gm.gmCellIncX : CELL / 2;
@@ -50,24 +58,27 @@ static Glyph &glyph(uint32_t code) {
 
 /* O mesmo glifo desenhado em HDS x o tamanho (fonte em alta resolucao, ver hdfont.h). FONT_HD_FACE troca so a fonte HD (padrao: a mesma do nativo). */
 static HFONT g_latin_hd, g_cjk_hd;
-bool font_hd_glyph(uint32_t code, int *w, int *h, std::vector<uint8_t> *a8) {
+static int g_hd_lift;   /* HD px que o glifo sobe: encolher ancorado na linha de base deixaria o texto colado embaixo; mantem o centro das maiusculas (~0,35 em) no mesmo lugar */
+bool font_hd_glyph(uint32_t code, int *w, int *h, int *top, std::vector<uint8_t> *a8) {
     init_gdi();
     if (!g_latin_hd) {
-        int px = getenv("FONT_PX") ? atoi(getenv("FONT_PX")) : 21, wt = getenv("FONT_HD_W") ? atoi(getenv("FONT_HD_W")) : getenv("FONT_W") ? atoi(getenv("FONT_W")) : FW_BOLD;   /* o traco do glifo de 84 px parece mais fino que o hintado de 21 px: peso maior */
+        int px = env_int("FONT_PX", kNativeFontPx), wt = env_int("FONT_HD_W", env_int("FONT_W", FW_BOLD));   /* o traco do glifo de 84 px parece mais fino que o hintado de 21 px: peso maior */
         wchar_t face[64] = L"Segoe UI";
         if (const char *ff = getenv("FONT_HD_FACE")) MultiByteToWideChar(CP_UTF8, 0, ff, -1, face, 64);
         else if (const char *ff2 = getenv("FONT_FACE")) MultiByteToWideChar(CP_UTF8, 0, ff2, -1, face, 64);
+        const int shrink = env_int("FONT_HD_SHRINK", kHdFontShrinkPx);
+        px -= shrink; g_hd_lift = (int)(kCapitalCentreEm * shrink * HDS + 0.5f);
         g_latin_hd = CreateFontW(-px * HDS, 0, 0, 0, wt, FALSE, FALSE, FALSE, DEFAULT_CHARSET, OUT_TT_PRECIS, CLIP_DEFAULT_PRECIS, ANTIALIASED_QUALITY, DEFAULT_PITCH, face);
         g_cjk_hd = CreateFontW(-px * HDS, 0, 0, 0, wt, FALSE, FALSE, FALSE, DEFAULT_CHARSET, OUT_TT_PRECIS, CLIP_DEFAULT_PRECIS, ANTIALIASED_QUALITY, DEFAULT_PITCH, L"MS Gothic");
     }
-    HFONT old = (HFONT)SelectObject(g_dc, code >= 0x2e80 ? g_cjk_hd : g_latin_hd);
+    HFONT old = (HFONT)SelectObject(g_dc, code >= kCjkFirstCode ? g_cjk_hd : g_latin_hd);
     GLYPHMETRICS gm; MAT2 m = {{0, 1}, {0, 0}, {0, 0}, {0, 1}};
     DWORD sz = GetGlyphOutlineW(g_dc, code, GGO_GRAY8_BITMAP, &gm, 0, nullptr, &m);
     bool ok = false;
     if (sz != GDI_ERROR && sz != 0) {
         std::vector<uint8_t> raw(sz);
         if (GetGlyphOutlineW(g_dc, code, GGO_GRAY8_BITMAP, &gm, sz, raw.data(), &m) != GDI_ERROR) {
-            *w = gm.gmBlackBoxX; *h = gm.gmBlackBoxY; uint32_t pitch = (*w + 3) & ~3u; a8->assign((size_t)*w * *h, 0);
+            *w = gm.gmBlackBoxX; *h = gm.gmBlackBoxY; *top = gm.gmptGlyphOrigin.y + g_hd_lift; uint32_t pitch = (*w + 3) & ~3u; a8->assign((size_t)*w * *h, 0);
             for (int y = 0; y < *h; y++) for (int x = 0; x < *w; x++) (*a8)[(size_t)y * *w + x] = (uint8_t)std::min(255u, raw[y * pitch + x] * 255u / 64u);
             ok = true;
         }
@@ -130,7 +141,7 @@ HLE(sceFontGetCharGlyphImage) {   /* (font, charCode, GlyphImage*) */
     if (fmt <= 1 && g.w > 0 && g.h > 0) {   /* fonte HD: guarda o glifo em alta resolucao, indexado pelo bitmap 4 bits que o jogo recebeu */
         std::vector<uint8_t> nb((size_t)g.w * g.h);
         for (size_t i = 0; i < nb.size(); i++) nb[i] = g.a8[i] >> 4;
-        hdfont_record(ARG(1), xp, yp, nb.data(), g.w, g.h);
+        hdfont_record(ARG(1), xp, yp, g.top, nb.data(), g.w, g.h);
     }
     RET(0);
 }

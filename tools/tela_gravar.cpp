@@ -3,9 +3,10 @@
  * nunca apareceu). Serve para piscadas/engasgos "entre um quadro e outro", que as capturas internas do jogo nao mostram.
  *
  * Compilar (MSYS2 UCRT64): g++ -O2 -o gen/tela_gravar.exe tools/tela_gravar.cpp -ld3d11 -ldxgi
- * Uso: tela_gravar <saida_sem_extensao> <segundos> [y0 y1] [--esperar <arquivo> <texto>]
+ * Uso: tela_gravar <saida_sem_extensao> <segundos> [y0 y1] [--esperar <arquivo> <texto>] [--so-tempos]
  *   grava <saida>.tsv (indice, ms da captura, ms da apresentacao, acumulados) e <saida>.bin (por imagem: faixa y0..y1 do canal
  *   verde em largura total + miniatura 480x270 RGB por media 4x4). --esperar: so comeca quando <texto> aparece em <arquivo>.
+ * --so-tempos: so o .tsv (sem copiar pixels; para gravar uma sessao inteira e medir o ritmo com tools/ritmo_analisar.py).
  * Analise: tools/tela_analisar.py <saida>. Monitor = o principal. */
 #include <windows.h>
 #include <d3d11.h>
@@ -31,9 +32,10 @@ int main(int argc, char **argv) {
     if (argc < 3) { fprintf(stderr, "uso: tela_gravar <saida> <segundos> [y0 y1] [--esperar arq texto]\n"); return 1; }
     SetProcessDpiAwarenessContext(DPI_AWARENESS_CONTEXT_PER_MONITOR_AWARE_V2);
     const std::string out = argv[1]; const double secs = atof(argv[2]);
-    int y0 = 800, y1 = 1000; const char *wait_file = nullptr, *wait_text = nullptr;
+    int y0 = 800, y1 = 1000; const char *wait_file = nullptr, *wait_text = nullptr; bool so_tempos = false;
     for (int i = 3; i < argc; i++) {
         if (!strcmp(argv[i], "--esperar") && i + 2 < argc) { wait_file = argv[i + 1]; wait_text = argv[i + 2]; i += 2; }
+        else if (!strcmp(argv[i], "--so-tempos")) so_tempos = true;
         else if (i + 1 < argc && isdigit((unsigned char)argv[i][0])) { y0 = atoi(argv[i]); y1 = atoi(argv[i + 1]); i++; }
     }
     /* saida principal (a que contem 0,0) e seu adaptador */
@@ -71,6 +73,7 @@ int main(int argc, char **argv) {
     const int TW = 480, TH = 270, sx = W / TW, sy = H / TH;
     std::vector<uint8_t> strip((size_t)W * (y1 - y0)), thumb((size_t)TW * TH * 3);
     const double t0 = now_ms(); unsigned n = 0, acc_total = 0, timeouts = 0;
+    fprintf(ft, "#t0 %.3f (QPC em ms: o jogo com TF_PRESENT_LOG=1 registra [present] no mesmo relogio)\n", t0);
     while (now_ms() - t0 < secs * 1000.0) {
         DXGI_OUTDUPL_FRAME_INFO fi = {}; IDXGIResource *res = nullptr;
         hr = dup->AcquireNextFrame(100, &fi, &res);
@@ -82,7 +85,10 @@ int main(int argc, char **argv) {
         }
         if (FAILED(hr)) { fprintf(stderr, "AcquireNextFrame: %08lx\n", (unsigned long)hr); break; }
         const double ta = now_ms() - t0;
-        if (fi.LastPresentTime.QuadPart) {
+        if (fi.LastPresentTime.QuadPart && so_tempos) {
+            fprintf(ft, "%u\t%.3f\t%.3f\t%u\n", n, ta, qpc_ms(fi.LastPresentTime.QuadPart) - t0, fi.AccumulatedFrames);
+            n++; acc_total += fi.AccumulatedFrames; if ((n & 63) == 0) fflush(ft);   /* o roteiro pode encerrar o gravador quando o jogo fecha */
+        } else if (fi.LastPresentTime.QuadPart) {
             ID3D11Texture2D *tex = nullptr; res->QueryInterface(__uuidof(ID3D11Texture2D), (void **)&tex);
             ctx->CopyResource(stg, tex); tex->Release();
             D3D11_MAPPED_SUBRESOURCE m;

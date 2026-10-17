@@ -6,33 +6,43 @@
 #include <vector>
 #include <map>
 #include <algorithm>
+#include <functional>
 
 struct Loaded { const GenModule *g; uint32_t uid; };
 static std::vector<Loaded> g_loaded;
 static std::string lower(std::string s) { for (auto &ch : s) ch = (char)tolower((unsigned char)ch); return s; }
 
-static bool build_image(const std::vector<uint8_t> &f, uint32_t base, std::vector<uint8_t> &img) {
-    auto u32 = [&](size_t o) { return *(const uint32_t *)&f[o]; };
-    auto u16 = [&](size_t o) { return *(const uint16_t *)&f[o]; };
+/* Monta a imagem do modulo (primeiro segmento do ELF) e aplica as relocacoes MIPS. modinfo = offset do sceModuleInfo (p_paddr).
+ * Todo offset vindo do arquivo e conferido: um PRX corrompido falha o carregamento em vez de ler/escrever fora do buffer. */
+static bool build_image(const std::vector<uint8_t> &f, uint32_t base, std::vector<uint8_t> &img, uint32_t *modinfo) {
+    auto in_file = [&](uint64_t o, uint64_t n) { return o + n <= f.size(); };
+    auto u32 = [&](size_t o) { uint32_t v = 0; if (in_file(o, 4)) memcpy(&v, &f[o], 4); return v; };
+    auto u16 = [&](size_t o) { uint16_t v = 0; if (in_file(o, 2)) memcpy(&v, &f[o], 2); return v; };
     if (f.size() < 0x40 || memcmp(f.data(), "\x7f" "ELF", 4) != 0) return false;
     uint32_t phoff = u32(28), shoff = u32(32); uint16_t shentsize = u16(46), shnum = u16(48);
-    uint32_t p_off = u32(phoff + 4), p_filesz = u32(phoff + 16), p_memsz = u32(phoff + 20);
+    if (!in_file(phoff, 0x20)) return false;
+    uint32_t p_off = u32(phoff + 4), p_paddr = u32(phoff + 12), p_filesz = u32(phoff + 16), p_memsz = u32(phoff + 20);
+    if (!in_file(p_off, p_filesz) || p_filesz > p_memsz) return false;
     img.assign(p_memsz, 0); memcpy(img.data(), &f[p_off], p_filesz);
+    *modinfo = p_paddr & 0x7fffffffu;
+    auto word = [&](uint32_t off) -> uint32_t * { return (uint64_t)off + 4 <= img.size() ? (uint32_t *)&img[off] : nullptr; };
     std::vector<uint32_t> hi;
     for (unsigned s = 0; s < shnum; s++) {
         size_t sh = shoff + (size_t)s * shentsize;
-        if (u32(sh + 4) != 0x700000a0) continue;
+        if (!in_file(sh, 24) || u32(sh + 4) != 0x700000a0) continue;
         uint32_t off = u32(sh + 16), size = u32(sh + 20);
+        if (!in_file(off, size)) return false;
         for (uint32_t i = 0; i < size / 8; i++) {
             uint32_t r_off = u32(off + i * 8), info = u32(off + i * 8 + 4), typ = info & 0xff;
-            uint32_t *w = (uint32_t *)&img[r_off];
+            uint32_t *w = word(r_off);
+            if (!w) { fprintf(stderr, "reloc fora da imagem: %08x\n", r_off); return false; }
             if (typ == 2) *w += base;
             else if (typ == 4) *w = (*w & 0xfc000000u) | ((*w + (base >> 2)) & 0x03ffffffu);
             else if (typ == 5) { hi.push_back(r_off); continue; }
             else if (typ == 6) {
                 int32_t lo = (int16_t)(*w & 0xffff);
                 for (uint32_t ho : hi) {
-                    uint32_t *hw = (uint32_t *)&img[ho];
+                    uint32_t *hw = word(ho);
                     uint32_t val = ((*hw & 0xffff) << 16) + lo + base;
                     uint32_t h = ((val >> 16) + ((val & 0x8000) ? 1 : 0)) & 0xffff;
                     *hw = (*hw & 0xffff0000u) | h;
@@ -44,36 +54,44 @@ static bool build_image(const std::vector<uint8_t> &f, uint32_t base, std::vecto
     return true;
 }
 
+/* Soma `delta` a um par HI16/LO16 do MIPS: os HI16 pendentes em `his` pegam o carry do LO16 em `lo_word` (como o carregador do firmware). */
+static void relocate_hilo(std::vector<uint32_t> &his, uint32_t *lo_word, uint32_t delta, const std::function<uint32_t *(uint32_t)> &word) {
+    int32_t lo = (int16_t)(*lo_word & 0xffff);
+    for (uint32_t h : his) {
+        uint32_t *hp = word(h); if (!hp) continue;
+        uint32_t val = ((*hp & 0xffff) << 16) + lo + delta;
+        *hp = (*hp & 0xffff0000u) | (((val >> 16) + ((val & 0x8000) ? 1 : 0)) & 0xffff);
+    }
+    his.clear(); *lo_word = (*lo_word & 0xffff0000u) | ((lo + delta) & 0xffff);
+}
+
 /* Importacoes de VARIAVEIS (sceVstub), igual a tools/imports.py:apply_var_imports. O codigo recompilado ja saiu com os
  * enderecos certos; aqui corrigimos a imagem em memoria (palavras de dados R_MIPS_32 e a copia do .text). */
 static void apply_var_imports(std::vector<uint8_t> &img, uint32_t base, uint32_t mi) {   /* mi = offset do sceModuleInfo */
-    auto at = [&](uint32_t a) -> uint32_t * { return (a - base + 4 <= img.size()) ? (uint32_t *)&img[a - base] : nullptr; };
-    if (mi + 0x34 > img.size()) return;
+    auto at = [&](uint32_t a) -> uint32_t * { return (a >= base && (uint64_t)(a - base) + 4 <= img.size()) ? (uint32_t *)&img[a - base] : nullptr; };
+    auto rd = [&](uint32_t a) { const uint32_t *p = at(a); return p ? *p : 0; };
+    if ((uint64_t)mi + 0x34 > img.size()) return;
     uint32_t st = *(uint32_t *)&img[mi + 0x2c], se = *(uint32_t *)&img[mi + 0x30];
     for (uint32_t o = st; o < se;) {
-        uint32_t *e = at(o); if (!e) break;
+        if (!at(o) || (uint64_t)(o - base) + 10 > img.size()) break;
         uint32_t size = img[o - base + 8], nvar = img[o - base + 9];
+        if (!size) break;
         if (nvar && size >= 6) {
-            uint32_t varp = *at(o + 20);
+            uint32_t varp = rd(o + 20);
             for (uint32_t i = 0; i < nvar; i++) {
-                uint32_t refp = *at(varp + 8 * i), nid = *at(varp + 8 * i + 4), addr;
+                uint32_t refp = rd(varp + 8 * i), nid = rd(varp + 8 * i + 4), addr;
                 if (!host_resolve_export(nid, &addr)) { fprintf(stderr, "[modulo] variavel importada %08x sem export\n", nid); continue; }
                 std::vector<uint32_t> his;
-                for (uint32_t r = refp;; r += 4) {
+                for (uint32_t r = refp; at(r); r += 4) {   /* a lista de referencias termina em 0 (ou sai da imagem) */
                     uint32_t w = *at(r); if (!w) break;
                     uint32_t typ = w >> 26, a = (w & 0x03ffffffu) << 2; uint32_t *p = at(a); if (!p) continue;
                     if (typ == 2) *p += addr;
                     else if (typ == 5) his.push_back(a);
-                    else if (typ == 6) {
-                        int32_t lo = (int16_t)(*p & 0xffff);
-                        for (uint32_t h : his) { uint32_t *hp = at(h); uint32_t val = ((*hp & 0xffff) << 16) + lo + addr;
-                            *hp = (*hp & 0xffff0000u) | (((val >> 16) + ((val & 0x8000) ? 1 : 0)) & 0xffff); }
-                        his.clear(); *p = (*p & 0xffff0000u) | ((lo + addr) & 0xffff);
-                    }
+                    else if (typ == 6) relocate_hilo(his, p, addr, at);
                 }
             }
         }
-        o += size * 4; if (!size) break;
+        o += size * 4;
     }
 }
 
@@ -124,11 +142,11 @@ uint32_t module_load(const char *path_in, bool *ok) {
     if (iso_find("PSP_GAME/" + std::string(g->iso_path), &lba, &size, &isdir) != 0) { fprintf(stderr, "[modulo] %s ausente no ISO\n", g->iso_path); return 0x80010002u; }
     std::vector<uint8_t> file(size); iso_read(lba, 0, file.data(), size);
     pctext_apply(lba, 0, file.data(), size);   /* textos de "Memory Stick" do BOOT -> textos de PC */
-    std::vector<uint8_t> img;
-    if (!build_image(file, g->base, img) || img.size() != g->memsz) {
+    std::vector<uint8_t> img; uint32_t modinfo = 0;
+    if (!build_image(file, g->base, img, &modinfo) || img.size() != g->memsz) {
         fprintf(stderr, "[modulo] %s: imagem incompativel com o codigo recompilado (tamanho %zu, esperado %u)\n", g->name, img.size(), g->memsz); return 0x80020139u;
     }
-    apply_var_imports(img, g->base, *(const uint32_t *)&file[*(const uint32_t *)&file[28] + 12] & 0x7fffffffu);   /* p_paddr = sceModuleInfo */
+    apply_var_imports(img, g->base, modinfo);
     if (!k_alloc((uint32_t)img.size(), 2, g->base, g->name)) {
         fprintf(stderr, "[modulo] %s: regiao 0x%08x ocupada (outro modulo ainda carregado?)\n", g->name, g->base); return 0x800200d9u;
     }

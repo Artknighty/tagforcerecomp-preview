@@ -51,8 +51,10 @@ static void carregar(void) {
 
 static int hk_ler_deck(TfCpu *c) {   /* libehsys_85A292D7(indice, saida) */
     if (g_off) return 0;
-    const int idx = (int)A->reg(c, 4); const uint32_t out = A->reg(c, 5);
+    int idx = (int)A->reg(c, 4); const uint32_t out = A->reg(c, 5);
+    { static const char *rm = getenv("TF_DECK_REMAP"); int de = -1, para = -1; if (rm && sscanf(rm, "%d:%d", &de, &para) == 2 && idx == de) idx = para; }   /* teste: reproduz duelos gravados com o deck antigo (ex.: 37:1 = Zane com o deck do Jaden) */
     auto it = g_decks.find(idx);
+    A->log("[deck] leitura RCP%03d (ra=%08x, campo do indice em %08x; slot: personagem=%u especial=%u deck=%u variante=%u) -> %s", idx, A->reg(c, 31), out - 128, ((uint16_t*)A->mem(out - 132))[0], ((uint16_t*)A->mem(out - 132))[1], ((uint16_t*)A->mem(out - 132))[2], ((uint16_t*)A->mem(out - 132))[3], it == g_decks.end() ? "deck original do jogo" : "deck do mod");   /* diagnostico: qual deck cada duelista recebeu (report "Zane com deck do Jaden") */
     if (it == g_decks.end() || out < 0x08000000u || out > 0x0a000000u) return 0;
     const Deck &d = it->second;
     uint8_t *o = A->mem(out); memset(o, 0, 0x108);

@@ -2,6 +2,8 @@
  * carregado DINAMICAMENTE: se as DLLs (avcodec-63.dll, avutil-61.dll e dependencias) nao estiverem ao lado do .exe nem em
  * C:\msys64\ucrt64\bin, os *_open devolvem nullptr e o jogo segue sem som ATRAC / sem filmes. Os cabecalhos so dao os
  * tipos; as funcoes vem de GetProcAddress, entao o .exe nao depende das DLLs para abrir. */
+#include <mutex>
+#include <thread>
 #include <windows.h>
 #include <stdio.h>
 #include <string.h>
@@ -32,7 +34,13 @@ static struct {
     void (*avfree)(void *);   /* opcional: sem ela os buffers de av_mallocz vazam (como antes) */
 } F;
 
-static bool load_ffmpeg(void) {
+static bool load_ffmpeg_now(void);
+/* as ~80 DLLs do FFmpeg levavam 0,6 s (2,4 s com o disco ocupado) dentro do sceMpegCreate do filme de abertura: o jogo parava na logo.
+ * ffmpeg_preload as carrega numa thread logo no inicio; quem precisar antes espera so o que falta (trava). */
+static std::mutex g_ffmu;
+static bool load_ffmpeg(void) { std::lock_guard<std::mutex> lk(g_ffmu); return load_ffmpeg_now(); }
+void ffmpeg_preload(void) { std::thread([] { SetThreadPriority(GetCurrentThread(), THREAD_PRIORITY_BELOW_NORMAL); load_ffmpeg(); }).detach(); }
+static bool load_ffmpeg_now(void) {
     static int state = 0;   /* 0 = nao tentou, 1 = ok, -1 = indisponivel */
     if (state) return state > 0;
     state = -1;

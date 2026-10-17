@@ -1,5 +1,5 @@
 /* First-run preparation of the release (generic) build. The release contains no game code: after the game files are installed from the user's own
- * ISO, the Allegrex -> C translator (tools/*.py, run by the embedded Python in tools/python) writes the C code of the game into gen/ on the
+ * ISO, the Allegrex -> C translator (tools/<name>.py, run by the embedded Python in tools/python) writes the C code of the game into gen/ on the
  * user's machine, and jit.cpp compiles it in memory with TinyCC. This file runs the translator and tells whether its output is up to date. */
 #include "hle.h"
 #include "util.h"

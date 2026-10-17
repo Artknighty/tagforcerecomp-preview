@@ -3,7 +3,7 @@
 layout(location = 0) in vec3 pos;
 layout(location = 1) in vec3 uvw;
 layout(location = 2) in vec4 col;
-layout(push_constant) uniform PCV { layout(offset = 80) vec2 fbsize; } pcv;   // tamanho nativo do quadro sombra (480x272 na tela; alvos de textura tem outros)
+layout(push_constant) uniform PCV { layout(offset = 96) vec2 fbsize; } pcv;   // tamanho nativo do quadro sombra (480x272 na tela; alvos de textura tem outros)
 layout(location = 0) out vec3 vUvw;
 layout(location = 1) out vec4 vCol;
 layout(location = 2) out float vZ;

@@ -14,7 +14,6 @@ typedef struct {
 } GenModule;
 extern "C" const GenModule g_gen_modules[]; extern "C" const unsigned g_gen_nmodules;
 bool jit_init(void);   /* TF_JIT=1: compila os gen/ *.c em memoria com o TinyCC em vez de usar os modulos ligados (jit.cpp) */
-bool jit_enabled(void);
 bool jit_generic(void);   /* release build: no game code is linked in; it is translated from the installed game on first run and compiled in memory */
 std::wstring code_dir(const std::string &id);   /* where the translated C code of this game version lives (prepare.cpp) */
 bool code_ready(const std::string &id);
@@ -26,7 +25,7 @@ struct HleReg { HleReg(const char *n, HleFn f) { hle_register(n, f); } };
 
 /* HLE(sceFoo) { ... }  -- argumentos: ARG(0..7), retorno: RET(v) */
 #define HLE(name) static void hle_##name(CPU *c); static HleReg reg_##name(#name, hle_##name); static void hle_##name(CPU *c)
-#define ARG(i) (c->r[(i) < 4 ? 4 + (i) : 4 + (i)])   /* a0-a3, t0-t3 = r4..r11 */
+#define ARG(i) (c->r[4 + (i)])   /* a0-a3, t0-t3 = r4..r11 */
 #define RET(v) (c->r[2] = (uint32_t)(v))
 #define RET64(v) do { uint64_t v_ = (uint64_t)(v); c->r[2] = (uint32_t)v_; c->r[3] = (uint32_t)(v_ >> 32); } while (0)
 
@@ -39,10 +38,7 @@ bool host_resolve_export(uint32_t nid, uint32_t *addr);
 uint32_t module_load(const char *iso_path, bool *ok);   /* carrega um modulo recompilado do ISO; devolve uid */
 uint32_t k_register_module(uint32_t base, uint32_t memsz, uint32_t textsz, uint32_t datasz, uint32_t bsssz, uint32_t gp, const char *name);
 void k_unregister_module(uint32_t uid);
-void k_reserve(uint32_t start, uint32_t size, const char *name);
-CPU *host_main_cpu(void);
 extern uint8_t *g_mem;
-const char *host_import_name(uint32_t addr);
 [[noreturn]] void host_fatal(int code);   /* erro fatal (HLE que falta, instrucao nao suportada...): grava o fim do log da sessao e sai com `code` */
 
 /* ---- kernel ---- */
@@ -60,7 +56,6 @@ int k_run(void);                       /* agenda ate todas as threads terminarem
 uint64_t k_now_us(void);
 void k_block_current(uint64_t timeout_us, bool has_timeout);
 uint32_t k_current_uid(void);
-void k_advance(uint32_t us);
 void k_delay_current(uint64_t us);
 uint32_t k_call_guest(uint32_t addr, uint32_t a0, uint32_t a1, uint32_t a2, uint32_t a3);   /* roda funcao do jogo em contexto de interrupcao */
 

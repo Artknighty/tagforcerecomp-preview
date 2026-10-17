@@ -1,4 +1,4 @@
-/* Barra de menu nativa da janela (versao de PC): Arquivo / Exibir / Graficos / Mods / Cheats / Ajuda. Para acrescentar um item:
+/* Barra de menu nativa da janela (versao de PC): Arquivo / Exibir / Mods / Cheats / Ajuda. Para acrescentar um item:
  * um ID no enum, a chamada (acao/alterna/opcao/submenu) em menu_create e o caso em menu_command. As acoes ficam no display.cpp
  * (display_*). O menu some em tela cheia; enquanto um menu esta aberto o Windows prende a thread num laco modal e o jogo fica
  * pausado (o display avisa o watchdog). Textos em UTF-16 com escapes \x (acentos).
@@ -11,6 +11,7 @@
 #include <string>
 #include <wctype.h>
 #include "dark_ui.h"
+#include "hotkeys.h"
 #include "menu.h"
 #include "texrepl.h"
 #include "mods.h"
@@ -27,7 +28,7 @@ void display_ask_reset_text(const wchar_t *text);
 enum {
     ID_RESET = 1001, ID_EXIT,
     ID_FULLSCREEN = 1101, ID_FPS, ID_SCALE1, ID_SCALE2, ID_SCALE3, ID_SCALE4,
-    ID_FILTER0 = 1150, ID_FILTER1, ID_FILTER2, ID_ASPECT0 = 1160, ID_ASPECT1, ID_ASPECT2, ID_INTEGER = 1170, ID_RES1 = 1180, ID_RES2, ID_RES3, ID_RES4, ID_RES5, ID_RES6, ID_MSAA1 = 1210, ID_MSAA2, ID_MSAA4, ID_MSAA8, ID_TEXSC1 = 1220, ID_TEXSC2, ID_TEXSC4, ID_FPS30 = 1224, ID_FPS60, ID_FONTHD = 1227, ID_SYNC0 = 1230, ID_SYNC1, ID_SYNC2, ID_MODS_DUMP = 1288, ID_RENDER_SW = 1190, ID_RENDER_D3D, ID_RENDER_VK,
+    ID_FILTER0 = 1150, ID_FILTER1, ID_FILTER2, ID_ASPECT0 = 1160, ID_ASPECT1, ID_ASPECT2, ID_RES1 = 1180, ID_RES2, ID_RES3, ID_RES4, ID_RES5, ID_RES6, ID_MSAA1 = 1210, ID_MSAA2, ID_MSAA4, ID_MSAA8, ID_FPS30 = 1224, ID_FPS60, ID_FPS120, ID_SYNC0 = 1230, ID_SYNC1, ID_SYNC2, ID_MODS_DUMP = 1288, ID_RENDER_SW = 1190, ID_RENDER_D3D, ID_RENDER_VK,
     ID_CONTROLS = 1201, ID_ABOUT, ID_PCINPUT = 1205, ID_MOUSEMENU,
     ID_MODS_FOLDER = 1290, ID_MODS_APPLY, ID_MOD_FIRST = 1300,   /* 1300 + i = liga/desliga o mod i */
 };
@@ -45,7 +46,7 @@ static std::deque<Item> g_itens;              /* enderecos estaveis: o Windows g
 static std::map<UINT, Item *> g_item_id;
 /* icones (Segoe Fluent Icons no Windows 11, Segoe MDL2 Assets no 10) */
 enum : wchar_t { IC_REINICIAR = 0xE72C, IC_SAIR = 0xE7E8, IC_TELA_CHEIA = 0xE740, IC_FPS = 0xE9D9, IC_JANELA = 0xE7C4, IC_GPU = 0xE964, IC_RES = 0xE7F4,
-                 IC_AA = 0xE771, IC_TEXTURA = 0xEB9F, IC_FONTE = 0xE8D2, IC_QUADROS = 0xEC4A, IC_SYNC = 0xE8AB, IC_FILTRO = 0xE793, IC_PROPORCAO = 0xE7FB,
+                 IC_AA = 0xE771, IC_TEXTURA = 0xEB9F, IC_QUADROS = 0xEC4A, IC_SYNC = 0xE8AB, IC_FILTRO = 0xE793, IC_PROPORCAO = 0xE7FB,
                  IC_INTEIRA = 0xE80A, IC_MOD = 0xEA86, IC_PASTA = 0xE838, IC_DESPEJO = 0xE896, IC_CHEAT = 0xE945, IC_AJUSTE = 0xE9E9, IC_CONTROLE = 0xE7FC,
                  IC_SOBRE = 0xE946 };
 
@@ -233,20 +234,17 @@ bool menu_dark_message(HWND h, UINT m, WPARAM w, LPARAM l, LRESULT *res) {
 
 void ge_set_res(int n);
 void ge_set_msaa(void);
-void ge_set_texscale(void);
 void display_set_renderer(int r);
 static void gfx_menu_sync(void) {   /* (MF_BYCOMMAND procura tambem nos submenus) */
     for (int i = 0; i < 3; i++) { CheckMenuItem(g_gfxm, ID_FILTER0 + i, i == g_gfx.filter ? MF_CHECKED : MF_UNCHECKED); CheckMenuItem(g_gfxm, ID_ASPECT0 + i, i == g_gfx.aspect ? MF_CHECKED : MF_UNCHECKED); }
-    static const int resv[6] = {1, 2, 3, 4, 6, 8};
-    for (int i = 0; i < 6; i++) CheckMenuItem(g_gfxm, ID_RES1 + i, resv[i] == g_gfx.res ? MF_CHECKED : MF_UNCHECKED);
+    static const int resv[6] = {1, 3, 4, 6, 8, 0};   /* 0 = a do monitor (gfx.h) */
+    for (int i = 0; i < 6; i++) CheckMenuItem(g_gfxm, ID_RES1 + i, (resv[i] ? !g_gfx.res_auto && resv[i] == g_gfx.res : g_gfx.res_auto) ? MF_CHECKED : MF_UNCHECKED);
     { static const int mv[4] = {1, 2, 4, 8}; for (int i = 0; i < 4; i++) CheckMenuItem(g_gfxm, ID_MSAA1 + i, mv[i] == g_gfx.msaa ? MF_CHECKED : MF_UNCHECKED); }
-    { static const int tv[3] = {1, 2, 4}; for (int i = 0; i < 3; i++) CheckMenuItem(g_gfxm, ID_TEXSC1 + i, tv[i] == g_gfx.texscale ? MF_CHECKED : MF_UNCHECKED); }
-    CheckMenuItem(g_gfxm, ID_FONTHD, g_gfx.hdfont ? MF_CHECKED : MF_UNCHECKED);
     for (int i = 0; i < 3; i++) CheckMenuItem(g_gfxm, ID_SYNC0 + i, i == g_gfx.sync ? MF_CHECKED : MF_UNCHECKED);
-    CheckMenuItem(g_gfxm, ID_FPS30, !g_gfx.fps60 ? MF_CHECKED : MF_UNCHECKED); CheckMenuItem(g_gfxm, ID_FPS60, g_gfx.fps60 ? MF_CHECKED : MF_UNCHECKED);
-    CheckMenuItem(g_gfxm, ID_INTEGER, g_gfx.integer ? MF_CHECKED : MF_UNCHECKED);
+    for (int i = 0; i < 3; i++) CheckMenuItem(g_gfxm, ID_FPS30 + i, i == g_gfx.fps ? MF_CHECKED : MF_UNCHECKED);
     CheckMenuItem(g_gfxm, ID_RENDER_SW, g_gfx.renderer == GFX_RENDER_SOFTWARE ? MF_CHECKED : MF_UNCHECKED); CheckMenuItem(g_gfxm, ID_RENDER_D3D, g_gfx.renderer == GFX_RENDER_D3D11 ? MF_CHECKED : MF_UNCHECKED); CheckMenuItem(g_gfxm, ID_RENDER_VK, g_gfx.renderer == GFX_RENDER_VULKAN ? MF_CHECKED : MF_UNCHECKED);
 }
+void menu_gfx_refresh(void) { if (g_gfxm) gfx_menu_sync(); }   /* the in-game Graphics screen changed an option */
 HMENU menu_create(void) {
     HMENU file = CreatePopupMenu();
     acao(file, ID_RESET, IC_REINICIAR, L"&Restart game...");
@@ -259,33 +257,31 @@ HMENU menu_create(void) {
     opcao(g_scale, ID_SCALE3, L"&3x", L"1440 x 816", L"3x");
     opcao(g_scale, ID_SCALE4, L"&4x", L"1920 x 1088", L"4x");
     g_view = CreatePopupMenu();
-    alterna(g_view, ID_FULLSCREEN, IC_TELA_CHEIA, L"&Fullscreen", L"F11", false);
-    alterna(g_view, ID_FPS, IC_FPS, L"Show &FPS", L"F3", false);
+    alterna(g_view, ID_FULLSCREEN, IC_TELA_CHEIA, L"&Fullscreen", hotkey_key(VK_F11), false);
+    alterna(g_view, ID_FPS, IC_FPS, L"Show &FPS", hotkey_key(VK_F3), false);
     alterna(g_view, ID_PCINPUT, IC_CONTROLE, L"PC &keyboard and mouse", L"WASD + clicks", display_pc_input());
     alterna(g_view, ID_MOUSEMENU, IC_CONTROLE, L"Mouse in m&enus", L"experimental", display_mouse_menus());
     separador(g_view);
     submenu(g_view, g_scale, IC_JANELA, L"&Window size");
 
     /* Graphics: in sections, each choice in a submenu that shows the current value beside it */
-    HMENU render = CreatePopupMenu(), res = CreatePopupMenu(), msaa = CreatePopupMenu(), tex = CreatePopupMenu(), fps = CreatePopupMenu(), sync = CreatePopupMenu(),
+    HMENU render = CreatePopupMenu(), res = CreatePopupMenu(), msaa = CreatePopupMenu(), fps = CreatePopupMenu(), sync = CreatePopupMenu(),
           filtro = CreatePopupMenu(), prop = CreatePopupMenu();
     opcao(render, ID_RENDER_SW, L"&Software", L"CPU", L"Software");
     opcao(render, ID_RENDER_D3D, L"&Direct3D 11", L"GPU", L"Direct3D 11");
     opcao(render, ID_RENDER_VK, L"&Vulkan", L"GPU", L"Vulkan");
-    opcao(res, ID_RES1, L"&1x", L"480 x 272 (native)", L"1x");
-    opcao(res, ID_RES2, L"&2x", L"960 x 544", L"2x");
-    opcao(res, ID_RES3, L"&3x", L"1440 x 816 \x00B7 heavy", L"3x");
-    opcao(res, ID_RES4, L"&4x", L"1920 x 1088", L"4x");
-    opcao(res, ID_RES5, L"&6x", L"2880 x 1632 \x00B7 GPU only", L"6x");
-    opcao(res, ID_RES6, L"&8x", L"3840 x 2176 \x00B7 GPU only", L"8x");
+    opcao(res, ID_RES1, L"&480 x 272", L"original PSP", L"480x272");
+    opcao(res, ID_RES2, L"1&280 x 720", L"HD", L"720p");
+    opcao(res, ID_RES3, L"1&920 x 1080", L"Full HD", L"1080p");
+    opcao(res, ID_RES4, L"&2560 x 1440", L"QHD \x00B7 GPU only", L"1440p");
+    opcao(res, ID_RES5, L"&3840 x 2160", L"4K \x00B7 GPU only", L"4K");
+    opcao(res, ID_RES6, L"&Match monitor", L"", L"Monitor");
     opcao(msaa, ID_MSAA1, L"&Off", L"", L"Off");
     opcao(msaa, ID_MSAA2, L"&2x", L"", L"2x");
     opcao(msaa, ID_MSAA4, L"&4x", L"", L"4x");
     opcao(msaa, ID_MSAA8, L"&8x", L"", L"8x");
-    opcao(tex, ID_TEXSC1, L"&Original", L"", L"Original");
-    opcao(tex, ID_TEXSC2, L"Upscaled &2x", L"pixels", L"2x");
-    opcao(tex, ID_TEXSC4, L"Upscaled &4x", L"pixels", L"4x");
-    opcao(fps, ID_FPS60, L"&60 FPS", L"interpolated (GPU) \x00B7 experimental", L"60 FPS");
+    opcao(fps, ID_FPS120, L"&120 FPS", L"interpolated (GPU) \x00B7 120 Hz monitor", L"120 FPS");
+    opcao(fps, ID_FPS60, L"&60 FPS", L"interpolated (GPU)", L"60 FPS");
     opcao(fps, ID_FPS30, L"&30 FPS", L"original", L"30 FPS");
     opcao(sync, ID_SYNC0, L"&Default", L"no tearing, without waiting for the monitor", L"Default");
     opcao(sync, ID_SYNC1, L"&VSync", L"waits for the monitor", L"VSync");
@@ -299,25 +295,28 @@ HMENU menu_create(void) {
     g_gfxm = CreatePopupMenu();
     titulo(g_gfxm, L"QUALITY");
     submenu(g_gfxm, render, IC_GPU, L"&Renderer");
-    submenu(g_gfxm, res, IC_RES, L"&Internal resolution");
+    submenu(g_gfxm, res, IC_RES, L"&Resolution");
     submenu(g_gfxm, msaa, IC_AA, L"&Anti-aliasing (MSAA)");
-    submenu(g_gfxm, tex, IC_TEXTURA, L"&Textures without a replacement");
-    alterna(g_gfxm, ID_FONTHD, IC_FONTE, L"&High-resolution font", L"GPU", false);
     titulo(g_gfxm, L"MOTION");
     submenu(g_gfxm, fps, IC_QUADROS, L"&Frame rate");
     submenu(g_gfxm, sync, IC_SYNC, L"S&ynchronization");
     titulo(g_gfxm, L"SCREEN");
     submenu(g_gfxm, filtro, IC_FILTRO, L"Fi&lter");
     submenu(g_gfxm, prop, IC_PROPORCAO, L"Aspect &ratio");
-    alterna(g_gfxm, ID_INTEGER, IC_INTEIRA, L"&Integer scale", L"no blur", false);
     gfx_menu_sync();
 
     g_mods = CreatePopupMenu();   /* list of the mods in mods/ (checked = on; applies on restart) */
     g_cheats = CreatePopupMenu();   /* Cheats menu: settings that plugins registered with use_menu(TFMOD_MENU_CHEATS) (Cheats mod) */
     const int nm = mods_count();
+    int visible_mods = 0;
+    for (int i = 0; i < nm; i++) if (mods_menu_visible(i)) visible_mods++;
     titulo(g_mods, L"INSTALLED MODS");
-    if (!nm) acao(g_mods, 0, IC_MOD, L"(no mods installed)", L"", true);
-    for (int i = 0; i < nm && i < 90; i++) alterna(g_mods, ID_MOD_FIRST + i, IC_MOD, mods_label(i), mods_detail(i), mods_enabled(i));
+    if (!visible_mods) acao(g_mods, 0, IC_MOD, nm ? L"(texture packs: use in-game Graphics)" : L"(no mods installed)", L"", true);
+    for (int i = 0, shown = 0; i < nm && shown < 90; i++) {
+        if (!mods_menu_visible(i)) continue;
+        alterna(g_mods, ID_MOD_FIRST + i, IC_MOD, mods_label(i), mods_detail(i), mods_enabled(i));
+        shown++;
+    }
     /* plugin settings, each in its own menu: on/off switches (with the in-game key beside them) and sliders (open a window, value beside them) */
     bool tit_mods = false, sep_c = false;
     auto cabeca = [&](HMENU m) { if (m == g_mods && !tit_mods) { titulo(g_mods, L"MOD SETTINGS"); tit_mods = true; } };
@@ -345,7 +344,7 @@ HMENU menu_create(void) {
     g_bar = CreateMenu();
     AppendMenuW(g_bar, MF_POPUP, (UINT_PTR)file, L"&File");
     AppendMenuW(g_bar, MF_POPUP, (UINT_PTR)g_view, L"&View");
-    AppendMenuW(g_bar, MF_POPUP, (UINT_PTR)g_gfxm, L"&Graphics");
+    /* no Graphics menu in the bar: the options live in the game (Graphics item of the main menu, gfx_options.h) */
     AppendMenuW(g_bar, MF_POPUP, (UINT_PTR)g_mods, L"&Mods");
     AppendMenuW(g_bar, MF_POPUP, (UINT_PTR)g_cheats, L"&Cheats");
     AppendMenuW(g_bar, MF_POPUP, (UINT_PTR)help, L"&Help");
@@ -363,7 +362,7 @@ void menu_sync(bool fullscreen, bool fps, int scale) {   /* selection marks (cal
 }
 
 static void show_controls(HWND h) {
-    tf_msgbox(h,
+    tf_msgbox(h, (std::wstring(
         L"PC keyboard and mouse (View menu; on by default)\n"
         L"   W A S D or arrows: D-pad (move / choose)\n"
         L"   Space, E or left click = \x2715 (confirm)\n"
@@ -380,13 +379,11 @@ static void show_controls(HWND h) {
         L"   LB / RB (or triggers) = L / R\n"
         L"   Start = START   Back = SELECT\n"
         L"   D-pad or left analog stick\n\n"
-        L"Window\n"
-        L"   F11 or Alt+Enter: fullscreen\n"
-        L"   F3: show FPS\n"
-        L"   Esc: leave fullscreen / close the game\n\n"
-        L"Report problems (asks for a note; Esc or an empty note discards)\n"
-        L"   F8: something looks wrong on screen (captures + last frames)\n"
-        L"   F7 or L3 + R3: the CPU made a mistake (duel state)",
+        L"Window\n")
+        + hotkey_help_line(VK_F11) + hotkey_help_line(VK_F3) + hotkey_help_line(VK_F5)
+        + std::wstring(L"   Esc: leave fullscreen / close the game\n\n"
+                       L"Report problems (asks for a note; Esc or an empty note discards)\n")
+        + hotkey_help_line(VK_F8) + hotkey_help_line(VK_F7) + hotkey_help_line(VK_F9)).c_str(),
         L"Controls", MB_OK | MB_ICONINFORMATION);
 }
 static void show_about(HWND h) {
@@ -412,17 +409,14 @@ bool menu_command(HWND h, int id) {
     case ID_SCALE1: case ID_SCALE2: case ID_SCALE3: case ID_SCALE4: display_set_scale(id - ID_SCALE1 + 1); return true;
     case ID_FILTER0: case ID_FILTER1: case ID_FILTER2: g_gfx.filter = id - ID_FILTER0; gfx_save(); gfx_menu_sync(); InvalidateRect(h, nullptr, FALSE); return true;
     case ID_ASPECT0: case ID_ASPECT1: case ID_ASPECT2: g_gfx.aspect = id - ID_ASPECT0; gfx_save(); gfx_menu_sync(); InvalidateRect(h, nullptr, TRUE); return true;
-    case ID_RES1: case ID_RES2: case ID_RES3: case ID_RES4: case ID_RES5: case ID_RES6: { static const int resv[6] = {1, 2, 3, 4, 6, 8}; g_gfx.res = resv[id - ID_RES1]; ge_set_res(g_gfx.res); gfx_save(); gfx_menu_sync(); return true; }
+    case ID_RES1: case ID_RES2: case ID_RES3: case ID_RES4: case ID_RES5: case ID_RES6: { static const int resv[6] = {1, 3, 4, 6, 8, 0}; const int v = resv[id - ID_RES1]; g_gfx.res_auto = v == 0; g_gfx.res = v ? v : gfx_res_monitor(); ge_set_res(g_gfx.res); gfx_save(); gfx_menu_sync(); return true; }
     case ID_RENDER_SW: case ID_RENDER_D3D: case ID_RENDER_VK: display_set_renderer(id == ID_RENDER_VK ? GFX_RENDER_VULKAN : id == ID_RENDER_D3D ? GFX_RENDER_D3D11 : GFX_RENDER_SOFTWARE); gfx_menu_sync(); return true;
     case ID_MSAA1: case ID_MSAA2: case ID_MSAA4: case ID_MSAA8: { static const int mv[4] = {1, 2, 4, 8}; g_gfx.msaa = mv[id - ID_MSAA1]; ge_set_msaa(); gfx_save(); gfx_menu_sync(); return true; }
-    case ID_TEXSC1: case ID_TEXSC2: case ID_TEXSC4: { static const int tv[3] = {1, 2, 4}; g_gfx.texscale = tv[id - ID_TEXSC1]; ge_set_texscale(); gfx_save(); gfx_menu_sync(); return true; }
     case ID_MODS_DUMP: texrepl_set_dump(!texrepl_dumping()); CheckMenuItem(g_mods, ID_MODS_DUMP, texrepl_dumping() ? MF_CHECKED : MF_UNCHECKED); return true;
     case ID_SYNC0: case ID_SYNC1: case ID_SYNC2: g_gfx.sync = id - ID_SYNC0; gfx_save(); gfx_menu_sync(); return true;   /* a GPU recria a swapchain no proximo quadro */
-    case ID_FONTHD: g_gfx.hdfont = !g_gfx.hdfont; gfx_save(); gfx_menu_sync(); return true;
-    case ID_FPS30: case ID_FPS60: g_gfx.fps60 = id == ID_FPS60; gfx_save(); gfx_menu_sync(); return true;
+    case ID_FPS30: case ID_FPS60: case ID_FPS120: g_gfx.fps = id - ID_FPS30; gfx_save(); gfx_menu_sync(); return true;
     case ID_PCINPUT: display_set_pc_input(!display_pc_input()); CheckMenuItem(g_view, ID_PCINPUT, display_pc_input() ? MF_CHECKED : MF_UNCHECKED); return true;
     case ID_MOUSEMENU: display_set_mouse_menus(!display_mouse_menus()); CheckMenuItem(g_view, ID_MOUSEMENU, display_mouse_menus() ? MF_CHECKED : MF_UNCHECKED); return true;
-    case ID_INTEGER: g_gfx.integer = !g_gfx.integer; gfx_save(); gfx_menu_sync(); InvalidateRect(h, nullptr, TRUE); return true;
     case ID_CONTROLS: show_controls(h); return true;
     case ID_ABOUT: show_about(h); return true;
     case ID_MODS_FOLDER: mods_open_folder(); return true;

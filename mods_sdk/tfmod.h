@@ -72,8 +72,8 @@ typedef struct TfModApi {
 
     /* ---- version 4 ---- */
     /* On/off switch: a checkmark item in the Mods menu and, optionally, a key during play (Windows virtual-key code, e.g. 0x75 = F6;
-     * 0 = no key; F3/F7/F8/F9/F10/F11, Esc, Enter and the keys of the PSP buttons - arrows, Z X A S Q W, Shift - belong to the game
-     * and exist only in the menu). get() reads the state; set(new) is called on the game thread when the player toggles it (menu or
+     * 0 = no key; F3/F5/F7/F8/F9/F10/F11, Esc, Enter and the keys of the PSP buttons in both keyboard layouts - arrows, W A S D,
+     * Z X C E F R Q, Space, Backspace, Tab, Shift, Ctrl - belong to the game and exist only in the menu). get() reads the state; set(new) is called on the game thread when the player toggles it (menu or
      * key). Register in tfmod_init; storing the state in a file is up to the plugin (mod_dir). */
     void (*add_toggle)(const wchar_t *title, int vk, int (*get)(void), void (*set)(int));
     /* Information panel over the game (translucent; it neither pauses nor blocks anything). Call it every frame in which it should be

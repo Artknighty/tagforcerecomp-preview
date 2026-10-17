@@ -1,60 +1,157 @@
-/* Janela inicial. Tres estados:
- *  - jogo ainda nao instalado: escolhe a ISO e "Instalar e jogar" extrai tudo para a pasta jogo/ (uma unica vez, com barra de progresso);
- *    "Jogar direto da ISO" continua existindo (sem instalar);
- *  - instalando: barra de progresso;
- *  - jogo instalado: so "Jogar" (a ISO nao e mais necessaria); "Reinstalar da ISO..." refaz a pasta.
- * A ultima ISO escolhida fica em tagforce_recomp.ini (ao lado do .exe). Tema escuro, botoes desenhados aqui e DPI proprio desta janela. */
+/* Janela inicial (layout com barra lateral, no estilo dos lancadores de port para PC): sidebar a esquerda com as paginas
+ * (Play, Graphics, Game, About) e Quit; conteudo a direita; barra inferior fixa com o status e os botoes Stop/PLAY.
+ *  - Play: faixa de titulo, "Ready check" e as 3 opcoes principais;
+ *  - Graphics: todas as opcoes de graficos (mesmas chaves do tagforce_recomp.ini que o jogo le);
+ *  - Game: ISO / instalacao. O jogo ainda nao instalado: "Instalar e jogar" extrai tudo para a pasta jogo/ (uma unica vez, com progresso);
+ *    "Jogar direto da ISO" continua existindo (sem instalar); instalado: so "Play" ("Reinstalar da ISO..." refaz a pasta);
+ *  - About: creditos e atalhos para as pastas de logs e saves.
+ * Play abre o jogo como processo filho (run.exe --dados / --iso) e o lancador continua aberto (Stop encerra o jogo).
+ * A ultima ISO escolhida fica em tagforce_recomp.ini (ao lado do .exe). Tema escuro, tudo desenhado aqui, DPI proprio desta janela. */
 #include <windows.h>
 #include <commdlg.h>
 #include <dwmapi.h>
+#include <shellapi.h>
 #include <string>
 #include <thread>
 #include <mutex>
 #include <atomic>
+#include <vector>
+#include <algorithm>
 #include "dark_ui.h"
 #include "util.h"
 #include "gameid.h"
 #include "menu.h"
 #include "hle.h"
+#include "imgio.h"
 
 typedef void (*InstProgress)(double frac, const wchar_t *msg, void *ctx);
 bool iso_install(const wchar_t *iso, const wchar_t *dest, InstProgress cb, void *ctx, std::wstring *err);
 
-enum { ID_PICK = 101, ID_PLAY = 102, ID_QUIT = 103, ID_DIRECT = 104, TIMER_UI = 1 };
-static HWND g_wnd, g_bpick, g_play, g_bquit, g_bdirect;
+enum { ID_PICK = 101, ID_PLAY = 102, ID_QUIT = 103, ID_DIRECT = 104, ID_STOP = 105, ID_LOGS = 106, ID_SAVES = 107, ID_OPT0 = 200, ID_QOPT0 = 300, TIMER_UI = 1 };
+enum { PG_PLAY, PG_GRAPHICS, PG_GAME, PG_ABOUT, N_PAGES };
+enum { NAV_QUIT = N_PAGES };   /* item extra da sidebar (nao e pagina) */
+static const wchar_t *kNavName[N_PAGES] = {L"Play", L"Graphics", L"Game", L"About"};
+static HWND g_wnd, g_bpick, g_play, g_bdirect, g_bstop, g_blogs, g_bsaves;
+static HANDLE g_proc;                       /* jogo em andamento (processo filho); a janela continua aberta */
+static int g_page = PG_PLAY, g_navhot = -1;
+
+/* Opcoes de graficos: mesmas chaves e valores do tagforce_recomp.ini que o jogo le (gfx.cpp / gfx_options.h) */
+struct LOpt { const wchar_t *label, *hint, *key; int count; const wchar_t *names[6]; const int *values; int def; };
+static const int kResV[6] = {1, 3, 4, 6, 8, 0}, kMsaaV[4] = {1, 2, 4, 8};   /* resolucao: fator interno, 0 = a do monitor (gfx.h) */
+static const LOpt kOpts[] = {
+    {L"Renderer", L"Software uses the CPU. Direct3D 11 and Vulkan use the GPU.", L"renderizador", 3, {L"Software", L"Direct3D 11", L"Vulkan"}, nullptr, 1},
+    {L"Resolution", L"Screen resolution, as in any PC game. 2560x1440 and 3840x2160 need the GPU.", L"resolucao", 6, {L"480 x 272 (PSP)", L"1280 x 720", L"1920 x 1080", L"2560 x 1440", L"3840 x 2160", L"Match monitor"}, kResV, 0},
+    {L"Anti-aliasing (MSAA)", L"Smooths jagged edges (GPU only).", L"msaa", 4, {L"Off", L"2x", L"4x", L"8x"}, kMsaaV, 1},
+    {L"Textures", L"Original is the plain PSP look. Enhanced is the remastered package: textures, menus and text in high resolution.", nullptr, 2, {L"Original", L"Enhanced"}, nullptr, 1},
+    {L"Frame rate", L"60 and 120 FPS are interpolated from the original 30 (GPU). 120 needs a 120 Hz monitor.", L"fps60", 3, {L"30 FPS", L"60 FPS", L"120 FPS"}, nullptr, 1},
+    {L"Synchronization", L"Default avoids tearing. VSync waits for the monitor.", L"sincronizacao", 3, {L"Default", L"VSync", L"Lowest latency"}, nullptr, 0},
+    {L"Filter", L"How the 480 x 272 image is scaled to the window.", L"filtro", 3, {L"Sharp pixels", L"Smoothed", L"Bilinear"}, nullptr, 1},
+    {L"Aspect ratio", L"Proportion of the image: original 16:9, stretched or 4:3.", L"proporcao", 3, {L"16:9", L"Stretch", L"4:3"}, nullptr, 0},
+};
+static const int N_OPT = (int)(sizeof kOpts / sizeof kOpts[0]);
+static const int kQuick[3] = {0, 1, 4};     /* opcoes repetidas na pagina Play: renderer, resolucao, FPS */
+static HWND g_sel[N_OPT], g_qsel[3]; static int g_cur[N_OPT];
 static std::wstring g_path;                 /* ISO escolhida */
 static std::wstring g_data;                 /* pasta jogo/ */
 static bool g_installed;                    /* jogo/ pronta */
-static bool g_go, g_direct;                 /* sair para jogar; direto da ISO */
+static std::vector<uint32_t> g_thumbnail; static int g_thumbnail_w, g_thumbnail_h;
 static int g_dpi = 96;
-static HFONT g_fTitle, g_fSub, g_fText, g_fSmall, g_fBtn;
+static HFONT g_fHero, g_fHead, g_fTitle, g_fSub, g_fText, g_fSmall, g_fBtn, g_fPlay;
 /* instalacao em segundo plano */
 static std::thread g_thr; static std::atomic<bool> g_installing{false}, g_inst_done{false}, g_inst_ok{false};
 static std::atomic<int> g_prog{0}; static std::mutex g_mu; static std::wstring g_msg, g_err;
 
 static const COLORREF C_BG = dark::BG, C_CARD = dark::CARD, C_LINE = dark::LINE, C_TXT = dark::TXT, C_DIM = dark::DIM,   /* paleta comum (dark_ui.h) */
                       C_OK = RGB(98, 200, 130), C_WARN = RGB(240, 190, 90), C_ERR = RGB(240, 110, 110), C_BTN = dark::BTN, C_BTN_HOT = dark::BTN_HOT,
-                      C_ACC = dark::ACC, C_ACC_HOT = dark::ACC_HOT, C_OFF = dark::OFF, C_BAR = dark::LINE;
+                      C_ACC = dark::ACC, C_ACC_HOT = dark::ACC_HOT, C_OFF = dark::OFF, C_BAR = dark::LINE, C_SIDE = dark::BAR, C_NAVHOT = RGB(22, 28, 48);
 static int S(int v) { return MulDiv(v, g_dpi, 96); }
+/* medidas em 96 dpi */
+static const int W96 = 1040, H96 = 700, SIDE96 = 220, BAR96 = 72;
 
 static std::wstring ini_path() { return app_ini_path(); }
 static bool file_exists(const std::wstring &p) { DWORD a = GetFileAttributesW(p.c_str()); return a != INVALID_FILE_ATTRIBUTES && !(a & FILE_ATTRIBUTE_DIRECTORY); }
+static bool dir_exists(const std::wstring &p) { DWORD a = GetFileAttributesW(p.c_str()); return a != INVALID_FILE_ATTRIBUTES && (a & FILE_ATTRIBUTE_DIRECTORY); }
 static bool iso_ok() { return !g_path.empty() && file_exists(g_path); }
 static void update_data_dir() {   /* a pasta de dados depende da versao do jogo da ISO escolhida (gameid.cpp) */
     std::string id = iso_ok() ? game_id_iso(g_path) : ""; g_data = exe_dir() + game_data_dir_name(id.empty() ? game_id_built() : id);
 }
 static bool check_installed() { g_installed = file_exists(g_data + L"\\_disco.tsv"); return g_installed; }
-static void refresh() {
-    bool busy = g_installing;
-    EnableWindow(g_play, !busy && (g_installed || iso_ok())); EnableWindow(g_bpick, !busy); EnableWindow(g_bdirect, !busy && !g_installed && iso_ok());
-    ShowWindow(g_bdirect, g_installed || jit_generic() ? SW_HIDE : SW_SHOW);
-    SetWindowTextW(g_play, g_installed ? L"Play" : L"Install and play"); SetWindowTextW(g_bpick, g_installed ? L"Reinstall from ISO..." : L"Select ISO...");
-    InvalidateRect(g_wnd, nullptr, FALSE); for (HWND b : {g_bpick, g_play, g_bquit, g_bdirect}) InvalidateRect(b, nullptr, FALSE);
+
+static bool game_running() {
+    if (g_proc && WaitForSingleObject(g_proc, 0) != WAIT_TIMEOUT) { CloseHandle(g_proc); g_proc = nullptr; }
+    return g_proc != nullptr;
 }
+/* Textures: nao e chave do .ini, e o mod EnhancedTextures ligado/desligado (arquivo "disabled" na pasta do mod, como o jogo faz) */
+static std::wstring pack_marker(const wchar_t *mod) { return exe_dir() + L"mods/" + mod + L"/disabled"; }
+static void pack_set(bool enhanced) {
+    const std::wstring on = pack_marker(L"EnhancedTextures"), old = pack_marker(L"TexturasPC");
+    if (enhanced) DeleteFileW(on.c_str()); else if (dir_exists(exe_dir() + L"mods/EnhancedTextures")) { if (HANDLE h = CreateFileW(on.c_str(), GENERIC_WRITE, 0, nullptr, CREATE_ALWAYS, FILE_ATTRIBUTE_NORMAL, nullptr)) CloseHandle(h); }
+    if (enhanced && dir_exists(exe_dir() + L"mods/TexturasPC")) { if (HANDLE h = CreateFileW(old.c_str(), GENERIC_WRITE, 0, nullptr, CREATE_ALWAYS, FILE_ATTRIBUTE_NORMAL, nullptr)) CloseHandle(h); }   /* um pacote so (os dois carregariam cada textura duas vezes) */
+}
+static void opt_load() {
+    for (int i = 0; i < N_OPT; i++) {
+        const LOpt &o = kOpts[i];
+        if (!o.key) { g_cur[i] = dir_exists(exe_dir() + L"mods/EnhancedTextures") && !file_exists(pack_marker(L"EnhancedTextures")) ? 1 : 0; continue; }
+        int v = (int)GetPrivateProfileIntW(L"graficos", o.key, -9999, ini_path().c_str()), c = -1;
+        for (int k = 0; k < o.count; k++) if ((o.values ? o.values[k] : k) == v) c = k;
+        if (c < 0) for (int k = 0; k < o.count; k++) if ((o.values ? o.values[k] : k) == o.def) c = k;
+        g_cur[i] = c < 0 ? 0 : c;
+    }
+}
+static void opt_step(int i, int dir) {
+    const LOpt &o = kOpts[i]; g_cur[i] = (g_cur[i] + dir + o.count) % o.count;
+    if (!o.key) pack_set(g_cur[i] == 1);
+    else { wchar_t b[16]; swprintf(b, 16, L"%d", o.values ? o.values[g_cur[i]] : g_cur[i]); WritePrivateProfileStringW(L"graficos", o.key, b, ini_path().c_str()); }
+    SetWindowTextW(g_sel[i], o.names[g_cur[i]]); InvalidateRect(g_sel[i], nullptr, FALSE);
+    for (int k = 0; k < 3; k++) if (kQuick[k] == i) { SetWindowTextW(g_qsel[k], o.names[g_cur[i]]); InvalidateRect(g_qsel[k], nullptr, FALSE); }
+    InvalidateRect(g_wnd, nullptr, FALSE);   /* "Ready check" mostra o renderizador */
+}
+static void launch_game(bool direct) {
+    wchar_t exe[MAX_PATH]; GetModuleFileNameW(nullptr, exe, MAX_PATH);
+    std::wstring cmd = L"\"" + std::wstring(exe) + L"\" " + (direct ? L"--iso \"" + g_path + L"\"" : L"--dados \"" + g_data + L"\"");
+    STARTUPINFOW si = {sizeof si}; PROCESS_INFORMATION pi;
+    if (!CreateProcessW(nullptr, &cmd[0], nullptr, nullptr, FALSE, 0, nullptr, exe_dir().c_str(), &si, &pi)) { tf_msgbox(g_wnd, L"Could not start the game.", L"Tag Force Recomp", MB_ICONERROR); return; }
+    CloseHandle(pi.hThread); g_proc = pi.hProcess;
+}
+/* Stop: pede o fechamento pela janela do jogo (WM_CLOSE -> o jogo grava o resumo [perf], a lista de texturas recentes e o fim do log); so mata se nao fechar em 4 s */
+static BOOL CALLBACK close_game_window(HWND h, LPARAM lp) {
+    DWORD pid = 0; GetWindowThreadProcessId(h, &pid); wchar_t cls[32] = L"";
+    if (pid == (DWORD)lp && GetClassNameW(h, cls, 32) && !wcscmp(cls, L"TagForceRecomp")) PostMessageW(h, WM_CLOSE, 0, 0);
+    return TRUE;
+}
+static void stop_game() {
+    if (!g_proc) return;
+    EnumWindows(close_game_window, (LPARAM)GetProcessId(g_proc));
+    if (WaitForSingleObject(g_proc, 4000) == WAIT_TIMEOUT) TerminateProcess(g_proc, 0);
+}
+static bool is_sel(int id) { return (id >= ID_OPT0 && id < ID_OPT0 + N_OPT) || (id >= ID_QOPT0 && id < ID_QOPT0 + 3); }
+static int sel_option(int id) { return id >= ID_QOPT0 ? kQuick[id - ID_QOPT0] : id - ID_OPT0; }
+
+/* quais controles aparecem em cada pagina */
+static void apply_page() {
+    bool run = game_running(), busy = g_installing;
+    for (int i = 0; i < N_OPT; i++) ShowWindow(g_sel[i], g_page == PG_GRAPHICS ? SW_SHOW : SW_HIDE);
+    for (int k = 0; k < 3; k++) ShowWindow(g_qsel[k], g_page == PG_PLAY ? SW_SHOW : SW_HIDE);
+    ShowWindow(g_bpick, g_page == PG_GAME ? SW_SHOW : SW_HIDE);
+    ShowWindow(g_bdirect, g_page == PG_GAME && !g_installed && !jit_generic() ? SW_SHOW : SW_HIDE);
+    ShowWindow(g_blogs, g_page == PG_ABOUT ? SW_SHOW : SW_HIDE); ShowWindow(g_bsaves, g_page == PG_ABOUT ? SW_SHOW : SW_HIDE);
+    EnableWindow(g_bdirect, !busy && !run && !g_installed && iso_ok());
+}
+static void refresh() {
+    bool busy = g_installing, run = game_running();
+    EnableWindow(g_play, !busy && !run && (g_installed || iso_ok())); EnableWindow(g_bpick, !busy && !run);
+    EnableWindow(g_bstop, run); for (int i = 0; i < N_OPT; i++) EnableWindow(g_sel[i], !run); for (int k = 0; k < 3; k++) EnableWindow(g_qsel[k], !run);
+    SetWindowTextW(g_play, run ? L"PLAYING..." : g_installed ? L"PLAY" : L"INSTALL AND PLAY"); SetWindowTextW(g_bpick, g_installed ? L"Reinstall from ISO..." : L"Select ISO...");
+    apply_page();
+    InvalidateRect(g_wnd, nullptr, FALSE);
+    for (HWND b : {g_bpick, g_play, g_bdirect, g_bstop, g_blogs, g_bsaves}) InvalidateRect(b, nullptr, FALSE);
+    for (int i = 0; i < N_OPT; i++) InvalidateRect(g_sel[i], nullptr, FALSE); for (int k = 0; k < 3; k++) InvalidateRect(g_qsel[k], nullptr, FALSE);
+}
+static void show_page(int p) { if (p == g_page) return; g_page = p; refresh(); }
 static bool pick(HWND owner) {
     wchar_t buf[1024] = L"";
     OPENFILENAMEW of = {}; of.lStructSize = sizeof of; of.hwndOwner = owner;
-    of.lpstrFilter = L"Imagem de UMD (*.iso)\0*.iso\0Todos os arquivos\0*.*\0";
+    of.lpstrFilter = L"UMD image (*.iso)\0*.iso\0All files\0*.*\0";
     of.lpstrFile = buf; of.nMaxFile = 1024; of.lpstrTitle = L"Select the Yu-Gi-Oh! GX Tag Force ISO";
     of.Flags = OFN_FILEMUSTEXIST | OFN_PATHMUSTEXIST | OFN_HIDEREADONLY | OFN_NOCHANGEDIR;   /* nao mudar a pasta atual (ms0/) */
     if (!GetOpenFileNameW(&of)) return false;
@@ -85,23 +182,35 @@ static bool is_hot(HWND b) {
     POINT pt; GetCursorPos(&pt); RECT wr; GetWindowRect(b, &wr);
     return PtInRect(&wr, pt) && WindowFromPoint(pt) == b;
 }
+static void text(HDC dc, HFONT f, COLORREF c, RECT r, const wchar_t *t, UINT fl = DT_LEFT | DT_SINGLELINE | DT_VCENTER) {
+    HGDIOBJ o = SelectObject(dc, f); SetTextColor(dc, c); DrawTextW(dc, t, -1, &r, fl); SelectObject(dc, o);
+}
+static void focus_ring(HDC dc, RECT r) {
+    RECT f = r; InflateRect(&f, -S(3), -S(3)); HPEN p = CreatePen(PS_DOT, 1, RGB(200, 200, 210)); HGDIOBJ op = SelectObject(dc, p), ob = SelectObject(dc, GetStockObject(NULL_BRUSH));
+    RoundRect(dc, f.left, f.top, f.right, f.bottom, S(6), S(6)); SelectObject(dc, op); SelectObject(dc, ob); DeleteObject(p);
+}
 static void draw_button_dc(const DRAWITEMSTRUCT *d, HDC dc) {
-    RECT r = d->rcItem; bool primary = d->CtlID == ID_PLAY, flat = d->CtlID == ID_DIRECT, off = (d->itemState & ODS_DISABLED) != 0, down = (d->itemState & ODS_SELECTED) != 0;
+    RECT r = d->rcItem; const int id = (int)d->CtlID; bool primary = id == ID_PLAY, off = (d->itemState & ODS_DISABLED) != 0, down = (d->itemState & ODS_SELECTED) != 0;
     bool hot = !off && is_hot(d->hwndItem);
-    static HBRUSH bgb = CreateSolidBrush(C_BG); FillRect(dc, &r, bgb);
+    bool onbar = id == ID_PLAY || id == ID_STOP;   /* estes ficam sobre a barra inferior */
+    HBRUSH bgb = CreateSolidBrush(onbar ? C_SIDE : C_BG); FillRect(dc, &r, bgb); DeleteObject(bgb);
     wchar_t t[64]; GetWindowTextW(d->hwndItem, t, 64);
     SetBkMode(dc, TRANSPARENT);
-    if (flat) {   /* texto sublinhado, sem caixa */
-        SetTextColor(dc, off ? RGB(100, 100, 108) : hot ? C_TXT : C_DIM);
-        HFONT u = CreateFontW(-S(12), 0, 0, 0, FW_NORMAL, 0, 1, 0, DEFAULT_CHARSET, 0, 0, CLEARTYPE_QUALITY, 0, L"Segoe UI"); HGDIOBJ of = SelectObject(dc, u);
-        DrawTextW(dc, t, -1, &r, DT_RIGHT | DT_VCENTER | DT_SINGLELINE); SelectObject(dc, of); DeleteObject(u); return;
+    if (is_sel(id)) {   /* seletor: < valor >  (clique na ponta esquerda volta, no resto avanca) */
+        round_fill(dc, r, off ? C_OFF : hot ? C_BTN_HOT : C_BTN, off ? C_OFF : hot ? RGB(78, 92, 140) : C_LINE, S(8));
+        POINT pt; GetCursorPos(&pt); ScreenToClient(d->hwndItem, &pt);
+        bool lh = hot && pt.x < (r.right - r.left) / 3, rh = hot && !lh;
+        RECT tr = r; tr.left += S(30); tr.right -= S(30); text(dc, g_fBtn, off ? dark::OFF_TXT : C_TXT, tr, t, DT_CENTER | DT_VCENTER | DT_SINGLELINE | DT_END_ELLIPSIS);
+        RECT lr = r; lr.right = lr.left + S(30); text(dc, g_fBtn, off ? dark::OFF_TXT : lh ? C_ACC_HOT : C_ACC, lr, L"\x2039", DT_CENTER | DT_VCENTER | DT_SINGLELINE);
+        RECT rr = r; rr.left = rr.right - S(30); text(dc, g_fBtn, off ? dark::OFF_TXT : rh ? C_ACC_HOT : C_ACC, rr, L"\x203A", DT_CENTER | DT_VCENTER | DT_SINGLELINE);
+        if (d->itemState & ODS_FOCUS) focus_ring(dc, r);
+        return;
     }
     COLORREF bg = off ? C_OFF : primary ? (hot || down ? C_ACC_HOT : C_ACC) : (hot || down ? C_BTN_HOT : C_BTN);
     round_fill(dc, r, bg, (off || primary) ? bg : (hot ? RGB(78, 92, 140) : C_LINE), S(8));
-    SetTextColor(dc, off ? dark::OFF_TXT : primary ? dark::ACC_TXT : C_TXT);
-    HGDIOBJ of = SelectObject(dc, g_fBtn); RECT tr = r; if (down) OffsetRect(&tr, 0, 1);
-    DrawTextW(dc, t, -1, &tr, DT_CENTER | DT_VCENTER | DT_SINGLELINE); SelectObject(dc, of);
-    if (d->itemState & ODS_FOCUS) { RECT f = r; InflateRect(&f, -S(3), -S(3)); HPEN p = CreatePen(PS_DOT, 1, RGB(200, 200, 210)); HGDIOBJ op = SelectObject(dc, p), ob = SelectObject(dc, GetStockObject(NULL_BRUSH)); RoundRect(dc, f.left, f.top, f.right, f.bottom, S(6), S(6)); SelectObject(dc, op); SelectObject(dc, ob); DeleteObject(p); }
+    RECT tr = r; if (down) OffsetRect(&tr, 0, 1);
+    text(dc, primary ? g_fPlay : g_fBtn, off ? dark::OFF_TXT : primary ? dark::ACC_TXT : C_TXT, tr, t, DT_CENTER | DT_VCENTER | DT_SINGLELINE);
+    if (d->itemState & ODS_FOCUS) focus_ring(dc, r);
 }
 static void draw_button(const DRAWITEMSTRUCT *d) {   /* compoe num bitmap e copia de uma vez: sem piscar */
     int w = d->rcItem.right - d->rcItem.left, h = d->rcItem.bottom - d->rcItem.top; if (w <= 0 || h <= 0) return;
@@ -111,56 +220,184 @@ static void draw_button(const DRAWITEMSTRUCT *d) {   /* compoe num bitmap e copi
     BitBlt(d->hDC, d->rcItem.left, d->rcItem.top, w, h, mdc, 0, 0, SRCCOPY);
     SelectObject(mdc, obm); DeleteObject(bm); DeleteDC(mdc);
 }
+
+/* ---- geometria (px reais) ---- */
+static int nav_y(int i) { return S(124) + i * S(46); }
+static int nav_at(int x, int y) {
+    if (x < 0 || x >= S(SIDE96)) return -1;
+    for (int i = 0; i < N_PAGES; i++) if (y >= nav_y(i) && y < nav_y(i) + S(46)) return i;
+    RECT cr; GetClientRect(g_wnd, &cr); int qy = cr.bottom - S(BAR96);
+    if (y >= qy && y < cr.bottom) return NAV_QUIT;   /* Quit ocupa a altura da barra inferior, na sidebar */
+    return -1;
+}
+static void draw_progress(HDC dc, RECT bar) {
+    round_fill(dc, bar, C_BAR, C_BAR, S(8));
+    RECT fill = bar; fill.right = bar.left + MulDiv(bar.right - bar.left, g_prog, 1000); if (fill.right > bar.left + S(8)) round_fill(dc, fill, C_ACC, C_ACC, S(8));
+}
+static void section_label(HDC dc, int x, int y, int w, const wchar_t *t) { text(dc, g_fSmall, C_ACC, RECT{x, y, x + w, y + S(18)}, t); }
+static void check_line(HDC dc, int x, int y, int w, COLORREF c, const wchar_t *mark, const std::wstring &t) {
+    text(dc, g_fText, c, RECT{x, y, x + S(22), y + S(24)}, mark);
+    text(dc, g_fText, C_TXT, RECT{x + S(24), y, x + w, y + S(24)}, t.c_str(), DT_LEFT | DT_SINGLELINE | DT_VCENTER | DT_PATH_ELLIPSIS);
+}
+static std::wstring gpu_name() {
+    DISPLAY_DEVICEW dd = {sizeof dd}; if (EnumDisplayDevicesW(nullptr, 0, &dd, 0) && dd.DeviceString[0]) return dd.DeviceString; return L"Unknown";
+}
+static void load_thumbnail() {
+    g_thumbnail.clear(); g_thumbnail_w = g_thumbnail_h = 0;
+    std::wstring path = exe_dir() + L"yugioh.png";
+    if (!img_load(to_utf8(path).c_str(), &g_thumbnail_w, &g_thumbnail_h, g_thumbnail)) { g_thumbnail_w = g_thumbnail_h = 0; return; }
+    /* WIC devolve 0xAABBGGRR; StretchDIBits com BI_RGB espera 0xAARRGGBB. Escurece para servir de fundo ao titulo. */
+    for (uint32_t &p : g_thumbnail) {
+        uint32_t bgra = (p & 0xff00ff00u) | ((p & 0xffu) << 16) | ((p >> 16) & 0xffu);
+        uint32_t r = ((bgra >> 16) & 0xffu) * 48 / 100, g = ((bgra >> 8) & 0xffu) * 48 / 100, b = (bgra & 0xffu) * 48 / 100;
+        p = (bgra & 0xff000000u) | (r << 16) | (g << 8) | b;
+    }
+}
+static void draw_thumbnail(HDC dc, RECT r) {
+    if (g_thumbnail.empty() || !g_thumbnail_w || !g_thumbnail_h) return;
+
+    const int dw = r.right - r.left, dh = r.bottom - r.top;
+    int sx = 0, sy = 0, sw = g_thumbnail_w, sh = g_thumbnail_h;
+    if ((long long)sw * dh > (long long)sh * dw) { sw = (int)((long long)sh * dw / dh); sx = (g_thumbnail_w - sw) / 2; }
+    else { sh = (int)((long long)sw * dh / dw); sy = (g_thumbnail_h - sh) / 4; }   /* mantem o enquadramento que preserva a logo */
+
+    BITMAPINFO bi = {};
+    bi.bmiHeader.biSize = sizeof(BITMAPINFOHEADER); bi.bmiHeader.biWidth = g_thumbnail_w; bi.bmiHeader.biHeight = -g_thumbnail_h;
+    bi.bmiHeader.biPlanes = 1; bi.bmiHeader.biBitCount = 32; bi.bmiHeader.biCompression = BI_RGB;
+    int saved = SaveDC(dc); SetStretchBltMode(dc, HALFTONE); SetBrushOrgEx(dc, 0, 0, nullptr);
+    StretchDIBits(dc, r.left, r.top, dw, dh, sx, sy, sw, sh, g_thumbnail.data(), &bi, DIB_RGB_COLORS, SRCCOPY);
+    RestoreDC(dc, saved);
+}
+
 static void paint(HWND h) {
     PAINTSTRUCT ps; HDC wdc = BeginPaint(h, &ps); RECT cr; GetClientRect(h, &cr);
     HDC dc = CreateCompatibleDC(wdc); HBITMAP bm = CreateCompatibleBitmap(wdc, cr.right, cr.bottom); HGDIOBJ obm = SelectObject(dc, bm);   /* sem tremulo */
     HBRUSH bg = CreateSolidBrush(C_BG); FillRect(dc, &cr, bg); DeleteObject(bg);
     SetBkMode(dc, TRANSPARENT);
-    int m = S(28);
-    HGDIOBJ of = SelectObject(dc, g_fTitle); SetTextColor(dc, C_TXT);
-    RECT t = {m, S(22), cr.right - m, S(58)}; DrawTextW(dc, L"Yu-Gi-Oh! GX Tag Force", -1, &t, DT_LEFT | DT_SINGLELINE | DT_VCENTER);
-    dark::accent_line(dc, 0, cr.right, 0, S(2));
-    SelectObject(dc, g_fSub); SetTextColor(dc, C_DIM);
-    RECT s = {m, S(58), cr.right - m, S(80)}; DrawTextW(dc, L"PC recompilation \x2014 installation uses your own copy of the game", -1, &s, DT_LEFT | DT_SINGLELINE | DT_VCENTER);
-    RECT card = {m, S(100), cr.right - m, S(194)}; round_fill(dc, card, C_CARD, C_LINE, S(10));
-    int cx = card.left + S(16), cw = card.right - S(16);
-    SelectObject(dc, g_fSmall); SetTextColor(dc, C_DIM);
-    bool busy = g_installing; std::wstring msg, err; { std::lock_guard<std::mutex> lk(g_mu); msg = g_msg; err = g_err; }
-    RECT l = {cx, card.top + S(10), cw, card.top + S(28)};
-    DrawTextW(dc, busy ? L"INSTALLING" : g_installed ? L"GAME INSTALLED" : L"GAME IMAGE (ISO)", -1, &l, DT_LEFT | DT_SINGLELINE | DT_VCENTER);
-    SelectObject(dc, g_fText); SetTextColor(dc, C_TXT);
-    if (busy) {   /* barra de progresso */
-        RECT nm = {cx, card.top + S(30), cw, card.top + S(52)}; SelectObject(dc, g_fSmall); SetTextColor(dc, C_DIM); DrawTextW(dc, msg.c_str(), -1, &nm, DT_LEFT | DT_SINGLELINE | DT_VCENTER | DT_PATH_ELLIPSIS);
-        RECT bar = {cx, card.top + S(58), cw, card.top + S(70)}; round_fill(dc, bar, C_BAR, C_BAR, S(8));
-        RECT fill = bar; fill.right = bar.left + MulDiv(bar.right - bar.left, g_prog, 1000); if (fill.right > bar.left + S(8)) round_fill(dc, fill, C_ACC, C_ACC, S(8));
-        wchar_t pc[32]; swprintf(pc, 32, L"%d%%  \x2014  this only happens once", g_prog / 10); RECT pr = {cx, card.top + S(72), cw, card.bottom - S(4)}; SelectObject(dc, g_fSmall); DrawTextW(dc, pc, -1, &pr, DT_LEFT | DT_SINGLELINE | DT_VCENTER);
-    } else {
-        std::wstring txt = g_installed ? g_data : g_path.empty() ? L"No ISO selected" : g_path;
-        SetTextColor(dc, (g_installed || iso_ok()) ? C_TXT : C_WARN);
-        RECT p = {cx, card.top + S(30), cw, card.top + S(56)}; DrawTextW(dc, txt.c_str(), -1, &p, DT_LEFT | DT_SINGLELINE | DT_VCENTER | DT_PATH_ELLIPSIS);
-        SelectObject(dc, g_fSmall);
-        RECT w = {cx, card.top + S(54), cw, card.bottom - S(4)};
-        if (!err.empty()) { SetTextColor(dc, C_ERR); DrawTextW(dc, err.c_str(), -1, &w, DT_LEFT | DT_WORDBREAK); }
-        else if (g_installed) { SetTextColor(dc, C_OK); DrawTextW(dc, L"\x2713 Ready to play \x2014 the ISO is no longer needed", -1, &w, DT_LEFT | DT_SINGLELINE | DT_VCENTER); }
-        else if (!g_path.empty() && !iso_ok()) { SetTextColor(dc, C_WARN); DrawTextW(dc, L"File not found \x2014 choose the ISO again.", -1, &w, DT_LEFT | DT_SINGLELINE | DT_VCENTER); }
-        else if (iso_ok()) { SetTextColor(dc, C_DIM); DrawTextW(dc, jit_generic() ? L"First run: copies the game files (about 760 MB) and prepares the game. A few minutes, only once." : L"Installation copies the game files to the jogo/ folder (about 760 MB).", -1, &w, DT_LEFT | DT_SINGLELINE | DT_VCENTER); }
+    const int SW = S(SIDE96), BH = S(BAR96), cx = SW + S(28), cw = cr.right - S(28) - cx;
+    bool busy = g_installing, run = game_running(); std::wstring msg, err; { std::lock_guard<std::mutex> lk(g_mu); msg = g_msg; err = g_err; }
+
+    /* sidebar */
+    { RECT sb = {0, 0, SW, cr.bottom}; HBRUSH b = CreateSolidBrush(C_SIDE); FillRect(dc, &sb, b); DeleteObject(b);
+      RECT ln = {SW - 1, 0, SW, cr.bottom}; b = CreateSolidBrush(C_LINE); FillRect(dc, &ln, b); DeleteObject(b); }
+    text(dc, g_fSub, C_TXT, RECT{S(24), S(26), SW - S(12), S(46)}, L"Yu-Gi-Oh! GX");
+    text(dc, g_fHead, C_ACC, RECT{S(24), S(44), SW - S(12), S(76)}, L"TAG FORCE");
+    text(dc, g_fSmall, C_DIM, RECT{S(24), S(78), SW - S(12), S(96)}, L"PC recompilation");
+    for (int i = 0; i <= N_PAGES; i++) {
+        bool quit = i == NAV_QUIT, act = !quit && i == g_page, hot = i == g_navhot;
+        RECT it = quit ? RECT{0, cr.bottom - BH, SW - 1, cr.bottom} : RECT{0, nav_y(i), SW - 1, nav_y(i) + S(46)};
+        if (quit) { RECT ln = {0, it.top, SW - 1, it.top + 1}; HBRUSH b = CreateSolidBrush(C_LINE); FillRect(dc, &ln, b); DeleteObject(b); }
+        if (act || hot) { HBRUSH b = CreateSolidBrush(act ? C_BG : C_NAVHOT); FillRect(dc, &it, b); DeleteObject(b); }
+        if (act) { RECT bar = {0, it.top, S(3), it.bottom}; HBRUSH b = CreateSolidBrush(C_ACC); FillRect(dc, &bar, b); DeleteObject(b); }
+        RECT tr = it; tr.left += S(28);
+        text(dc, g_fText, act ? C_ACC : hot ? C_TXT : quit ? C_DIM : C_TXT, tr, quit ? L"Quit" : kNavName[i]);
     }
-    SelectObject(dc, of);
+
+    /* barra inferior: status a esquerda, Stop/PLAY a direita */
+    { RECT bar = {SW, cr.bottom - BH, cr.right, cr.bottom}; HBRUSH b = CreateSolidBrush(C_SIDE); FillRect(dc, &bar, b); DeleteObject(b);
+      RECT ln = {SW, bar.top, cr.right, bar.top + 1}; b = CreateSolidBrush(C_LINE); FillRect(dc, &ln, b); DeleteObject(b);
+      RECT st = {cx, bar.top + S(10), cr.right - S(28) - S(310), cr.bottom - S(10)};
+      if (busy) {
+          wchar_t pc[32]; swprintf(pc, 32, L"%d%%", g_prog / 10);
+          text(dc, g_fSmall, C_DIM, RECT{st.left, st.top, st.right - S(46), st.top + S(24)}, msg.c_str(), DT_LEFT | DT_SINGLELINE | DT_VCENTER | DT_PATH_ELLIPSIS);
+          text(dc, g_fSmall, C_TXT, RECT{st.right - S(44), st.top, st.right, st.top + S(24)}, pc, DT_RIGHT | DT_SINGLELINE | DT_VCENTER);
+          draw_progress(dc, RECT{st.left, st.top + S(28), st.right, st.top + S(38)});
+      } else if (!err.empty()) text(dc, g_fSmall, C_ERR, st, err.c_str(), DT_LEFT | DT_WORDBREAK | DT_END_ELLIPSIS);
+      else if (run) text(dc, g_fText, C_OK, st, L"\x25CF Game running \x2014 close it to change the options");
+      else if (g_installed) text(dc, g_fText, C_OK, st, L"\x2713 Ready to play");
+      else text(dc, g_fText, C_WARN, st, iso_ok() ? L"Not installed yet \x2014 press INSTALL AND PLAY" : L"Choose the game ISO in the Game page"); }
+
+    if (g_page == PG_PLAY) {
+        /* faixa de titulo (degrade vertical) */
+        int bh = S(220);
+        for (int y = 0; y < bh; y++) {
+            int t = y * 256 / bh; COLORREF c = RGB(GetRValue(C_SIDE) + (GetRValue(C_CARD) - GetRValue(C_SIDE)) * t / 256 + 6 * t / 256, GetGValue(C_SIDE) + (GetGValue(C_CARD) - GetGValue(C_SIDE)) * t / 256 + 6 * t / 256, GetBValue(C_SIDE) + (GetBValue(C_CARD) - GetBValue(C_SIDE)) * t / 256 + 14 * t / 256);
+            RECT l = {SW, y, cr.right, y + 1}; HBRUSH b = CreateSolidBrush(c); FillRect(dc, &l, b); DeleteObject(b);
+        }
+        draw_thumbnail(dc, RECT{SW, 0, cr.right, bh});
+        dark::accent_line(dc, SW, cr.right, bh - S(2), S(2));
+        std::string gid = game_id_built(); std::wstring ver = to_wide(gid.empty() ? std::string("Yu-Gi-Oh! GX Tag Force") : gid);
+        text(dc, g_fHero, C_TXT, RECT{cx, S(110), cr.right - S(28), S(160)}, L"Yu-Gi-Oh! GX Tag Force");
+        text(dc, g_fSub, C_ACC, RECT{cx, S(162), cr.right - S(28), S(186)}, (L"Static recompilation for PC  \x00B7  " + ver).c_str());
+        int top = bh + S(26), colw = (cw - S(40)) * 11 / 20, rx = cx + colw + S(40);
+        section_label(dc, cx, top, colw, L"READY CHECK");
+        int y = top + S(30), gap = S(34);
+        std::wstring gtxt = g_installed ? L"Game installed (" + g_data + L")" : iso_ok() ? L"ISO selected \x2014 not installed yet" : L"No game ISO selected";
+        check_line(dc, cx, y, colw, g_installed ? C_OK : iso_ok() ? C_WARN : C_ERR, g_installed ? L"\x2713" : L"!", gtxt); y += gap;
+        bool sv = dir_exists(exe_dir() + L"ms0");
+        check_line(dc, cx, y, colw, sv ? C_OK : C_DIM, sv ? L"\x2713" : L"\x2022", sv ? L"Saves found (ms0 folder)" : L"No saves yet (created on the first run)"); y += gap;
+        check_line(dc, cx, y, colw, C_OK, L"\x2713", L"Graphics card: " + gpu_name()); y += gap;
+        check_line(dc, cx, y, colw, C_OK, L"\x2713", std::wstring(L"Renderer: ") + kOpts[0].names[g_cur[0]] + L"  \x00B7  " + kOpts[1].names[g_cur[1]] + L"  \x00B7  " + kOpts[4].names[g_cur[4]]);
+        section_label(dc, rx, top, cx + cw - rx, L"QUICK SETTINGS");
+        for (int k = 0; k < 3; k++) {   /* rotulo de cada seletor rapido */
+            RECT w; GetWindowRect(g_qsel[k], &w); POINT p = {w.left, w.top}; ScreenToClient(h, &p);
+            text(dc, g_fText, C_TXT, RECT{rx, p.y - S(24), rx + S(120), p.y - S(2)}, kOpts[kQuick[k]].label);
+        }
+    } else if (g_page == PG_GRAPHICS) {
+        text(dc, g_fHead, C_TXT, RECT{cx, S(22), cx + cw, S(58)}, L"Graphics");
+        text(dc, g_fSub, C_DIM, RECT{cx, S(58), cx + cw, S(80)}, L"Saved in tagforce_recomp.ini; the in-game Graphics screen changes the same values.");
+        for (int i = 0; i < N_OPT; i++) {
+            int y = S(100) + i * S(56);
+            text(dc, g_fText, C_TXT, RECT{cx, y, cx + cw - S(300), y + S(24)}, kOpts[i].label);
+            text(dc, g_fSmall, C_DIM, RECT{cx, y + S(24), cx + cw - S(290), y + S(44)}, kOpts[i].hint, DT_LEFT | DT_SINGLELINE | DT_VCENTER | DT_END_ELLIPSIS);
+            RECT l = {cx, y + S(50), cx + cw, y + S(51)}; HBRUSH b = CreateSolidBrush(C_LINE); FillRect(dc, &l, b); DeleteObject(b);
+        }
+    } else if (g_page == PG_GAME) {
+        text(dc, g_fHead, C_TXT, RECT{cx, S(22), cx + cw, S(58)}, L"Game");
+        text(dc, g_fSub, C_DIM, RECT{cx, S(58), cx + cw, S(80)}, L"The game is installed once from your own ISO into the jogo folder next to the program.");
+        RECT card = {cx, S(100), cx + cw, S(200)}; round_fill(dc, card, C_CARD, C_LINE, S(10));
+        int ix = card.left + S(18), iw = card.right - S(18);
+        text(dc, g_fSmall, C_DIM, RECT{ix, card.top + S(10), iw, card.top + S(28)}, busy ? L"INSTALLING" : g_installed ? L"GAME INSTALLED" : L"GAME IMAGE (ISO)");
+        if (busy) {
+            text(dc, g_fSmall, C_DIM, RECT{ix, card.top + S(32), iw, card.top + S(52)}, msg.c_str(), DT_LEFT | DT_SINGLELINE | DT_VCENTER | DT_PATH_ELLIPSIS);
+            draw_progress(dc, RECT{ix, card.top + S(58), iw, card.top + S(70)});
+            wchar_t pc[64]; swprintf(pc, 64, L"%d%%  \x2014  this only happens once", g_prog / 10); text(dc, g_fSmall, C_DIM, RECT{ix, card.top + S(72), iw, card.bottom - S(4)}, pc);
+        } else {
+            std::wstring t = g_installed ? g_data : g_path.empty() ? L"No ISO selected" : g_path;
+            text(dc, g_fText, (g_installed || iso_ok()) ? C_TXT : C_WARN, RECT{ix, card.top + S(32), iw, card.top + S(58)}, t.c_str(), DT_LEFT | DT_SINGLELINE | DT_VCENTER | DT_PATH_ELLIPSIS);
+            RECT w = {ix, card.top + S(58), iw, card.bottom - S(6)};
+            if (!err.empty()) text(dc, g_fSmall, C_ERR, w, err.c_str(), DT_LEFT | DT_WORDBREAK);
+            else if (g_installed) text(dc, g_fSmall, C_OK, w, L"\x2713 Ready to play \x2014 the ISO is no longer needed");
+            else if (!g_path.empty() && !iso_ok()) text(dc, g_fSmall, C_WARN, w, L"File not found \x2014 choose the ISO again.");
+            else if (iso_ok()) text(dc, g_fSmall, C_DIM, w, jit_generic() ? L"First run: copies the game files (about 760 MB) and prepares the game. A few minutes, only once." : L"Installation copies the game files to the jogo/ folder (about 760 MB).");
+        }
+    } else {
+        text(dc, g_fHead, C_TXT, RECT{cx, S(22), cx + cw, S(58)}, L"About");
+        text(dc, g_fSub, C_DIM, RECT{cx, S(58), cx + cw, S(80)}, L"Yu-Gi-Oh! GX Tag Force \x2014 PC recompilation");
+        RECT p = {cx, S(104), cx + cw, S(280)};
+        text(dc, g_fText, C_TXT, p, L"The original PSP game is statically recompiled to native Windows code. You need your own copy of the game: nothing from it is distributed with this program.\n\n"
+                                    L"Graphics options can also be changed inside the game (Options > Graphics). Texture packages and mods live in the mods folder next to the program.", DT_LEFT | DT_WORDBREAK);
+        section_label(dc, cx, S(300), cw, L"FOLDERS");
+    }
     BitBlt(wdc, 0, 0, cr.right, cr.bottom, dc, 0, 0, SRCCOPY);
     SelectObject(dc, obm); DeleteObject(bm); DeleteDC(dc); EndPaint(h, &ps);
 }
+static void open_folder(const std::wstring &p) { CreateDirectoryW(p.c_str(), nullptr); ShellExecuteW(nullptr, L"open", p.c_str(), nullptr, nullptr, SW_SHOWNORMAL); }
 static LRESULT CALLBACK proc(HWND h, UINT m, WPARAM w, LPARAM l) {
     LRESULT dr; if (menu_dark_message(h, m, w, l, &dr)) return dr;   /* (sem barra de menu aqui; a funcao so trata mensagens da barra) */
     switch (m) {
     case WM_COMMAND:
-        if (g_installing && LOWORD(w) != ID_QUIT) return 0;
+        if (g_installing && LOWORD(w) != ID_QUIT && LOWORD(w) != ID_LOGS && LOWORD(w) != ID_SAVES) return 0;
         switch (LOWORD(w)) {
         case ID_PICK: if (pick(h)) { { std::lock_guard<std::mutex> lk(g_mu); g_err.clear(); } if (g_installed && iso_ok()) { if (tf_msgbox(h, L"Rebuild the jogo/ folder from this ISO? The files currently in the folder will be replaced.", L"Reinstall", MB_YESNO | MB_ICONQUESTION) == IDYES) start_install(); } refresh(); } return 0;
         case ID_PLAY:
-            if (g_installed) { if (jit_generic() && !code_ready(game_id_dir(g_data))) start_install(false); else { g_go = true; DestroyWindow(h); } }
-            else if (iso_ok()) start_install();
+            if (game_running()) return 0;
+            if (g_installed) { if (jit_generic() && !code_ready(game_id_dir(g_data))) start_install(false); else { launch_game(false); refresh(); } }
+            else if (iso_ok()) { show_page(PG_GAME); start_install(); }
             return 0;
-        case ID_DIRECT: if (iso_ok()) { g_go = true; g_direct = true; DestroyWindow(h); } return 0;
+        case ID_DIRECT: if (iso_ok() && !game_running()) { launch_game(true); refresh(); } return 0;
+        case ID_STOP:
+            if (game_running() && tf_msgbox(h, L"Close the game? Anything not saved inside the game will be lost.", L"Tag Force Recomp", MB_YESNO | MB_ICONQUESTION) == IDYES) { stop_game(); refresh(); }
+            return 0;
+        case ID_LOGS: open_folder(exe_dir() + L"logs"); return 0;
+        case ID_SAVES: open_folder(exe_dir() + L"ms0"); return 0;
+        default:
+            if (is_sel(LOWORD(w)) && !game_running()) {
+                HWND b = (HWND)l; POINT pt; GetCursorPos(&pt); RECT wr; GetWindowRect(b, &wr);
+                int back = PtInRect(&wr, pt) && pt.x < wr.left + (wr.right - wr.left) / 3;
+                opt_step(sel_option(LOWORD(w)), back ? -1 : 1);
+            }
+            return 0;
         case ID_QUIT:
             if (g_installing && tf_msgbox(h, L"Installation is in progress. Cancel and quit?", L"Tag Force Recomp", MB_YESNO | MB_ICONQUESTION) != IDYES) return 0;
             if (g_installing) ExitProcess(0);   /* a instalacao incompleta nao tem _disco.tsv: o jogo nao a usa */
@@ -171,14 +408,26 @@ static LRESULT CALLBACK proc(HWND h, UINT m, WPARAM w, LPARAM l) {
     case WM_CTLCOLORBTN: { static HBRUSH bgb = CreateSolidBrush(C_BG); return (LRESULT)bgb; }   /* o fundo do botao nao pisca em cor de sistema */
     case WM_PAINT: paint(h); return 0;
     case WM_DRAWITEM: draw_button((const DRAWITEMSTRUCT *)l); return TRUE;
+    case WM_MOUSEMOVE: {
+        int n = nav_at((short)LOWORD(l), (short)HIWORD(l));
+        if (n != g_navhot) { g_navhot = n; RECT sb = {0, 0, S(SIDE96), 0}; GetClientRect(h, &sb); sb.right = S(SIDE96); InvalidateRect(h, &sb, FALSE); }
+        TRACKMOUSEEVENT te = {sizeof te, TME_LEAVE, h, 0}; TrackMouseEvent(&te);
+        return 0; }
+    case WM_MOUSELEAVE: if (g_navhot != -1) { g_navhot = -1; RECT sb; GetClientRect(h, &sb); sb.right = S(SIDE96); InvalidateRect(h, &sb, FALSE); } return 0;
+    case WM_LBUTTONDOWN: {
+        int n = nav_at((short)LOWORD(l), (short)HIWORD(l));
+        if (n == NAV_QUIT) SendMessageW(h, WM_COMMAND, ID_QUIT, 0); else if (n >= 0) show_page(n);
+        return 0; }
     case WM_TIMER:
         if (w == TIMER_UI) {
-            { static bool was[4]; int i = 0;   /* hover dos botoes: so redesenha quando muda */
-              for (HWND b : {g_bpick, g_play, g_bquit, g_bdirect}) { bool hot = is_hot(b); if (hot != was[i]) { was[i] = hot; InvalidateRect(b, nullptr, FALSE); } i++; } }
-            if (g_installing) InvalidateRect(h, nullptr, FALSE);
+            { static bool was[16 + N_OPT]; static POINT lastp; int i = 0; POINT cp; GetCursorPos(&cp); bool moved = cp.x != lastp.x || cp.y != lastp.y; lastp = cp;   /* hover dos botoes: so redesenha quando muda */
+              std::vector<HWND> bs = {g_bpick, g_play, g_bdirect, g_bstop, g_blogs, g_bsaves}; bs.insert(bs.end(), g_qsel, g_qsel + 3); bs.insert(bs.end(), g_sel, g_sel + N_OPT);
+              for (HWND b : bs) { bool hot = is_hot(b); if (hot != was[i] || (hot && moved && i >= 6)) { was[i] = hot; InvalidateRect(b, nullptr, FALSE); } i++; } }
+            { static bool wasrun; bool run = game_running(); if (run != wasrun) { wasrun = run; refresh(); } }
+            if (g_installing) { RECT bar; GetClientRect(h, &bar); InvalidateRect(h, &bar, FALSE); }
             if (g_installing && g_inst_done) {   /* terminou */
                 g_installing = false; if (g_thr.joinable()) g_thr.join();
-                if (g_inst_ok) { check_installed(); g_go = true; DestroyWindow(h); }   /* instalou: ja joga */
+                if (g_inst_ok) { check_installed(); launch_game(false); refresh(); }   /* instalou: ja joga */
                 else { if (g_err.empty()) g_err = L"Installation failed."; refresh(); }
             }
         }
@@ -189,11 +438,13 @@ static LRESULT CALLBACK proc(HWND h, UINT m, WPARAM w, LPARAM l) {
     return DefWindowProcW(h, m, w, l);
 }
 
-/* Mostra a janela. Devolve o caminho da ISO (jogar direto da ISO) ou "" e preenche *data com a pasta instalada; ambos vazios = o usuario saiu. */
+/* Mostra a janela. Devolve sempre "" (o jogo roda em processo filho); *data nao e preenchido: ao fechar o lancador, o programa sai. */
 std::string launcher_pick_iso(std::wstring *data) {
+    (void)data;
+    load_thumbnail();
     wchar_t last[1024] = L"";
     GetPrivateProfileStringW(L"geral", L"iso", L"", last, 1024, ini_path().c_str());
-    g_path = last; g_go = g_direct = false; update_data_dir(); check_installed();
+    g_path = last; update_data_dir(); check_installed();
 
     /* DPI proprio so desta janela (o processo nao e DPI-aware; o jogo cuida da propria janela) */
     typedef HANDLE (WINAPI *SetCtx)(HANDLE);
@@ -201,6 +452,10 @@ std::string launcher_pick_iso(std::wstring *data) {
     SetCtx setctx = (SetCtx)(void *)GetProcAddress(u32, "SetThreadDpiAwarenessContext");
     HANDLE oldctx = setctx ? setctx((HANDLE)-4) : nullptr;   /* DPI_AWARENESS_CONTEXT_PER_MONITOR_AWARE_V2 */
     { HDC sdc = GetDC(nullptr); g_dpi = GetDeviceCaps(sdc, LOGPIXELSX); ReleaseDC(nullptr, sdc); if (g_dpi < 96) g_dpi = 96; }
+    { RECT wa; SystemParametersInfoW(SPI_GETWORKAREA, 0, &wa, 0);   /* telas pequenas / escala alta: encolhe tudo para a janela caber */
+      int needw = MulDiv(W96 + 16, g_dpi, 96), needh = MulDiv(H96 + 48, g_dpi, 96), aw = wa.right - wa.left - 20, ah = wa.bottom - wa.top - 20;
+      int d = g_dpi; if (needw > aw) d = std::min(d, MulDiv(g_dpi, aw, needw)); if (needh > ah) d = std::min(d, MulDiv(g_dpi, ah, needh));
+      g_dpi = std::max(d, 60); }
 
     menu_dark_init();   /* tema escuro do Windows (barra de titulo, caixas de dialogo) */
     HINSTANCE hi = GetModuleHandleW(nullptr);
@@ -209,19 +464,30 @@ std::string launcher_pick_iso(std::wstring *data) {
     wc.hIcon = LoadIconW(hi, MAKEINTRESOURCEW(1)); if (!wc.hIcon) wc.hIcon = LoadIconW(nullptr, (LPCWSTR)IDI_APPLICATION);
     RegisterClassW(&wc);
     DWORD st = WS_OVERLAPPED | WS_CAPTION | WS_SYSMENU | WS_MINIMIZEBOX | WS_CLIPCHILDREN;   /* o fundo nao repinta por cima dos botoes */
-    RECT r = {0, 0, S(560), S(304)};
+    RECT r = {0, 0, S(W96), S(H96)};
     { typedef BOOL (WINAPI *AdjDpi)(LPRECT, DWORD, BOOL, DWORD, UINT); AdjDpi adj = (AdjDpi)(void *)GetProcAddress(u32, "AdjustWindowRectExForDpi"); if (adj) adj(&r, st, FALSE, 0, g_dpi); else AdjustWindowRect(&r, st, FALSE); }
     int ww = r.right - r.left, wh = r.bottom - r.top;
     g_wnd = CreateWindowW(L"TagForceLauncher", L"Tag Force Recomp", st, (GetSystemMetrics(SM_CXSCREEN) - ww) / 2, (GetSystemMetrics(SM_CYSCREEN) - wh) / 2, ww, wh, nullptr, nullptr, hi, nullptr);
     menu_dark_window(g_wnd);
-    g_fTitle = make_font(26, FW_SEMIBOLD); g_fSub = make_font(13, FW_NORMAL); g_fText = make_font(15, FW_NORMAL); g_fSmall = make_font(12, FW_SEMIBOLD); g_fBtn = make_font(15, FW_SEMIBOLD);
-    RECT cr; GetClientRect(g_wnd, &cr); int m = S(28), bh = S(42), by = cr.bottom - S(24) - bh;
-    g_bpick = CreateWindowW(L"BUTTON", L"Select ISO...", WS_CHILD | WS_VISIBLE | WS_TABSTOP | BS_OWNERDRAW, m, by, S(176), bh, g_wnd, (HMENU)ID_PICK, hi, nullptr);
-    g_bquit = CreateWindowW(L"BUTTON", L"Quit", WS_CHILD | WS_VISIBLE | WS_TABSTOP | BS_OWNERDRAW, cr.right - m - S(150) - S(12) - S(90), by, S(90), bh, g_wnd, (HMENU)ID_QUIT, hi, nullptr);
-    g_play = CreateWindowW(L"BUTTON", L"Play", WS_CHILD | WS_VISIBLE | WS_TABSTOP | BS_OWNERDRAW, cr.right - m - S(150), by, S(150), bh, g_wnd, (HMENU)ID_PLAY, hi, nullptr);
-    g_bdirect = CreateWindowW(L"BUTTON", L"Play directly from the ISO (no install)", WS_CHILD | WS_VISIBLE | WS_TABSTOP | BS_OWNERDRAW, cr.right - m - S(260), by - S(26), S(260), S(20), g_wnd, (HMENU)ID_DIRECT, hi, nullptr);
+    g_fHero = make_font(34, FW_SEMIBOLD); g_fHead = make_font(26, FW_SEMIBOLD); g_fTitle = make_font(26, FW_SEMIBOLD); g_fSub = make_font(13, FW_NORMAL); g_fText = make_font(15, FW_NORMAL);
+    g_fSmall = make_font(12, FW_SEMIBOLD); g_fBtn = make_font(15, FW_SEMIBOLD); g_fPlay = make_font(19, FW_BOLD);
+    RECT cr; GetClientRect(g_wnd, &cr); int cx = S(SIDE96) + S(28), cw = cr.right - S(28) - cx;
+    auto btn = [&](const wchar_t *t, int id, int x, int y, int w, int h) { return CreateWindowW(L"BUTTON", t, WS_CHILD | WS_VISIBLE | WS_TABSTOP | BS_OWNERDRAW, x, y, w, h, g_wnd, (HMENU)(INT_PTR)id, hi, nullptr); };
+    opt_load();
+    { int selw = S(270), selx = cx + cw - selw, h = S(34);   /* pagina Graphics: uma linha por opcao, seletor a direita */
+      for (int i = 0; i < N_OPT; i++) g_sel[i] = btn(kOpts[i].names[g_cur[i]], ID_OPT0 + i, selx, S(100) + i * S(56) + S(4), selw, h); }
+    { int colw = (cw - S(40)) * 11 / 20, rx = cx + colw + S(40), w = cx + cw - rx;   /* pagina Play: 3 seletores na coluna direita */
+      for (int k = 0; k < 3; k++) g_qsel[k] = btn(kOpts[kQuick[k]].names[g_cur[kQuick[k]]], ID_QOPT0 + k, rx, S(220) + S(26) + S(30) + S(24) + k * S(68), w, S(36)); }
+    g_bpick = btn(L"Select ISO...", ID_PICK, cx, S(220), S(200), S(40));
+    g_bdirect = btn(L"Play directly from the ISO", ID_DIRECT, cx + S(212), S(220), S(260), S(40));
+    g_blogs = btn(L"Open logs folder", ID_LOGS, cx, S(326), S(200), S(40));
+    g_bsaves = btn(L"Open saves folder", ID_SAVES, cx + S(212), S(326), S(200), S(40));
+    { int by = cr.bottom - S(BAR96) + S(13), bh = S(46);
+      g_play = btn(L"PLAY", ID_PLAY, cr.right - S(28) - S(210), by, S(210), bh);
+      g_bstop = btn(L"Stop", ID_STOP, cr.right - S(28) - S(210) - S(10) - S(90), by, S(90), bh); }
     SendMessageW(g_wnd, DM_SETDEFID, ID_PLAY, 0);
     SetTimer(g_wnd, TIMER_UI, 60, nullptr);
+    if (!g_installed) g_page = PG_GAME;   /* primeira vez: comeca pela instalacao */
     refresh();
     ShowWindow(g_wnd, SW_SHOW); UpdateWindow(g_wnd);
     if (!g_installed && !iso_ok()) PostMessageW(g_wnd, WM_COMMAND, ID_PICK, 0);   /* primeira vez: ja abre o seletor */
@@ -231,9 +497,7 @@ std::string launcher_pick_iso(std::wstring *data) {
         if (!IsDialogMessageW(g_wnd, &msg)) { TranslateMessage(&msg); DispatchMessageW(&msg); }
     }
     if (g_thr.joinable()) g_thr.join();
-    for (HFONT f : {g_fTitle, g_fSub, g_fText, g_fSmall, g_fBtn}) DeleteObject(f);
+    for (HFONT f : {g_fHero, g_fHead, g_fTitle, g_fSub, g_fText, g_fSmall, g_fBtn, g_fPlay}) DeleteObject(f);
     if (setctx) setctx(oldctx);
-    if (!g_go) return "";
-    if (g_direct) return to_utf8(g_path);
-    *data = g_data; return "";
+    return "";
 }

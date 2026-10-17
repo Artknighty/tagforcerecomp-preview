@@ -29,6 +29,30 @@ at `+0x124` (values `0x15f…0x162` mean the player's own / saved decks). The ma
 consecutive blocks** (a table in `libtitle.prx` marks the first deck of each block: 1, 7, 13, 19, 25, 31, 37). The order inside a block is
 the in-game progression, **not** a strength order.
 
+### Deck map (who owns each of the 351 decks)
+
+Solved from the story's own data and written as code in `decomp/duelists.h` (`CharacterId`, `OwnerOfDeck`, `LadderDeck`, `SingleDeck`, `IsPlaceholder`).
+The story gives a character his decks in `ScrNNNDeck.bin` (NNN = character id − 1) inside `script/st01_t01_brain.ehp` (first year) and
+`st02_t01_brain.ehp` (second year); the last `u16` of each 16-byte record is the deck id (the first four are a month/day range, 0 = none).
+The first year uses levels 1 and 2 plus the June duel (level 6); the second year uses levels 3, 4 and 5. Character names are in `BOOT.BIN`
+at `0x71cc0` (full name, short name, in id order from 2).
+
+| Decks | Owner | Rule |
+|---|---|---|
+| RCP000 | the player | model of the personal deck |
+| RCP001 … RCP228 | characters 2 … 39 | ladder of 6: `deck = 1 + 6 × (character − 2) + (level − 1)`. Jaden … Zane are 2 … 8, Crowler 9, Banner 10, Atticus 11 … Sheppard 39 |
+| RCP240 … RCP341 | characters 41 … 142 | one deck each: `deck = character + 199` (Colin, 85, is the exception: his slot RCP284 is a dummy) |
+| RCP229, RCP230 | Colin (85) | special decks named by his script |
+| everything else | nobody | the **placeholder** (same cards as RCP051, 171 decks): the game fills every unused slot with it |
+
+Exceptions the scripts do on purpose: Nightshroud (40) duels with Atticus's level 1 (RCP055), Blair's script also names RCP109 (Belowski's level 1 by the
+rule), and the characters who do not really duel (Doctor, Researchers, many fillers) get RCP235, a placeholder. Many ladders use only some levels
+(`LadderUsedMask`); the main cast and Crowler use all six.
+
+`python tools/decks_mapa.py` rebuilds `decomp/duelist_ids.inc` (ids and masks only, no game text) and writes `gen/decks_db/MAPA_DECKS.md` /
+`mapa_decks.json` (the readable map with deck names, archetype and the story phase of each deck; game data, outside Git). It also prints every
+deck whose script owner differs from the rule, so a different game version shows up at once.
+
 ## Extracting a database
 
 ```sh

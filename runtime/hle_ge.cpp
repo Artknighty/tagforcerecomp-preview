@@ -4,20 +4,24 @@
  * Cobre: through (2D) e 3D (world/view/proj, recorte no plano proximo, cull), iluminacao por vertice, skinning, texturas
  * (5650/5551/4444/8888, CLUT4-32, DXT1/3/5, swizzle, bilinear, render-to-texture), blend, alpha/depth/stencil test, mascara de
  * escrita, scissor, clear mode, pontos/linhas e transferencias de blocos. Sem fog e sem curvas/patches. */
+#include "ctl.h"
 #include "hle.h"
 #include <windows.h>
 #include "raster_pool.h"
 #include "gpu.h"
+#include "pacing.h"
 extern "C" { extern uint32_t g_trace[1024]; extern uint32_t g_trace_i; }
 #include "gfx.h"
 #include "imgio.h"
 #include "texrepl.h"
 #include "hdfont.h"
+#include "gameid.h"
 #include <limits.h>
 #include <stdio.h>
 #include <stdlib.h>
 #include <math.h>
 #include <map>
+#include <unordered_map>
 #include <algorithm>
 
 struct GeCb { uint32_t signal_fn, signal_arg, finish_fn, finish_arg; };
@@ -268,8 +272,7 @@ static inline uint32_t tsample(float u, float v) {
     float fu = u - 0.5f, fv = v - 0.5f; int x0 = ifloor(fu), y0 = ifloor(fv);
     int ax = (int)((fu - x0) * 256.f), ay = (int)((fv - y0) * 256.f);
     int xa = wrap_x(x0), xb = wrap_x(x0 + 1), ya = wrap_y(y0), yb = wrap_y(y0 + 1);   /* 4 wraps em vez de 8 */
-    uint32_t t00 = tfetch_w(xa, ya), t10 = tfetch_w(xb, ya), t01 = tfetch_w(xa, yb), t11 = tfetch_w(xb, yb), o = 0;
-    (void)o;
+    uint32_t t00 = tfetch_w(xa, ya), t10 = tfetch_w(xb, ya), t01 = tfetch_w(xa, yb), t11 = tfetch_w(xb, yb);
     if (t00 == t10 && t00 == t01 && t00 == t11) return t00;
     return bilerp(t00, t10, t01, t11, ax, ay);
 }
@@ -906,7 +909,7 @@ static void gpu_materialize(GFbRec &f, bool write = true);
 static const bool g_gpu_dbg = getenv("TF_GPU_DEBUG") != nullptr;
 static const char *const g_gpu_why[] = {"", "pontos/linhas", "stencil", "mascara de escrita", "blend abs", "fator 2*dst", "fator 2*src com outro alfa", "duas cores fixas", "textura", "textura grande"};
 static uint64_t g_gpu_stat[16], g_gpu_prims, g_gpu_verts;
-void interp_reset(void); void interp_taint(int); void interp_record(const GpuState &, const GpuVtx *, int, bool, int); bool interp_enabled(void); void interp_fb_drawn(int);
+void interp_reset(void); void interp_taint(int); void interp_record(const GpuState &, const GpuVtx *, int, bool, int); bool interp_enabled(void); void interp_fb_drawn(int); bool interp_hold_ok(void);
 static void gpu_reset_fbs(void) { interp_reset(); hdfont_reset(); for (auto &f : g_gf) { if (f.used) { gpu_materialize(f); gpu_fb_destroy(f.id); } f = GFbRec(); } for (auto &f : g_rt) { if (f.used) gpu_fb_destroy(f.id); f = GFbRec(); } }
 static void gpu_fb_resync(GFbRec &f) { interp_taint(f.id); gpu_fb_upload(f.id, (const uint32_t *)mem_ptr(f.addr), f.stride, (const uint16_t *)mem_ptr(f.zaddr), f.zstride); f.stale = false; f.stOk = false; }   /* refazer zera o stencil da GPU */
 static GFbRec *gpu_fb_for(uint32_t addr, uint32_t stride, uint32_t zaddr, uint32_t zstride) {
@@ -1029,10 +1032,37 @@ static uint64_t hash_bytes(const uint8_t *p, size_t n) {   /* so comparado em me
 }
 static uint64_t g_tex_bytes, g_tex_fail;   /* memoria estimada das texturas na GPU (cache) e falhas de criacao */
 static const uint64_t g_tex_budget = (uint64_t)(getenv("TF_TEX_BUDGET_MB") ? atoll(getenv("TF_TEX_BUDGET_MB")) : 1536) << 20;
-static void gpu_tex_clear(void) { for (auto &kv : g_gtex) gpu_tex_release(kv.second.id); g_gtex.clear(); g_tex_bytes = 0; }
+/* TEXTURAS HD COMPARTILHADAS (2026-10-15): a substituta de um hash (+ variante de cor, + ampliada ou nao) vira UMA textura na GPU, usada por
+ * todas as entradas do cache que a pedem (o jogo recarrega a mesma arte em outro endereco ao voltar a uma tela). Antes cada entrada criava a sua
+ * e a entrada parada 5 s saia da GPU: ao voltar a uma tela as HD subiam de novo (~11 ms de GPU por 16 MB, o intermediario do 60 FPS saia
+ * atrasado: tranco a cada visita, sessao 205658). Agora a HD sem uso fica na GPU ate o orcamento (TF_TEX_BUDGET_MB) encher; sai a menos recente. */
+struct HdTex { uint32_t id; uint64_t bytes, last; int refs; };
+static std::unordered_map<uint64_t, HdTex> g_hd; static std::unordered_map<uint32_t, uint64_t> g_hd_of;   /* chave -> textura; id da GPU -> chave */
+static uint64_t hd_key(uint32_t dh, uint32_t tcol, int akind) { return ((uint64_t)tcol << 32 | dh) ^ (akind ? 0x8000000000000000ull : 0); }
+static void tex_drop(uint32_t id, uint64_t bytes) {   /* uma entrada do cache deixa de usar a textura id */
+    extern uint64_t display_frames(void);
+    auto it = g_hd_of.find(id);
+    if (it == g_hd_of.end()) { gpu_tex_release(id); g_tex_bytes -= std::min(g_tex_bytes, bytes); return; }
+    HdTex &t = g_hd[it->second]; if (t.refs > 0) t.refs--; t.last = display_frames();
+}
+static void hd_free_unused(uint64_t target) {   /* HD sem nenhuma entrada usando, das menos recentes, ate g_tex_bytes <= target */
+    if (g_tex_bytes <= target) return;
+    std::vector<std::pair<uint64_t, uint64_t>> v; for (auto &kv : g_hd) if (kv.second.refs <= 0) v.push_back({kv.second.last, kv.first});
+    std::sort(v.begin(), v.end());
+    for (auto &x : v) {
+        if (g_tex_bytes <= target) break;
+        HdTex &t = g_hd[x.second]; gpu_tex_release(t.id); g_tex_bytes -= std::min(g_tex_bytes, t.bytes); g_hd_of.erase(t.id); g_hd.erase(x.second);
+    }
+}
+static void gpu_tex_clear(void) {
+    for (auto &kv : g_gtex) if (!g_hd_of.count(kv.second.id)) gpu_tex_release(kv.second.id);
+    for (auto &kv : g_hd) gpu_tex_release(kv.second.id);
+    g_gtex.clear(); g_hd.clear(); g_hd_of.clear(); g_tex_bytes = 0;
+}
 /* libera as texturas menos usadas (menos recentes) ate g_tex_bytes <= target; nao mexe nas usadas neste quadro */
 static void gpu_tex_evict_to(uint64_t target) {
     extern uint64_t display_frames(void);
+    hd_free_unused(target);
     if (g_tex_bytes <= target) return;
     uint64_t fr = display_frames();
     std::vector<std::map<GTKey, GTEnt>::iterator> v;
@@ -1040,7 +1070,8 @@ static void gpu_tex_evict_to(uint64_t target) {
     std::sort(v.begin(), v.end(), [](const std::map<GTKey, GTEnt>::iterator &a, const std::map<GTKey, GTEnt>::iterator &b) { return a->second.used < b->second.used; });
     for (auto it : v) {
         if (g_tex_bytes <= target) break;
-        g_tex_bytes -= std::min(g_tex_bytes, it->second.bytes); gpu_tex_release(it->second.id); g_gtex.erase(it);
+        tex_drop(it->second.id, it->second.bytes); g_gtex.erase(it);
+        hd_free_unused(target);
     }
 }
 /* F8 ("tem algo errado na tela"): texturas usadas nos 3 ultimos quadros (hash do dado = nome do PNG no pacote de texturas; tamanho; formato; estado da substituicao) */
@@ -1055,13 +1086,30 @@ void ge_marca_texturas(int n) {
         fprintf(stderr, "[marca-graf] #%d   tex hash=%08x %ux%u psm=%u endereco=%08x %s%c", n, e.dh, k.w, k.h, k.psm, k.addr, e.awaiting ? "SUBSTITUTA CARREGANDO (mostrando a original)" : e.akind == 1 ? "ampliada (Scale2x)" : e.dh ? "com hash (pacote de texturas pode substituir)" : "sem hash (textura de GPU/render-to-texture ou sem pacote)", 10);
     }
 }
+/* custo do quadro (o display.cpp registra os quadros pesados): texturas criadas na GPU (quantas, MB, ms) e espera pelos PNGs substitutos */
+static int g_fc_tex_n; static double g_fc_tex_mb, g_fc_tex_ms, g_fc_wait_ms;
+void ge_frame_cost(int *n, double *mb, double *ms, double *wait_ms, double *alloc_ms, double *copy_ms) {
+    static double a0, c0; *alloc_ms = std::max(0.0, g_gpu_us[7] - a0) / 1000.0; *copy_ms = std::max(0.0, g_gpu_us[6] - c0) / 1000.0; a0 = g_gpu_us[7]; c0 = g_gpu_us[6];
+    *n = g_fc_tex_n; *mb = g_fc_tex_mb; *ms = g_fc_tex_ms; *wait_ms = g_fc_wait_ms; g_fc_tex_n = 0; g_fc_tex_mb = g_fc_tex_ms = g_fc_wait_ms = 0; }
 /* cria a textura na GPU; se faltar memoria/descritores libera as menos usadas e tenta de novo (antes: falhava em silencio e ficava a original) */
-static uint32_t gpu_tex_create_ev(int w, int h, const uint32_t *px, bool mips, uint64_t *bytes) {
+static uint32_t gpu_tex_create_ev(int w, int h, const uint32_t *px, bool mips, uint64_t *bytes, const uint32_t *chain) {
+    struct Cost { double t0; int w, h; ~Cost() { g_fc_tex_n++; g_fc_tex_mb += (double)w * h * 4 / 1048576.0; g_fc_tex_ms += (gpu_now_us() - t0) / 1000.0; } } cost{gpu_now_us(), w, h};
     uint64_t b = (uint64_t)w * h * 4 * (mips ? 4 : 3) / 3; *bytes = b;
     if (g_tex_bytes + b > g_tex_budget) gpu_tex_evict_to(b > g_tex_budget ? 0 : g_tex_budget - b);
-    uint32_t id = gpu_tex_create(w, h, px, mips);
-    if (!id) { gpu_tex_evict_to(g_tex_bytes / 2); id = gpu_tex_create(w, h, px, mips); }
+    uint32_t id = gpu_tex_create(w, h, px, mips, chain);
+    if (!id) { gpu_tex_evict_to(g_tex_bytes / 2); id = gpu_tex_create(w, h, px, mips, chain); }
     if (!id) { g_tex_fail++; if (g_tex_fail <= 10) fprintf(stderr, "[gpu] nao consegui criar a textura %dx%d (cache: %llu MB em %zu texturas)\n", w, h, (unsigned long long)(g_tex_bytes >> 20), g_gtex.size()); return 0; }
+    g_tex_bytes += b; return id;
+}
+/* textura substituta na GPU: BC7 pronta do cache (bc7.h) ou RGBA com os mipmaps; *bytes = memoria de video estimada */
+static uint32_t hd_create(const TexReplImg &ri, uint64_t *bytes) {
+    if (ri.bc.empty()) return gpu_tex_create_ev(ri.w, ri.h, ri.px.data(), true, bytes, ri.mips.empty() ? nullptr : ri.mips.data());
+    struct Cost { double t0; size_t n; ~Cost() { g_fc_tex_n++; g_fc_tex_mb += (double)n / 1048576.0; g_fc_tex_ms += (gpu_now_us() - t0) / 1000.0; } } cost{gpu_now_us(), ri.bc.size()};
+    const uint64_t b = ri.bc.size(); *bytes = b;
+    if (g_tex_bytes + b > g_tex_budget) gpu_tex_evict_to(b > g_tex_budget ? 0 : g_tex_budget - b);
+    uint32_t id = gpu_tex_create_bc7(ri.w, ri.h, ri.levels, ri.bc.data());
+    if (!id) { gpu_tex_evict_to(g_tex_bytes / 2); id = gpu_tex_create_bc7(ri.w, ri.h, ri.levels, ri.bc.data()); }
+    if (!id) { texrepl_no_bc(); g_tex_fail++; return 0; }   /* sem suporte a BC7: as proximas leituras voltam ao PNG */
     g_tex_bytes += b; return id;
 }
 /* substituta carregando em segundo plano: quando chega, troca a textura da GPU (o original serve enquanto isso) */
@@ -1070,23 +1118,38 @@ static void repl_wait_note(const GTEnt &e, uint64_t fr) { if (e.akind != 0 || !e
 /* desenho num alvo de textura (render-to-texture): a imagem composta fica la e o jogo a reaproveita por varios quadros sem
  * redesenhar (carta revelada na abertura de pacotes, carta grande da lista da loja), entao a substituta que chegasse depois
  * nunca apareceria. Nesse caso espera a leitura do PNG (ate 200 ms por quadro no total; normalmente poucos ms). */
-static int repl_get(uint32_t dh, int ow, int oh, std::shared_ptr<TexReplImg> &ri, uint32_t tcol, bool wait) {
+static int repl_get(uint32_t dh, int ow, int oh, std::shared_ptr<TexReplImg> &ri, uint32_t tcol, bool wait, bool first = false) {
     int st = texrepl_get(dh, CMD(0xb8) & 0xf0f, ow, oh, ri, tcol);
-    if (st != 1 || !wait) return st;
+    /* primeira vez que a textura aparece (nao esta no cache em RAM): segura o quadro ate o PNG ficar pronto, em vez de mostrar a original
+     * de baixa resolucao e trocar depois (pop-in). Orcamento por quadro: TF_TEX_WAIT_MS (padrao 80; 0 = nunca segura). */
+    static const double first_us = (getenv("TF_TEX_WAIT_MS") ? atof(getenv("TF_TEX_WAIT_MS")) : 80.0) * 1000.0;
+    const double limit = wait ? 200000.0 : first ? first_us : 0.0;
+    if (st != 1 || limit <= 0.0) return st;
     extern uint64_t display_frames(void);
     static uint64_t frame = ~0ull; static double spent; if (display_frames() != frame) { frame = display_frames(); spent = 0; }
     const double t0 = gpu_now_us();
-    while (st == 1 && spent + (gpu_now_us() - t0) < 200000.0) { Sleep(1); st = texrepl_get(dh, CMD(0xb8) & 0xf0f, ow, oh, ri, tcol); }
-    spent += gpu_now_us() - t0;
+    while (st == 1 && spent + (gpu_now_us() - t0) < limit) { Sleep(1); st = texrepl_get(dh, CMD(0xb8) & 0xf0f, ow, oh, ri, tcol); }
+    spent += gpu_now_us() - t0; g_fc_wait_ms += (gpu_now_us() - t0) / 1000.0;
     return st;
+}
+static uint32_t gpu_tex_create_ev(int w, int h, const uint32_t *px, bool mips, uint64_t *bytes, const uint32_t *chain = nullptr);
+static uint32_t hd_create(const TexReplImg &ri, uint64_t *bytes);
+static uint32_t hd_get(uint32_t dh, uint32_t tcol, int akind, const TexReplImg &ri) {   /* textura HD compartilhada (cria se preciso); 0 = sem memoria */
+    extern uint64_t display_frames(void);
+    const uint64_t k = hd_key(dh, tcol, akind);
+    auto it = g_hd.find(k);
+    if (it != g_hd.end()) { it->second.refs++; it->second.last = display_frames(); return it->second.id; }
+    uint64_t b = 0; const uint32_t id = hd_create(ri, &b);
+    if (!id) return 0;
+    g_hd[k] = {id, b, display_frames(), 1}; g_hd_of[id] = k; return id;
 }
 static void repl_poll(GTEnt &e, int ow, int oh, bool wait) {
     extern uint64_t display_frames(void); uint64_t fr = display_frames();
     if (fr < e.retry) return;
     std::shared_ptr<TexReplImg> ri; int st = e.akind == 1 ? texrepl_upscale_take(e.dh, ri) : repl_get(e.dh, ow, oh, ri, e.tcol, wait);
     if (st == 2) {
-        uint64_t b = 0; uint32_t nid = gpu_tex_create_ev(ri->w, ri->h, ri->px.data(), true, &b);
-        if (nid) { gpu_tex_release(e.id); g_tex_bytes -= std::min(g_tex_bytes, e.bytes); e.id = nid; e.bytes = b; e.awaiting = false; repl_wait_note(e, fr); }
+        const uint32_t nid = hd_get(e.dh, e.tcol, e.akind, *ri);
+        if (nid) { tex_drop(e.id, e.bytes); e.id = nid; e.bytes = 0; e.awaiting = false; repl_wait_note(e, fr); }
         else e.retry = fr + 120;   /* sem memoria agora: a original segue e tenta de novo em 2 s (a imagem sera relida) */
     }
     else if (st == 0) e.awaiting = false;
@@ -1123,22 +1186,22 @@ static uint32_t gpu_tex_bind(bool rtt) {   /* handle da textura do estado atual 
       } }
     /* texturas substitutas / despejo: o hash dos dados identifica a textura (nao vale para render-to-texture na VRAM) */
     uint32_t dh = 0; bool repl = false, awaiting = false; std::shared_ptr<TexReplImg> ri;
-    if (n && R.tp && !(R.taddr >= 0x04000000u && R.taddr < 0x04200000u) && (texrepl_active() || texrepl_dumping() || g_gfx.texscale > 1)) {
+    if (n && R.tp && !(R.taddr >= 0x04000000u && R.taddr < 0x04200000u) && (texrepl_active() || texrepl_dumping() || gfx_texscale() > 1)) {
         dh = texrepl_hash(R.tp, n); repl = true;
     }
     uint32_t id = 0, tcol = 0xffffffffu; uint64_t nbytes = 0, retry = 0;
     if (repl && !texrepl_active()) texrepl_dump(dh, (int)R.tw, (int)R.th, R.tpsm, R.taddr, px, false);
     if (repl && texrepl_active()) {
         if (texrepl_ambiguous(dh)) tcol = texrepl_color(px, (size_t)R.tw * R.th);   /* varias cores por paleta: escolhe pela cor da textura original */
-        int st = repl_get(dh, (int)R.tw, (int)R.th, ri, tcol, rtt);
+        int st = repl_get(dh, (int)R.tw, (int)R.th, ri, tcol, rtt, true);
         texrepl_dump(dh, (int)R.tw, (int)R.th, R.tpsm, R.taddr, px, st != 0);
-        if (st == 2) { id = gpu_tex_create_ev(ri->w, ri->h, ri->px.data(), true, &nbytes); if (!id) { awaiting = true; retry = display_frames() + 120; } } else awaiting = st == 1;
+        if (st == 2) { id = hd_get(dh, tcol, 0, *ri); if (!id) { awaiting = true; retry = display_frames() + 120; } } else awaiting = st == 1;
     }
     int akind = 0;
-    if (!id && !awaiting && repl && g_gfx.texscale > 1 && R.tw * R.th <= 65536) { texrepl_upscale_request(dh, (int)R.tw, (int)R.th, px, g_gfx.texscale); awaiting = true; akind = 1; }   /* sem substituta: amplia em segundo plano */
+    if (!id && !awaiting && repl && gfx_texscale() > 1 && R.tw * R.th <= 65536) { texrepl_upscale_request(dh, (int)R.tw, (int)R.th, px, gfx_texscale()); awaiting = true; akind = 1; }   /* sem substituta: amplia em segundo plano */
     if (!id) id = gpu_tex_create_ev((int)R.tw, (int)R.th, px, false, &nbytes);
     if (!id) return 0;
-    if (e) { gpu_tex_release(e->id); g_tex_bytes -= std::min(g_tex_bytes, e->bytes); }
+    if (e) tex_drop(e->id, e->bytes);
     GTEnt ne = {id, h, stamp, display_frames()}; ne.dh = dh; ne.awaiting = awaiting; ne.akind = akind; ne.bytes = nbytes; ne.retry = retry; ne.tcol = tcol; ne.asked = awaiting ? display_frames() : 0; if (ri && !awaiting) g_rw_n++; g_gtex[k] = ne;   /* pronta na hora: espera 0 */
     return id;
 }
@@ -1158,6 +1221,10 @@ static void gpu_tri_sink(const Vtx &a, const Vtx &b, const Vtx &c, bool flat) {
     bool same = flat || (a.col == b.col && b.col == c.col);   /* como draw_tri_t: cor constante = a do ultimo vertice */
     gpu_push(a, same ? c.col : a.col); gpu_push(b, same ? c.col : b.col); gpu_push(c, c.col);
 }
+/* Retangulo de UV (texels) de cada sprite 2D enviado a GPU: o sombreador amostra so dentro dele (GpuState::uvclamp), sem misturar a borda da peca
+ * com o vizinho do atlas quando o filtro linear roda numa resolucao maior. Um por sprite que gerou triangulos, na ordem. */
+struct SpriteUvRect { float u0, v0, u1, v1; };
+static std::vector<SpriteUvRect> g_sprite_rects; static bool g_sprite_collect;
 static void gpu_sprite(const Vtx &a, const Vtx &b, bool through) {   /* como draw_sprite_t: cobre os pixels nativos tocados */
     float x1 = std::min(a.x, b.x), x2 = std::max(a.x, b.x), y1 = std::min(a.y, b.y), y2 = std::max(a.y, b.y);
     float dx = b.x - a.x, dy = b.y - a.y; bool rot = through && dx * dy < 0;
@@ -1170,6 +1237,7 @@ static void gpu_sprite(const Vtx &a, const Vtx &b, bool through) {   /* como dra
     Vtx p00 = at(xs, ys), p10 = at(xe, ys), p01 = at(xs, ye), p11 = at(xe, ye);
     gpu_push(p00, b.col); gpu_push(p10, b.col); gpu_push(p01, b.col);
     gpu_push(p10, b.col); gpu_push(p11, b.col); gpu_push(p01, b.col);
+    if (g_sprite_collect) g_sprite_rects.push_back({std::min(a.u, b.u), std::min(a.v, b.v), std::max(a.u, b.u), std::max(a.v, b.v)});
 }
 /* linha/ponto: os mesmos pixels nativos da DDA do draw_line, cada um como um quadrado de 1 pixel nativo (cor/UV/Z do pixel) */
 static void gpu_line(const Vtx &a, const Vtx &b, bool flat) {
@@ -1248,8 +1316,10 @@ static bool gpu_shadow_pass_impl(const PrimJob &j, GFbRec *f) {
         else {
             st = true;
             /* alfa gravado na cor = novo valor do stencil quando previsivel (sem blend: o alfa da saida tambem e o fator do blend);
-             * senao o alfa da cor fica como estava (o buffer de stencil e o que vale para os testes) */
-            if (!R.blend && swmask == 255 && (R.szpass == 1 || R.szpass == 2)) aconst = 0x100 | (R.szpass == 2 ? R.sref & 255 : 0);
+             * senao o alfa da cor fica como estava (o buffer de stencil e o que vale para os testes). Com blend o alfa tambem e gravado (os
+             * backends usam o canal alfa do fator de blend, sem mexer no RGB): no PSP o alfa do alvo E o stencil, e um alvo de textura usado depois
+             * como textura (as cartas da Polymerization: cartas desenhadas no alvo com stencil e fatiadas em malha) precisa dele */
+            if (swmask == 255 && (R.szpass == 1 || R.szpass == 2)) aconst = 0x100 | (R.szpass == 2 ? R.sref & 255 : 0);
             else cmask &= ~8u;
         }
     }
@@ -1281,6 +1351,7 @@ static bool gpu_shadow_pass_impl(const PrimJob &j, GFbRec *f) {
     gs.cmask = cmask; gs.aconst = aconst;
     if (st) { gs.st = 1; gs.sfunc = R.sfunc; gs.sref = R.sref & 255; gs.smask = R.smask & 255; gs.swmask = swmask; gs.sfail = R.sfail; gs.szfail = R.szfail; gs.szpass = R.szpass; }
     g_gv.clear(); g_hidden.clear(); g_rec_all = interp_enabled(); t_tri_sink = gpu_tri_sink;
+    g_sprite_rects.clear(); { static const bool off = getenv("TF_NO_UVCLAMP") != nullptr; g_sprite_collect = !off && tex && j.type == 6 && j.through; }   /* TF_NO_UVCLAMP=1: sem o recorte de UV dos sprites (comparacao A/B) */
     const Vtx *vv = j.vv; uint32_t n = j.count;
     switch (j.type) {
     case 6: for (uint32_t i = 0; i + 1 < n; i += 2) gpu_sprite(vv[i], vv[i + 1], j.through); break;
@@ -1311,6 +1382,21 @@ static bool gpu_shadow_pass_impl(const PrimJob &j, GFbRec *f) {
         } else if (!g_gv.empty()) f->stOk = false;
     } else if (!R.clear && !R.st && swmask && !g_gv.empty()) f->stOk = false;   /* desenho comum grava o alfa (o stencil do PSP) */
     g_gpu_prims++; g_gpu_verts += g_gv.size();
+    /* sprites 2D com textura: um desenho por grupo de sprites com o mesmo retangulo de UV (cada grupo leva o seu retangulo no estado) */
+    const bool perSprite = g_sprite_collect && g_hidden.empty() && g_sprite_rects.size() * 6 == g_gv.size() && recn == g_gv.size();
+    g_sprite_collect = false;
+    if (perSprite) {
+        for (size_t i = 0; i < g_sprite_rects.size();) {
+            size_t k = i + 1;
+            while (k < g_sprite_rects.size() && !memcmp(&g_sprite_rects[k], &g_sprite_rects[i], sizeof(SpriteUvRect))) k++;
+            GpuState gi = gs; gi.uvclamp = 1; gi.cu0 = g_sprite_rects[i].u0; gi.cv0 = g_sprite_rects[i].v0; gi.cu1 = g_sprite_rects[i].u1; gi.cv1 = g_sprite_rects[i].v1;
+            gpu_draw(gi, g_gv.data() + i * 6, (int)((k - i) * 6));
+            interp_record(gi, recv + i * 6, (int)((k - i) * 6), f->isRtt, 0);
+            i = k;
+        }
+        interp_fb_drawn(f->id);
+        return true;
+    }
     if (!g_gv.empty()) { gpu_draw(gs, g_gv.data(), (int)g_gv.size()); interp_fb_drawn(f->id); }
     if (recn) interp_record(gs, recv, (int)recn, f->isRtt, (j.type >= 3 && j.type <= 5) ? g_cull : 0);
     return true;
@@ -1326,6 +1412,32 @@ bool ge_gpu_skip_active(uint32_t addr) {   /* o nativo deste buffer esta invalid
     return false;
 }
 const uint32_t *ge_gpu_small(void) { return g_small_valid ? g_small : nullptr; }
+static int g_ck_pend = -1;   /* quadro (indice em g_gf) cuja reducao para a comparacao com o nativo ficou para ge_gpu_frame_post */
+/* SUBIDA ANTECIPADA (2026-10-15): as texturas usadas nas ultimas sessoes ja estao na RAM (pre-carregamento do texrepl), mas so iam para a GPU no
+ * quadro em que a cena as pedia: 20-60 MB de uma vez e o intermediario do 60 FPS esperava a copia (o tranco ao entrar numa tela, sessao 205658).
+ * Agora sobem aos poucos (ate ~4 MB por quadro, no fim do display_present, depois do intermediario) como texturas HD compartilhadas sem dono (g_hd);
+ * quando a cena pede, ja estao la. Respeita 90% do orcamento (TF_TEX_BUDGET_MB). TF_TEX_SUBIDA=0 desliga. */
+static void hd_preupload(void) {
+    static const bool off = getenv("TF_TEX_SUBIDA") && atoi(getenv("TF_TEX_SUBIDA")) == 0;
+    if (off || !g_gpu_on || !texrepl_active()) return;
+    extern uint64_t display_frames(void);
+    uint64_t sent = 0; uint32_t h; std::shared_ptr<TexReplImg> img;
+    while (sent < (4u << 20) && texrepl_take_preupload(&h, img)) {
+        const uint64_t k = hd_key(h, 0xffffffffu, 0);
+        if (g_hd.count(k)) continue;
+        const uint64_t b = img->bc.empty() ? (uint64_t)img->w * img->h * 4 * 4 / 3 : (uint64_t)img->bc.size();
+        if (g_tex_bytes + b > g_tex_budget / 10 * 9) return;
+        uint64_t nb = 0; const uint32_t id = hd_create(*img, &nb);
+        if (!id) return;
+        g_hd[k] = {id, nb, display_frames(), 0}; g_hd_of[id] = k; sent += b;
+    }
+}
+void ge_gpu_frame_post(void) {
+    hd_preupload();
+    const int i = g_ck_pend; g_ck_pend = -1;
+    if (i < 0 || !g_gf[i].used) return;
+    const int t = gpu_check_start(g_gf[i].id); if (t >= 0) { g_gf[i].ticket = t; g_gf[i].ckp = true; }
+}
 int ge_gpu_frame(uint32_t addr, uint32_t fmt) {
     extern uint64_t display_frames(void);
     if (!g_gpu_on) return -1;
@@ -1340,6 +1452,8 @@ int ge_gpu_frame(uint32_t addr, uint32_t fmt) {
                 (unsigned long long)(g_tex_bytes >> 20), g_gtex.size(), (unsigned long long)g_tex_fail, q, rd, (unsigned long long)ld, (unsigned long long)fl, (unsigned long long)dr,
                 (unsigned long long)rm, (unsigned long long)rh, (unsigned long long)pfc, (unsigned long long)dms, nt, (unsigned long long)g_rw_n, g_rw_n ? (double)g_rw_sum / g_rw_n : 0.0, (unsigned long long)g_rw_max, (unsigned long long)g_rw_late);
         g_rw_n = g_rw_sum = g_rw_max = g_rw_late = 0;
+        { uint64_t bd = 0, bms = 0, dmb = 0, bs = 0; size_t bp = 0; texrepl_bc_stats(&bd, &bms, &bp, &dmb, &bs);
+          if (bd || bp || bs) fprintf(stderr, "[texturas] BC7: %llu lidas direto do cache, %llu comprimidas nesta sessao (%llu ms em segundo plano), %zu na fila, cache em disco %llu MB\n", (unsigned long long)bs, (unsigned long long)bd, (unsigned long long)bms, bp, (unsigned long long)dmb); }
     }
     if (g_gpu_dbg && fr % 600 == 0) {
         fprintf(stderr, "[gpu] quadro %llu: %llu prims na GPU (%llu vertices), texturas %zu; sem raster nativo em %llu de %llu quadros, %llu acessos a VRAM protegida (%.2f ms); stale:", (unsigned long long)fr, (unsigned long long)g_gpu_prims, (unsigned long long)g_gpu_verts, g_gtex.size(),
@@ -1351,7 +1465,7 @@ int ge_gpu_frame(uint32_t addr, uint32_t fmt) {
         fputc(10, stderr);
     }
     if (fr % 120 == 0) for (auto &f : g_rt) if (f.used && f.lastUse + 300 < fr) { gpu_fb_destroy(f.id); f = GFbRec(); }   /* alvos de textura sem uso */
-    if (fr % 120 == 0) for (auto it = g_gtex.begin(); it != g_gtex.end();) { if (it->second.used + 300 < fr) { g_tex_bytes -= std::min(g_tex_bytes, it->second.bytes); gpu_tex_release(it->second.id); it = g_gtex.erase(it); } else ++it; }
+    if (fr % 120 == 0) for (auto it = g_gtex.begin(); it != g_gtex.end();) { if (it->second.used + 300 < fr) { tex_drop(it->second.id, it->second.bytes); it = g_gtex.erase(it); } else ++it; }   /* uma HD continua na GPU (tex_drop): so sai quando o orcamento enche */
     if (fmt != 3) return -1;
     addr = 0x04000000u | (addr & 0x1ffff0u);
     GFbRec *f = nullptr; for (auto &c : g_gf) if (c.used && c.res == g_ge_res && c.addr == addr) f = &c;
@@ -1388,8 +1502,9 @@ int ge_gpu_frame(uint32_t addr, uint32_t fmt) {
         const uint32_t *fbm = (const uint32_t *)mem_ptr(addr);
         for (int y = 0; y < 272; y += 2) for (int x = 0; x < 480; x += 2) f->nat[(y >> 1) * 240 + (x >> 1)] = fbm[(size_t)y * f->stride + x];
     }
-    int t = gpu_check_start(f->id);
-    if (t >= 0) { f->ticket = t; f->ckp = true; if (sync) check(*f); }
+    /* a reducao le o quadro real: fica para ge_gpu_frame_post, depois do intermediario (com ela aqui o quadro real retido na fila saia antes dele) */
+    if (sync) { int t = gpu_check_start(f->id); if (t >= 0) { f->ticket = t; f->ckp = true; check(*f); } }
+    else g_ck_pend = (int)(f - g_gf);
     /* entra no modo sem raster nativo depois de 3 quadros sem acesso nem divergencia */
     if (g_skip_ok) for (auto &r : g_gf) {
         if (!r.used || r.prot || r.stale || r.needResync || !skip_eligible(r) || fr < std::max(r.lastFault, r.lastBad) + 3) continue;
@@ -1408,8 +1523,16 @@ void ge_set_gpu(bool on) {
     for (auto &s : g_sh) s = Shadow();
     fprintf(stderr, "[gpu] renderizador por GPU %s\n", on ? "ligado" : "desligado");
 }
-bool ge_gpu_active(void) { return g_gpu_on; }
 
+/* Textura lida de um buffer exibido protegido (modo sem raster nativo): o raster nativo a leria texel a texel nas threads do rasterizador e o acesso
+ * cairia no vram_fault fora da thread do jogo (duas threads ao mesmo tempo = a segunda nao era tratada e o processo caia). Reconstroi antes, aqui,
+ * exatamente como o tratador faria numa leitura. */
+static void gpu_unprotect_texture(void) {
+    const uint32_t a = R.taddr & 0x0fffffffu; if (a < 0x04000000u || a >= 0x04200000u) return;
+    uint32_t n = R.swz ? ((R.th + 7) >> 3) * R.swzrow : R.th * R.rowb;
+    if (R.tpsm >= 8) n = ((R.th + 3) / 4) * std::max(1u, R.tbw / 4) * (R.tpsm == 8 ? 8u : 16u);
+    for (auto &f : g_gf) if (f.used && f.prot && a < f.addr + prot_bytes(f) && a + std::max(n, 1u) > f.addr) gpu_materialize(f, false);
+}
 static void draw_prim(GeList &l, uint32_t data) {
     g_prims++;
     uint32_t type = (data >> 16) & 7, count = data & 0xffff;
@@ -1417,14 +1540,17 @@ static void draw_prim(GeList &l, uint32_t data) {
     int oc = 0, ot = 0, op = 0, ow = 0, on = 0, vs = vertex_size(t, &ow, &ot, &oc, &on, &op);
     (void)l;
     g_off_nrm = on; g_off_wt = ow;
-    static const bool nodraw = getenv("GE_NODRAW") != nullptr;   /* medicao: pula a rasterizacao */
+    static const bool nodraw_env = getenv("GE_NODRAW") != nullptr;   /* medicao: pula a rasterizacao */
+    const bool nodraw = nodraw_env || g_ctl_nodraw;   /* g_ctl_nodraw: comando "nodraw 1" do TF_CTL (duelos de teste ~10x mais rapidos; capturas saem pretas) */
     if (nodraw) { if (t.idx) G.iaddr += count * (t.idx == 1 ? 1 : t.idx == 2 ? 2 : 4); else G.vaddr += count * vs; return; }
     uint32_t va = G.vaddr, ia = G.iaddr;
     bool textured = CMD(0x1e) & 1;
     static int nlog = 0; static const bool gl = getenv("GE_PRIM") != nullptr;
     static const char *gpf = getenv("GE_PRIM_FRAME");   /* GE_PRIM_FRAME=n: todos os PRIMs do quadro n, com textura */
     extern uint64_t display_frames(void);
-    bool this_frame = gpf && display_frames() == (uint64_t)atoll(gpf);
+    static uint64_t ctl_dump_frame = ~0ull;
+    if (g_ctl_texdump_arm) { g_ctl_texdump_arm = false; ctl_dump_frame = display_frames() + 1; fprintf(stderr, "[ctl] texdump: alvo quadro %llu\n", (unsigned long long)ctl_dump_frame); }   /* comando texdump do tf.py */
+    bool this_frame = (gpf && display_frames() == (uint64_t)atoll(gpf)) || (display_frames() >= ctl_dump_frame && display_frames() <= ctl_dump_frame + 1);   /* o contador pode andar de 2 em 2 */
     if ((gl && nlog++ < 60) || this_frame) {
         fprintf(stderr, "[prim] type=%u n=%u vtype=%06x through=%d tex=%d fb=%08x/%u z=%08x/%u psm=%u clear=%x blend=%d/%03x scissor=%03x,%03x va=%08x",
                 type, count, CMD(0x12), t.through, textured, fb_base(), fb_stride(), z_base(), CMD(0x9f) & 0xffff, CMD(0xd2), CMD(0xd3), CMD(0x21) & 1, CMD(0xdf), CMD(0xd4), CMD(0xd5), va);
@@ -1462,14 +1588,14 @@ static void draw_prim(GeList &l, uint32_t data) {
     if (t.idx) G.iaddr += count * (t.idx == 1 ? 1 : t.idx == 2 ? 2 : 4); else G.vaddr += count * vs;
     /* icone de carregamento (Ojama + disco, texturas loading000x embutidas no BOOT): no PSP indicava leitura do UMD, que
      * nao existe aqui; nao e desenhado (TF_LOADING_ICON=1 mantem) */
-    { static const bool keep = getenv("TF_LOADING_ICON") != nullptr;
+    { static const bool keep = getenv("TF_LOADING_ICON") != nullptr || game_id_built() != "ULES-00600";   /* enderecos do BOOT europeu */
       if (textured && !keep) { uint32_t ta = tex_addr(); if (ta >= 0x088ad000 && ta < 0x088b3800) return; } }
     bool flat = CMD(0x50) == 0;
     g_cull = (!t.through && (CMD(0x1d) & 1)) ? ((CMD(0x9b) & 1) ? 2 : 1) : 0;
     setup_state(textured);
     if (R.tex) {   /* GE_TEXDUMP_FRAME=n: grava cada textura distinta usada no quadro n (decodificada) em gen/tex_<end>_<fmt>.bmp */
         static const char *tdf = getenv("GE_TEXDUMP_FRAME");
-        if (tdf && display_frames() == (uint64_t)atoll(tdf)) {
+        if ((tdf && display_frames() == (uint64_t)atoll(tdf)) || (display_frames() >= ctl_dump_frame && display_frames() <= ctl_dump_frame + 1)) {
             static std::map<uint64_t, bool> done; uint64_t key = ((uint64_t)R.taddr << 8) | R.tpsm;
             if (!done[key]) {
                 done[key] = true;
@@ -1520,6 +1646,7 @@ static void draw_prim(GeList &l, uint32_t data) {
             if (gf->prot) { if (ok) native = false; else gpu_materialize(*gf); }
         }
     }
+    if (native && R.tex && g_gpu_on) gpu_unprotect_texture();
     { double tr0 = g_gpu_dbg ? gpu_now_us() : 0; if (native) raster_prim(job); if (g_gpu_dbg) g_gpu_us[4] += gpu_now_us() - tr0; }
     double t1 = pt ? now_us() : 0;
     if (!g_gpu_on && sw_res() > 1 && R.psm == 3) shadow_pass(job);
@@ -1545,9 +1672,22 @@ static void transfer(void) {
  * porque um callback de sinal pode reentrar no ge_run da mesma lista */
 static int g_ge_depth; static std::vector<uint32_t> g_ge_finished;
 static void ge_run_list(uint32_t id);
+double g_ge_frame_us;   /* tempo gasto no GE (listas, sombra, envio para a GPU) desde o ultimo quadro: divisao do quadro pesado (display.cpp) */
 static void ge_run(uint32_t id) {
+    static const bool lat_dbg = getenv("TF_LAT_DEBUG") != nullptr; const int64_t t_list = g_ge_depth || !lat_dbg ? 0 : pace_now(); const uint64_t p0 = g_prims;
+    const bool top = g_ge_depth == 0; const double tge0 = top ? qpc_us() : 0;   /* so a chamada de topo (a lista chamada pelo jogo), nao as aninhadas */
     g_ge_depth++; ge_run_list(id); g_ge_depth--;
-    if (!g_ge_depth && !g_ge_finished.empty()) { for (uint32_t f : g_ge_finished) g_lists.erase(f); g_ge_finished.clear(); }
+    if (t_list && g_prims - p0 > 100 && pace_have_exit()) { pace_stat(PACE_STAT_LIST0, pace_ms(t_list - pace_last_exit())); pace_stat(PACE_STAT_LIST1, pace_ms(pace_now() - pace_last_exit())); }
+    if (!g_ge_depth && !g_ge_finished.empty()) {
+        for (uint32_t f : g_ge_finished) g_lists.erase(f);
+        g_ge_finished.clear();
+        /* 60/120 FPS: a lista terminou, a GPU ja comeca o quadro real (o jogo monta tudo no fim do quadro, ~0,5 ms antes do vblank); o intermediario
+         * que vem depois dele fica pronto mais cedo e a fase do intermediario (pacing.cpp) encurta */
+        /* lista grande (quadro novo) sem alvos de textura: o quadro real fica retido e vai para a GPU logo atras do intermediario (gpu_hold) */
+        static uint64_t prims_kick; const bool big = g_prims - prims_kick > 100; prims_kick = g_prims;
+        if (g_gpu_on && interp_enabled()) { g_gpu_prof_tag = 'R'; if (big && interp_hold_ok()) gpu_hold(); else gpu_kick(); }
+    }
+    if (top) g_ge_frame_us += qpc_us() - tge0;
 }
 static void ge_run_list(uint32_t id) {
     GeList &l = g_lists[id];

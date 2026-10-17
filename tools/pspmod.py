@@ -3,7 +3,7 @@
 Uso: python tools/pspmod.py <modulo.prx> <base_hex> [savestate.ppst]
 Com savestate, compara a imagem relocada com a RAM do estado (oraculo).
 """
-import struct, sys
+import os, struct, sys
 from elfscan import load
 
 R_MIPS_32, R_MIPS_26, R_MIPS_HI16, R_MIPS_LO16 = 2, 4, 5, 6

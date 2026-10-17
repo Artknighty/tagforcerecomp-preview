@@ -191,7 +191,7 @@ static void atrac_parse(Atrac &a) {
     while (off + 8 <= n) {
         uint32_t csz = *(const uint32_t *)(p + off + 4); const uint8_t *c = p + off + 8;
         if (csz > n - off - 8) break;   /* bloco maior que o arquivo (dado corrompido): o deslocamento daria a volta em 32 bits (laco infinito) */
-        if (!memcmp(p + off, "fmt ", 4)) {
+        if (!memcmp(p + off, "fmt ", 4) && csz >= 16) {
             uint16_t fmt = *(const uint16_t *)c; a.chans = *(const uint16_t *)(c + 2); a.block = *(const uint16_t *)(c + 12);
             a.plus = fmt != 0x270; a.spf = a.plus ? 2048 : 1024;   /* 0x270 = ATRAC3; 0xfffe (extensivel) = ATRAC3plus */
             uint16_t cb = csz >= 18 ? *(const uint16_t *)(c + 16) : 0;

@@ -15,7 +15,9 @@ void display_set_iso(const char *utf8);
 void display_set_data(const wchar_t *dir);
 void mods_init(void);
 void texrepl_init(void);
+void ffmpeg_preload(void);
 void plugins_load(void);
+void decomp_init(void);
 std::string launcher_pick_iso(std::wstring *data);   /* ISO (jogar direto) ou, em *data, a pasta instalada */
 typedef void (*InstProgress)(double frac, const wchar_t *msg, void *ctx);
 bool iso_install(const wchar_t *iso, const wchar_t *dest, InstProgress cb, void *ctx, std::wstring *err);
@@ -26,6 +28,22 @@ static void cli_progress(double f, const wchar_t *m, void *) { static int last =
 void diag_init(void);
 void diag_start_game(void);
 void diag_flush(void);
+
+/* Um jogo por pasta de saves: dois processos com o MESMO ms0/ se sobrescreveriam (o ultimo a salvar vence). O mutex dura o processo todo; o
+ * "Reiniciar jogo" abre o novo processo antes de o antigo sair, entao ele espera ate 10 s. Testes automaticos (TF_KEEP_CWD / TF_LOG_DIR) usam
+ * o ms0 de teste e rodam em paralelo de proposito: ficam de fora. */
+static bool acquire_save_lock() {
+    if (getenv("TF_KEEP_CWD") || getenv("TF_LOG_DIR")) return true;
+    wchar_t cwd[MAX_PATH] = L""; GetCurrentDirectoryW(MAX_PATH, cwd);
+    uint32_t h = 2166136261u; for (const wchar_t *p = cwd; *p; p++) { h ^= (uint32_t)towlower(*p); h *= 16777619u; }
+    wchar_t name[64]; swprintf(name, 64, L"Local\\TagForceRecomp_%08x", h);
+    HANDLE m = CreateMutexW(nullptr, FALSE, name);
+    if (!m) return true;   /* sem mutex nao bloqueia o jogo */
+    DWORD r = WaitForSingleObject(m, 10000);   /* WAIT_ABANDONED = o processo anterior caiu: assumimos */
+    if (r == WAIT_OBJECT_0 || r == WAIT_ABANDONED) return true;   /* o handle fica aberto ate o fim do processo */
+    tf_msgbox(nullptr, L"The game is already running with this save folder. Close it first (two copies would overwrite each other's saves).", L"Tag Force Recomp", MB_ICONWARNING);
+    return false;
+}
 
 int main() {
     /* executavel de janela (sem console atras do jogo); se foi aberto de um terminal sem redirecionar a saida, usa o console dele */
@@ -75,9 +93,10 @@ started:
         if (!code_ready(id)) { std::wstring err; if (!code_prepare(id, data, [](double, const wchar_t *m, void *) { fprintf(stderr, "[prepare] %ls\n", m); }, nullptr, &err)) { tf_msgbox(nullptr, err.c_str(), L"Tag Force Recomp", MB_ICONERROR); diag_flush(); return 1; } }
     }
     if (game_handoff(iso, data)) { diag_flush(); return 0; }   /* ISO/pasta de outra versao do jogo: o executavel dela cuida (gameid.cpp) */
+    if (!acquire_save_lock()) { diag_flush(); return 1; }
     diag_start_game();
     if (!jit_init() && jit_generic()) { tf_msgbox(nullptr, L"Could not compile the translated game code (see the log in the logs folder). Delete the gen folder and start again; if it keeps failing, please report it.", L"Tag Force Recomp", MB_ICONERROR); diag_flush(); return 1; }   /* TF_JIT=1: modulos compilados em memoria pelo TinyCC */
-    host_create(); k_init(); mods_init(); texrepl_init(); plugins_load(); display_init(); display_set_iso(iso.c_str()); if (!data.empty()) display_set_data(data.c_str());
+    ffmpeg_preload(); host_create(); k_init(); mods_init(); texrepl_init(); plugins_load(); decomp_init(); display_init(); display_set_iso(iso.c_str()); if (!data.empty()) display_set_data(data.c_str());
     bool ok; module_load("SYSDIR/BOOT.BIN", &ok);
     const GenModule *boot = nullptr;
     { unsigned nm; const GenModule *gm = gen_modules(&nm); for (unsigned i = 0; i < nm; i++) if (!strcmp(gm[i].name, "BOOT")) boot = &gm[i]; }

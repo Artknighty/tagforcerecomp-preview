@@ -5,6 +5,7 @@
 #include "mods.h"
 #include "modbox.h"
 #include "dark_ui.h"
+#include "hotkeys.h"
 #include "util.h"
 #include "gameid.h"
 #include "../mods_sdk/tfmod.h"
@@ -38,10 +39,10 @@ struct Toggle { Plugin *p; std::wstring title; int vk; int (*get)(void); void (*
 std::vector<Toggle> g_toggles;     /* liga/desliga registrados pelos plugins (menu Mods com marca; tecla opcional no jogo) */
 void api_add_toggle(const wchar_t *title, int vk, int (*get)(void), void (*set)(int)) {
     if (!title || !get || !set || g_toggles.size() >= 20) return;
-    /* teclas da janela (F3 FPS, F7/F8 marcas, F9 capturas, F10 menu do Windows, F11 tela cheia, Esc) e os botoes do PSP no teclado (display.cpp,
-     * read_keys): uma delas trocaria o liga/desliga E apertaria o botao no jogo */
-    static const int reservadas[] = {VK_F3, VK_F7, VK_F8, VK_F9, VK_F10, VK_F11, VK_ESCAPE, VK_RETURN, VK_SHIFT, VK_UP, VK_DOWN, VK_LEFT, VK_RIGHT, 'Z', 'X', 'A', 'S', 'Q', 'W', 'D', 'E', 'F', 'R', 'C', VK_SPACE, VK_BACK, VK_TAB};
-    for (int r : reservadas) if (vk == r) { api_log("tecla %d reservada pelo jogo: liga/desliga so pelo menu", vk); vk = 0; }
+    /* teclas da janela (tabela kHotkeys, hotkeys.h; mais F10 = menu do Windows e Esc) e os botoes do PSP no teclado (display.cpp, read_keys):
+     * uma delas trocaria o liga/desliga E apertaria o botao no jogo */
+    static const int reservadas[] = {VK_F10, VK_ESCAPE, VK_RETURN, VK_SHIFT, VK_CONTROL, VK_UP, VK_DOWN, VK_LEFT, VK_RIGHT, 'Z', 'X', 'A', 'S', 'Q', 'W', 'D', 'E', 'F', 'R', 'C', VK_SPACE, VK_BACK, VK_TAB};
+    for (int r : reservadas) if (vk == r || hotkey_reserved(vk)) { api_log("tecla %d reservada pelo jogo: liga/desliga so pelo menu", vk); vk = 0; }
     Plugin *p = current(); const int menu = p ? p->menu : 0;
     g_toggles.push_back({p, title, vk, get, set, menu});
     api_log("liga/desliga no menu %s%s (atual: %s)", menu ? "Cheats" : "Mods", vk ? " e por tecla" : "", get() ? "ligado" : "desligado");
@@ -131,7 +132,6 @@ void plugins_load(void) {
 /* ---- ajustes dos plugins no menu Mods (menu.cpp) ---- */
 int plugin_slider_count(void) { return (int)g_sliders.size(); }
 int plugin_slider_menu(int i) { return i >= 0 && i < (int)g_sliders.size() ? g_sliders[i].menu : 0; }   /* 0 = menu Mods, 1 = menu Cheats */
-static std::wstring utf8w(const std::string &s) { const int n = MultiByteToWideChar(CP_UTF8, 0, s.c_str(), -1, nullptr, 0); std::wstring w(n > 0 ? n - 1 : 0, L'\0'); if (n > 1) MultiByteToWideChar(CP_UTF8, 0, s.c_str(), -1, &w[0], n); return w; }
 /* item do menu: titulo + "..." (abre a janela) e o valor atual a direita */
 std::wstring plugin_slider_title(int i) {   /* o menu mostra o titulo ate o primeiro " (" (a legenda entre parenteses fica so na janela do ajuste) */
     if (i < 0 || i >= (int)g_sliders.size()) return L"";
@@ -166,7 +166,7 @@ int plugin_toggle_by_key(int vk) {   /* tecla apertada no jogo: troca o liga/des
 bool plugin_slider_edit(HWND owner, int i) {
     if (i < 0 || i >= (int)g_sliders.size()) return false;
     const Slider &s = g_sliders[i]; int v = s.get();
-    const std::wstring title = utf8w(s.p ? s.p->name : std::string()), text = s.title;
+    const std::wstring title = to_wide(s.p ? s.p->name : std::string()), text = s.title;
     if (!tf_slider(owner, title.c_str(), text.c_str(), s.unit.c_str(), s.vmin, s.vmax, s.def, &v)) return false;
     void *prev = g_hook_owner; g_hook_owner = s.p; s.set(v); g_hook_owner = prev;   /* durante o set, o log do plugin leva o nome dele */
     return true;

@@ -104,17 +104,23 @@ static void cap_salvar(const char *tag, const uint32_t *src, int w, int h) {   /
  * TF_MARCA_NOTA_AUTO="texto" = grava com esse texto sem abrir a caixa (vazio = como Esc: descarta). */
 void display_notify(const char *msg);
 void plugins_marca(int n);
-void text_input_begin(const std::wstring &desc, const std::wstring &initial, int maxlen);
+void text_input_begin_multiline(const std::wstring &desc, const std::wstring &initial, int maxlen);
 int text_input_poll(std::wstring *out);
 bool text_input_busy(void);
 void audio_out_skip(bool on);
 extern volatile int g_diag_paused;
-static int g_marca_n, g_marcag_n, g_burst_n; static uint64_t g_burst_next;
-static bool g_marca_pedida, g_marcag_pedida, g_nota_aberta;
-static void marca_cpu(void) { if (!g_nota_aberta) g_marca_pedida = true; }
+static int g_marcag_n, g_burst_n; static uint64_t g_burst_next;
+static bool g_marcag_pedida, g_nota_aberta;
+static void marca_cpu(void) { if (!g_nota_aberta) g_marcag_pedida = true; }   /* F7 / L3+R3: agora a mesma marca geral do F8 */
 static void marca_graf(void) { if (!g_nota_aberta) g_marcag_pedida = true; }
 static void marca_nota_log(int n, const std::string &u0, const char *pref) {
-    std::string u = u0; for (char &c : u) if ((unsigned char)c < 0x20) c = ' ';
+    /* a nota pode ter varias linhas: no log vira uma linha so, com " / " no lugar de cada quebra (os relatorios leem o log por linha) */
+    std::string u; for (size_t i = 0; i < u0.size(); i++) {
+        const unsigned char c = (unsigned char)u0[i];
+        if (c == '\r') { if (i + 1 < u0.size() && u0[i + 1] == '\n') i++; u += " / "; }
+        else if (c == '\n') u += " / ";
+        else u += c < 0x20 ? ' ' : (char)c;
+    }
     fprintf(stderr, "[%s-nota] #%d: %s%c", pref, n, u.c_str(), 10);
 }
 static bool nota_vazia(const std::string &s) { for (char c : s) if ((unsigned char)c > ' ') return false; return true; }
@@ -124,7 +130,7 @@ static bool marca_nota_modal(bool graf, std::string *nota) {
     if (getenv("TF_MARCA_SEM_NOTA")) return true;
     if (const char *a = getenv("TF_MARCA_NOTA_AUTO")) { *nota = a; return !nota_vazia(*nota); }
     g_nota_aberta = true; g_diag_paused++; audio_out_skip(true); const ULONGLONG t0 = GetTickCount64();
-    text_input_begin(graf ? L"What looks wrong on the screen? (Esc or empty = discard)" : L"What did the CPU do wrong? (Esc or empty = discard)", L"", 300);
+    (void)graf; text_input_begin_multiline(L"What is wrong? Enter = new line, Ctrl+Enter = save, Esc or empty = discard", L"", 2000);
     std::wstring t; int st = 1;
     for (;;) {
         MSG m; while (PeekMessageW(&m, nullptr, 0, 0, PM_REMOVE)) { TranslateMessage(&m); DispatchMessageW(&m); }
@@ -153,12 +159,36 @@ static int seq_ring_n(void) {
     if (g_seq_n < 0) { const char *e = getenv("TF_SEQ_RING"); g_seq_n = e ? std::max(0, std::min(600, atoi(e))) : 90; g_seqm.assign((size_t)g_seq_n, SeqMeta{}); }
     return g_seq_n;
 }
+/* GRAVACAO CONTINUA (TF_SEQ_AUTO=<arquivo.bin>, para replays): TODO quadro apresentado (R e M) vira uma miniatura 160x90 RGB nesse arquivo (o anel de
+ * 600 e esvaziado a cada 400 quadros; um engasgo curto nesses pontos, aparece como intervalo grande no ms). Formato: "TFSEQ1\n", w, h (int32), depois por
+ * quadro: tag (char), susp (char), 2 bytes 0, ms (float), quadro do jogo (uint64), w*h*3 bytes. tools/piscadas_analisar.py procura quadros que destoam e voltam
+ * (A-B-A) em qualquer duracao, o que uma janela de 1,5 s nunca pega numa sessao inteira. */
+static const char *seq_auto_path(void) { static const char *e = getenv("TF_SEQ_AUTO"); return e && *e ? e : nullptr; }
+static void seq_auto_flush(int n) {
+    const int N = seq_ring_n(); const char *path = seq_auto_path(); if (!N || !path || n <= 0) return;
+    static FILE *f = nullptr;
+    if (!f) { f = fopen(path, "wb"); if (!f) return; const int32_t hd[2] = {160, 90}; fputs("TFSEQ1\n", f); fwrite(hd, 4, 2, f); }
+    const uint64_t k1 = g_seq_pos, k0 = k1 > (uint64_t)n ? k1 - (uint64_t)n : 0;
+    std::vector<uint32_t> px; std::vector<uint8_t> th(160 * 90 * 3);
+    for (uint64_t k = k0; k < k1; k++) {
+        const int slot = (int)(k % (uint64_t)N); int w = 0, h = 0;
+        if (!gpu_ring_read(slot, px, &w, &h) || w < 160 || h < 90) continue;
+        for (int y = 0; y < 90; y++) { const int ya = y * h / 90, yb = std::max(ya + 1, (y + 1) * h / 90);
+            for (int x = 0; x < 160; x++) { const int xa = x * w / 160, xb = std::max(xa + 1, (x + 1) * w / 160); uint32_t r = 0, g = 0, b = 0, c = 0;
+                for (int yy = ya; yy < yb; yy++) for (int xx = xa; xx < xb; xx++) { const uint32_t p = px[(size_t)yy * w + xx]; r += p & 255; g += (p >> 8) & 255; b += (p >> 16) & 255; c++; }
+                uint8_t *o = &th[((size_t)y * 160 + x) * 3]; o[0] = (uint8_t)(r / c); o[1] = (uint8_t)(g / c); o[2] = (uint8_t)(b / c); } }
+        const SeqMeta &m = g_seqm[slot]; const char hd[4] = {m.tag, (char)m.susp, 0, 0}; const float ms = (float)m.ms; const uint64_t fr = m.frame;
+        fwrite(hd, 1, 4, f); fwrite(&ms, 4, 1, f); fwrite(&fr, 8, 1, f); fwrite(th.data(), 1, th.size(), f);
+    }
+    fflush(f);
+}
 void display_seq_present(int fb, int tag) {   /* chamado por gpu_present_fb antes de mostrar o quadro (a reducao entra na fila da GPU antes da apresentacao) */
     const int N = seq_ring_n(); if (!N || fb < 0) return;
     const int slot = (int)(g_seq_pos % (uint64_t)N);
     if (!gpu_ring_push(fb, slot, N)) return;
     g_seqm[slot] = SeqMeta{tag ? 'M' : 'R', pace_mid_suspended(), seq_now_ms(), g_frames};
     g_seq_pos++;
+    if (seq_auto_path() && g_seq_pos % 400 == 0) seq_auto_flush(400);
 }
 /* le o anel (do mais antigo ao mais novo) e grava os PNGs numa thread */
 static void seq_gravar(const char *motivo) {
@@ -195,6 +225,7 @@ static void seq_gravar(const char *motivo) {
     }).detach();
 }
 static void seq_esperar_gravacao(void) {   /* ao sair do jogo: termina de gravar capturas e a caixa-preta (ate 15 s) */
+    if (seq_auto_path()) seq_auto_flush((int)(g_seq_pos % 400));   /* grava o resto da gravacao continua (TF_SEQ_AUTO) */
     for (int i = 0; g_grav_pend > 0 && i < 1500; i++) Sleep(10);
 }
 static void seq_quadro(void) {   /* a cada display_present: TF_SEQ_FRAME (replays) */

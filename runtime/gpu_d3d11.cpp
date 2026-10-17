@@ -27,6 +27,7 @@ cbuffer CB : register(b0) {
     uint amask; uint aover; uint aconst; uint pad1;
     float2 texsz; float2 fbsz;
     float4 sfix;
+    float4 uvr;   // retangulo de UV do sprite (texels do PSP): u0, v0, u1, v1
 };
 Texture2D T : register(t0);
 SamplerState S : register(s0);
@@ -49,6 +50,12 @@ PO ps_main(VO i) {
     if ((flags & 16) == 0) {
         if (flags & 1) {
             float2 uv = (i.uvw.xy / i.uvw.z) / texsz;
+            if (flags & 64) {   // sprite de atlas: nao amostra alem do retangulo de UV do sprite (meio texel da textura REAL: a substituta HD tem mais texels)
+                float2 sz; T.GetDimensions(sz.x, sz.y);
+                float2 ins = min(0.5 / texsz, 1.5 / sz);   // textura nativa: meio texel (= a amostragem do PSP); substituta HD: 1,5 texel dela (a fileira da borda tem halo da ampliacao)
+                float2 lo = uvr.xy / texsz + ins, hi = uvr.zw / texsz - ins;
+                uv = clamp(uv, lo, max(hi, lo));
+            }
             float4 t = T.Sample(S, uv);
             bool ta = (flags & 2) != 0;
             float3 vc = rgb; float va = a;
@@ -398,6 +405,18 @@ uint32_t d3d_tex_create(int w, int h, const uint32_t *px, bool mips) {
     uint32_t id; if (!g_tex_free.empty()) { id = g_tex_free.back(); g_tex_free.pop_back(); g_tex[id].srv = sv; } else { id = (uint32_t)g_tex.size(); g_tex.push_back({sv}); }
     return id;
 }
+static uint32_t d3d_tex_create_bc7(int w, int h, int levels, const uint8_t *data) {   /* BC7 com todos os niveis prontos (bc7.h) */
+    if (!g_dev || (w & 3) || (h & 3) || levels < 1 || levels > 16) return 0;
+    D3D11_TEXTURE2D_DESC d = {}; d.Width = w; d.Height = h; d.MipLevels = levels; d.ArraySize = 1; d.SampleDesc.Count = 1; d.Usage = D3D11_USAGE_IMMUTABLE;
+    d.Format = DXGI_FORMAT_BC7_UNORM; d.BindFlags = D3D11_BIND_SHADER_RESOURCE;
+    D3D11_SUBRESOURCE_DATA sd[16] = {}; int mw = w, mh = h;
+    for (int i = 0; i < levels; i++) { sd[i].pSysMem = data; sd[i].SysMemPitch = (UINT)((mw + 3) / 4 * 16); data += (size_t)((mw + 3) / 4) * ((mh + 3) / 4) * 16; mw = std::max(1, mw / 2); mh = std::max(1, mh / 2); }
+    ID3D11Texture2D *t = nullptr; if (FAILED(g_dev->CreateTexture2D(&d, sd, &t))) return 0;
+    ID3D11ShaderResourceView *sv = nullptr; HRESULT hr = g_dev->CreateShaderResourceView(t, nullptr, &sv); rel(t);
+    if (FAILED(hr)) return 0;
+    uint32_t id; if (!g_tex_free.empty()) { id = g_tex_free.back(); g_tex_free.pop_back(); g_tex[id].srv = sv; } else { id = (uint32_t)g_tex.size(); g_tex.push_back({sv}); }
+    return id;
+}
 void d3d_tex_release(uint32_t h) {
     if (!h || h >= g_tex.size() || !g_tex[h].srv) return;
     d3d_flush();   /* desenhos acumulados podem usar a textura */
@@ -430,14 +449,15 @@ static D3D11_BLEND map_factor(uint32_t f, bool is_src) {
 static ID3D11BlendState *get_blend(const GpuState &s) {
     uint32_t mask = (s.clear ? (((s.clear & 0x100) ? 7u : 0u) | ((s.clear & 0x200) ? 8u : 0u)) : 15u) & s.cmask;
     bool bl = s.blend && !s.clear;
-    uint64_t key = mask | ((uint64_t)bl << 4) | ((uint64_t)s.bsf << 5) | ((uint64_t)s.bdf << 9) | ((uint64_t)s.beq << 13);
+    const bool acb = bl && s.aconst;   /* blend + alfa gravado constante (stencil): o alfa de saida vem do canal alfa do fator de blend, o RGB blenda normal */
+    uint64_t key = mask | ((uint64_t)bl << 4) | ((uint64_t)s.bsf << 5) | ((uint64_t)s.bdf << 9) | ((uint64_t)s.beq << 13) | ((uint64_t)acb << 20);
     auto it = g_bsMap.find(key); if (it != g_bsMap.end()) return it->second;
     D3D11_BLEND_DESC d = {}; auto &r = d.RenderTarget[0]; r.RenderTargetWriteMask = (UINT8)mask;
     if (bl) {
         r.BlendEnable = TRUE; r.SrcBlend = map_factor(s.bsf, true); r.DestBlend = map_factor(s.bdf, false);
         static const D3D11_BLEND_OP ops[] = {D3D11_BLEND_OP_ADD, D3D11_BLEND_OP_SUBTRACT, D3D11_BLEND_OP_REV_SUBTRACT, D3D11_BLEND_OP_MIN, D3D11_BLEND_OP_MAX, D3D11_BLEND_OP_ADD};
         r.BlendOp = ops[s.beq > 5 ? 0 : s.beq];
-        r.SrcBlendAlpha = D3D11_BLEND_ONE; r.DestBlendAlpha = D3D11_BLEND_ZERO; r.BlendOpAlpha = D3D11_BLEND_OP_ADD;
+        r.SrcBlendAlpha = acb ? D3D11_BLEND_BLEND_FACTOR : D3D11_BLEND_ONE; r.DestBlendAlpha = D3D11_BLEND_ZERO; r.BlendOpAlpha = D3D11_BLEND_OP_ADD;
         if (r.BlendOp == D3D11_BLEND_OP_MIN || r.BlendOp == D3D11_BLEND_OP_MAX) { r.SrcBlend = r.DestBlend = D3D11_BLEND_ONE; }
     }
     ID3D11BlendState *b = nullptr; g_dev->CreateBlendState(&d, &b); g_bsMap[key] = b; return b;
@@ -460,6 +480,27 @@ static ID3D11DepthStencilState *get_depth(const GpuState &s) {
 }
 static void d3d_flush_impl(void);
 void d3d_flush(void) { double t = gpu_now_us(); d3d_flush_impl(); g_gpu_us[0] += gpu_now_us() - t; }
+/* envia o que ja foi gravado sem apresentar: a GPU comeca agora; d3d_wait_kicked espera esse envio terminar (consulta de evento; ms esperados) */
+static ID3D11Query *g_kickQ; static bool g_kickPend;
+static void d3d_kick(void) {
+    if (!g_ctx) return;
+    d3d_flush();
+    if (!g_kickQ) { D3D11_QUERY_DESC qd = {D3D11_QUERY_EVENT, 0}; g_dev->CreateQuery(&qd, &g_kickQ); }
+    if (g_kickQ) { g_ctx->End(g_kickQ); g_kickPend = true; }
+    g_ctx->Flush();
+}
+static double d3d_wait_kicked(void) {
+    if (!g_kickPend || !g_kickQ || !g_ctx) return 0;
+    g_kickPend = false; const double t = gpu_now_us(); BOOL done = FALSE;
+    while (g_ctx->GetData(g_kickQ, &done, sizeof done, 0) == S_FALSE) YieldProcessor();
+    return (gpu_now_us() - t) / 1000.0;
+}
+static double d3d_wait_kicked_for(double max_ms) {
+    if (!g_kickPend || !g_kickQ || !g_ctx) return 0;
+    const double t = gpu_now_us(); BOOL done = FALSE;
+    while (g_ctx->GetData(g_kickQ, &done, sizeof done, 0) == S_FALSE) { if ((gpu_now_us() - t) / 1000.0 >= max_ms) return -1; YieldProcessor(); }
+    g_kickPend = false; return (gpu_now_us() - t) / 1000.0;
+}
 static void d3d_flush_impl(void) {
     if (g_cmds.empty() || !g_dev) { g_cmds.clear(); g_verts.clear(); return; }
     D3D11_MAPPED_SUBRESOURCE m;
@@ -480,7 +521,7 @@ static void d3d_flush_impl(void) {
             sc.left = std::max<LONG>(0, sc.left); sc.top = std::max<LONG>(0, sc.top); sc.right = std::min<LONG>(f.w, sc.right); sc.bottom = std::min<LONG>(f.h, sc.bottom);
             if (sc.right <= sc.left || sc.bottom <= sc.top) continue;
             g_ctx->RSSetScissorRects(1, &sc);
-            float bf[4] = {(s.fix & 255) / 255.f, ((s.fix >> 8) & 255) / 255.f, ((s.fix >> 16) & 255) / 255.f, 1.f};
+            float bf[4] = {(s.fix & 255) / 255.f, ((s.fix >> 8) & 255) / 255.f, ((s.fix >> 16) & 255) / 255.f, (s.blend && s.aconst && !s.clear) ? (s.aconst & 255) / 255.f : 1.f};
             g_ctx->OMSetBlendState(get_blend(s), bf, 0xffffffff);
             g_ctx->OMSetDepthStencilState(get_depth(s), s.st ? (s.sref & 255) : 0);
             ID3D11ShaderResourceView *tsrv = nullptr;
@@ -490,9 +531,10 @@ static void d3d_flush_impl(void) {
             }
             bool tex = tsrv != nullptr;
             if (tex) { g_ctx->PSSetShaderResources(0, 1, &tsrv); g_ctx->PSSetSamplers(0, 1, &g_smp[(s.linear ? 4 : 0) | (s.clampu ? 2 : 0) | (s.clampv ? 1 : 0)]); }
-            struct { float tenv[4]; uint32_t flags, tfn, afunc, aref, amask, aover, aconst, p1; float tsz[2], fbsz[2]; float sfix[4]; } cb = {};
+            struct { float tenv[4]; uint32_t flags, tfn, afunc, aref, amask, aover, aconst, p1; float tsz[2], fbsz[2]; float sfix[4]; float uvr[4]; } cb = {};
             cb.tenv[0] = (s.tenv & 255) / 255.f; cb.tenv[1] = ((s.tenv >> 8) & 255) / 255.f; cb.tenv[2] = ((s.tenv >> 16) & 255) / 255.f;
-            cb.flags = (tex ? 1u : 0u) | (s.talpha ? 2u : 0u) | (s.tdbl ? 4u : 0u) | ((s.atest && !s.clear) ? 8u : 0u) | (s.clear ? 16u : 0u) | ((s.aconst && !s.clear) ? 32u : 0u);
+            cb.flags = (tex ? 1u : 0u) | (s.talpha ? 2u : 0u) | (s.tdbl ? 4u : 0u) | ((s.atest && !s.clear) ? 8u : 0u) | (s.clear ? 16u : 0u) | ((s.aconst && !s.clear && !s.blend) ? 32u : 0u) | ((tex && s.uvclamp) ? 64u : 0u);
+            cb.uvr[0] = s.cu0; cb.uvr[1] = s.cv0; cb.uvr[2] = s.cu1; cb.uvr[3] = s.cv1;
             cb.aconst = s.aconst & 255; cb.tfn = s.tfn; cb.afunc = s.afunc; cb.aref = s.aref; cb.amask = s.amask;
             cb.aover = (s.blend && s.bsf == 6) ? 1 : (s.blend && s.bsf == 7) ? 2 : (s.blend && s.bsf == 11) ? 3 : 0;
             cb.sfix[0] = (s.sfix & 255) / 255.f; cb.sfix[1] = ((s.sfix >> 8) & 255) / 255.f; cb.sfix[2] = ((s.sfix >> 16) & 255) / 255.f;
@@ -593,11 +635,11 @@ static void d3d_destroy_all(void) {
     rel(g_ovT); rel(g_ovS); g_ovOn = false; rel(g_pixT); rel(g_pixS);
     for (auto &s : g_smp) rel(s); rel(g_sPoint); rel(g_sLin);
     rel(g_vs); rel(g_vsFull); rel(g_ps); rel(g_psResync); rel(g_psDown); rel(g_psPresent); rel(g_psOverlay); rel(g_il); rel(g_cb); rel(g_cb2); rel(g_vb);
-    rel(g_back);
+    rel(g_back); rel(g_kickQ); g_kickPend = false;
     if (g_ctx) { g_ctx->ClearState(); g_ctx->Flush(); }
     rel(g_swap); rel(g_ctx); rel(g_dev);
 }
 static void d3d_release_all(void) { d3d_destroy_all(); }
 const GpuBackend gpu_backend_d3d11 = {"Direct3D 11", d3d_init, d3d_ready, d3d_release_all, d3d_adapter_name, d3d_fb_create, d3d_fb_destroy, d3d_fb_upload, d3d_check_start, d3d_check_get,
     d3d_fb_readback, d3d_draw, d3d_flush, d3d_tex_create, d3d_tex_release, d3d_present_fb, d3d_present_pixels, d3d_present_last, d3d_set_overlay, d3d_has_stencil,
-    d3d_ring_push, d3d_ring_read};
+    d3d_ring_push, d3d_ring_read, d3d_kick, d3d_wait_kicked, nullptr, nullptr, nullptr, nullptr, d3d_tex_create_bc7, d3d_wait_kicked_for};

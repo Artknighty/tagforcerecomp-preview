@@ -5,6 +5,7 @@
 #include <string>
 #include <windows.h>
 #include <stdlib.h>
+#include <io.h>
 
 struct Dialog { int status = 0; uint32_t params = 0; };
 static Dialog g_save, g_msg, g_osk, g_net;
@@ -32,7 +33,9 @@ static void savedata_run(uint32_t p) {
         mkdirs(dir); std::string tmp = file + ".tmp"; FILE *f = fopen(tmp.c_str(), "wb");
         if (!f) { result = (int32_t)0x80110307; break; }
         size_t want = datasz ? datasz : bufsz;
-        bool ok = fwrite(mem_ptr(buf), 1, want, f) == want; ok = (fclose(f) == 0) && ok;
+        bool ok = fwrite(mem_ptr(buf), 1, want, f) == want;
+        ok = fflush(f) == 0 && _commit(_fileno(f)) == 0 && ok;   /* dados no disco ANTES da troca de nome: numa queda de energia o nome novo nao aponta para um arquivo vazio */
+        ok = (fclose(f) == 0) && ok;
         if (!ok || !MoveFileExA(tmp.c_str(), file.c_str(), MOVEFILE_REPLACE_EXISTING | MOVEFILE_WRITE_THROUGH)) { DeleteFileA(tmp.c_str()); result = (int32_t)0x80110307; }
         break; }
     case 7: case 9: case 10: RemoveDirectoryA(dir.c_str()); break;
@@ -40,8 +43,8 @@ static void savedata_run(uint32_t p) {
     }
     wr32(p + 0x1c, (uint32_t)result);
     extern void display_notify(const char *msg);
-    if (mode == 1 || mode == 3 || mode == 5) display_notify(result == 0 ? "jogo salvo" : "ERRO ao salvar");
-    else if ((mode == 2 || mode == 4) && result == 0) display_notify("save carregado");
+    if (mode == 1 || mode == 3 || mode == 5) display_notify(result == 0 ? "Game saved" : "ERROR: the game could not be saved");
+    else if ((mode == 2 || mode == 4) && result == 0) display_notify("Save loaded");
     fprintf(stderr, "[savedata] modo %u %s -> %08x\n", mode, mode >= 7 ? dir.c_str() : file.c_str(), (uint32_t)result);
 }
 static void step(Dialog &d, void (*run)(uint32_t)) {

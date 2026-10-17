@@ -33,7 +33,7 @@ experimental, what is missing, and what may change. If something is not listed h
 | Audio (SAS, ATRAC3/3+) and H.264 movies | Works (a slim FFmpeg ships in the zip) |
 | Direct3D 11 / Vulkan renderers, 1x–8x resolution, MSAA, HD font | Works in testing |
 | HD replacement textures (PPSSPP-format packs) | Works; the packs themselves are not distributed |
-| **60 FPS by interpolation** | **Experimental.** Game logic stays at 30 FPS; visual glitches in rarely-seen scenes are possible (there is a menu switch to go back to 30) |
+| **60 / 120 FPS by interpolation** | **Experimental.** Game logic stays at 30 FPS; visual glitches in rarely-seen scenes are possible (there is a menu switch to go back to 30) |
 | Sync modes / frame pacing | Works; "lowest latency" may tear |
 | Native text entry, mouse in menus | Works; **mouse in menus is experimental** |
 | Behavior mods: Better AI, Better Decks, CPU vs CPU, Booster box, Cheats | Work with the European version; AI quality is measured statistically in an arena, not guaranteed in every matchup |

@@ -65,7 +65,6 @@ static uint32_t max_free() {
     for (auto &b : g_blocks) { if (b.start > s) best = std::max(best, b.start - s); s = b.start + b.size; }
     return std::max(best, USER_END - s);
 }
-void k_reserve(uint32_t start, uint32_t size, const char *name) { k_alloc(size, 2, start & ~0xffu, name); }
 
 /* ------------------------------------------------------------------ threads */
 enum St { DORMANT, READY, RUNNING, WAITING, DEAD };
@@ -86,7 +85,6 @@ static std::deque<Thread *> g_vblank_waiters;
 void display_present(void);
 
 uint64_t k_now_us(void) { return g_now; }
-void k_advance(uint32_t us) { g_now += us; }
 uint32_t k_current_uid(void) { return g_cur ? g_cur->uid : 0; }
 static Thread *find_thread(uint32_t uid) { auto it = g_threads.find(uid); return it == g_threads.end() ? nullptr : it->second; }
 
@@ -201,23 +199,28 @@ struct Evf  { uint32_t pat; std::deque<Thread *> q; uint32_t attr = 0, init = 0;
 static std::map<uint32_t, Sema> g_sema;
 static std::map<uint32_t, Evf> g_evf;
 
-static void sema_dispatch(Sema &s) {
+/* Uma thread cuja espera estourou o tempo continua na fila ate alguem varrer a fila: confere o objeto esperado (wobj) para nao acordar,
+ * por engano, quem ja passou a esperar outro semaforo/event flag. */
+static bool waiting_on(const Thread *t, Wait kind, uint32_t uid) { return t->st == WAITING && t->wk == kind && t->wobj == uid; }
+template <class Q> static void enqueue_waiter(Q &q, Thread *t) { q.erase(std::remove(q.begin(), q.end(), t), q.end()); q.push_back(t); }   /* sem entrada velha repetida */
+
+static void sema_dispatch(uint32_t uid, Sema &s) {
     while (!s.q.empty()) {
         Thread *t = s.q.front();
-        if (t->st != WAITING || t->wk != W_SEMA) { s.q.pop_front(); continue; }
+        if (!waiting_on(t, W_SEMA, uid)) { s.q.pop_front(); continue; }
         if (s.count < (int)t->need) break;
         s.count -= t->need; s.q.pop_front(); make_ready(t, 0);
     }
 }
 static bool evf_match(Evf &e, Thread *t) {
     bool ok = (t->mode & 1) ? (e.pat & t->need) != 0 : (e.pat & t->need) == t->need;
-    if (ok) { if (t->out_ptr) wr32(t->out_ptr, e.pat); if (t->mode & 0x20) e.pat &= ~t->need; else if (t->mode & 0x10) e.pat = 0; }
+    if (ok) { if (t->out_ptr) wr32(t->out_ptr, e.pat); if (t->mode & 0x10) e.pat = 0; if (t->mode & 0x20) e.pat &= ~t->need; }
     return ok;
 }
-static void evf_dispatch(Evf &e) {
+static void evf_dispatch(uint32_t uid, Evf &e) {
     for (auto it = e.q.begin(); it != e.q.end();) {
         Thread *t = *it;
-        if (t->st != WAITING || t->wk != W_EVF) { it = e.q.erase(it); continue; }
+        if (!waiting_on(t, W_EVF, uid)) { it = e.q.erase(it); continue; }
         if (evf_match(e, t)) { make_ready(t, 0); it = e.q.erase(it); } else ++it;
     }
 }
@@ -310,19 +313,19 @@ HLE(sceKernelCreateSema) { uint32_t u = new_uid(); g_sema[u] = Sema{(int)ARG(2),
 #define KERR_WAIT_DELETE 0x800201b5u   /* o objeto esperado foi apagado */
 HLE(sceKernelDeleteSema) {   /* quem esperava acorda com WAIT_DELETE (antes ficava preso para sempre) */
     auto it = g_sema.find(ARG(0)); if (it == g_sema.end()) { RET(KERR_UNKNOWN_UID); return; }
-    for (Thread *t : it->second.q) if (t->st == WAITING && t->wk == W_SEMA && t->wobj == ARG(0)) make_ready(t, KERR_WAIT_DELETE);
+    for (Thread *t : it->second.q) if (waiting_on(t, W_SEMA, ARG(0))) make_ready(t, KERR_WAIT_DELETE);
     g_sema.erase(it); RET(0); preempt_check();
 }
 HLE(sceKernelSignalSema) {
     auto it = g_sema.find(ARG(0)); if (it == g_sema.end()) { RET(KERR_UNKNOWN_UID); return; }
-    it->second.count += ARG(1); sema_dispatch(it->second); RET(0); preempt_check();
+    it->second.count += ARG(1); sema_dispatch(ARG(0), it->second); RET(0); preempt_check();
 }
 static void wait_sema(CPU *c) {
     auto it = g_sema.find(ARG(0)); if (it == g_sema.end()) { RET(KERR_UNKNOWN_UID); return; }
     Sema &s = it->second; uint32_t need = ARG(1);
     if (s.count >= (int)need && s.q.empty()) { s.count -= need; RET(0); return; }
     bool has; uint32_t to = timeout_of(ARG(2), has);
-    g_cur->wk = W_SEMA; g_cur->wobj = ARG(0); g_cur->need = need; s.q.push_back(g_cur);
+    g_cur->wk = W_SEMA; g_cur->wobj = ARG(0); g_cur->need = need; enqueue_waiter(s.q, g_cur);
     k_block_current(to, has); RET(g_cur->result);
 }
 HLE(sceKernelWaitSema) { wait_sema(c); }
@@ -335,12 +338,12 @@ HLE(sceKernelCreateEventFlag) {   /* (nome, attr, padrao inicial, opt) */
 }
 HLE(sceKernelDeleteEventFlag) {
     auto it = g_evf.find(ARG(0)); if (it == g_evf.end()) { RET(KERR_UNKNOWN_UID); return; }
-    for (Thread *t : it->second.q) if (t->st == WAITING && t->wk == W_EVF && t->wobj == ARG(0)) make_ready(t, KERR_WAIT_DELETE);
+    for (Thread *t : it->second.q) if (waiting_on(t, W_EVF, ARG(0))) make_ready(t, KERR_WAIT_DELETE);
     g_evf.erase(it); RET(0); preempt_check();
 }
 HLE(sceKernelSetEventFlag) {
     auto it = g_evf.find(ARG(0)); if (it == g_evf.end()) { RET(KERR_UNKNOWN_UID); return; }
-    it->second.pat |= ARG(1); evf_dispatch(it->second); RET(0); preempt_check();
+    it->second.pat |= ARG(1); evf_dispatch(ARG(0), it->second); RET(0); preempt_check();
 }
 HLE(sceKernelClearEventFlag) { auto it = g_evf.find(ARG(0)); if (it == g_evf.end()) { RET(KERR_UNKNOWN_UID); return; } it->second.pat &= ARG(1); RET(0); }
 HLE(sceKernelWaitEventFlag) {   /* (id, bits, mode, outBits*, timeout*) */
@@ -349,7 +352,7 @@ HLE(sceKernelWaitEventFlag) {   /* (id, bits, mode, outBits*, timeout*) */
     g_cur->need = ARG(1); g_cur->mode = ARG(2); g_cur->out_ptr = ARG(3);
     if (evf_match(e, g_cur)) { RET(0); return; }
     bool has; uint32_t to = timeout_of(ARG(4), has);
-    g_cur->wk = W_EVF; g_cur->wobj = ARG(0); e.q.push_back(g_cur);
+    g_cur->wk = W_EVF; g_cur->wobj = ARG(0); enqueue_waiter(e.q, g_cur);
     k_block_current(to, has); RET(g_cur->result);
 }
 /* SceKernelEventFlagInfo: size, name[32], attr, initPattern, currentPattern, numWaitThreads. Antes nada era preenchido e o
@@ -410,14 +413,14 @@ HLE(sceKernelAllocateFpl) {   /* (uid, void **data, timeout*) */
     for (;;) {
         for (uint32_t i = 0; i < f.n; i++) if (!f.used[i]) { f.used[i] = true; wr32(ARG(1), f.base + i * f.bsize); RET(0); return; }
         bool has; uint32_t to = timeout_of(ARG(2), has);
-        g_cur->wk = W_MBX; g_cur->wobj = ARG(0); f.q.push_back(g_cur); k_block_current(to, has);
+        g_cur->wk = W_MBX; g_cur->wobj = ARG(0); enqueue_waiter(f.q, g_cur); k_block_current(to, has);
         if (g_cur->result) { RET(g_cur->result); return; }
     }
 }
 HLE(sceKernelFreeFpl) {
     auto it = g_fpl.find(ARG(0)); if (it == g_fpl.end()) { RET(KERR_UNKNOWN_UID); return; }
     Fpl &f = it->second; uint32_t i = (ARG(1) - f.base) / f.bsize; if (i < f.n) f.used[i] = false;
-    while (!f.q.empty()) { Thread *t = f.q.front(); f.q.pop_front(); if (t->st == WAITING && t->wk == W_MBX) { make_ready(t, 0); break; } }
+    while (!f.q.empty()) { Thread *t = f.q.front(); f.q.pop_front(); if (waiting_on(t, W_MBX, ARG(0))) { make_ready(t, 0); break; } }
     RET(0); preempt_check();
 }
 static std::map<uint32_t, uint32_t> g_vpl_size;      /* uid -> tamanho do pool (nao restringimos; so registro) */

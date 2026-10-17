@@ -1,4 +1,5 @@
 #version 450
+#extension GL_EXT_samplerless_texture_functions : require
 layout(location = 0) in vec3 vUvw;
 layout(location = 1) in vec4 vCol;
 layout(location = 2) in float vZ;
@@ -11,6 +12,7 @@ layout(push_constant) uniform PC {
     uint amask; uint aover; uint sidx; uint aconst;
     vec2 texsz; vec2 pad2;
     vec4 sfix;
+    vec4 uvr;
 } pc;
 vec4 fetch(vec2 uv) {
     switch (pc.sidx) {
@@ -35,6 +37,12 @@ void main() {
     if ((pc.flags & 16u) == 0u) {
         if ((pc.flags & 1u) != 0u) {
             vec2 uv = (vUvw.xy / vUvw.z) / pc.texsz;
+            if ((pc.flags & 64u) != 0u) {   // sprite de atlas: nao amostra alem do retangulo de UV do sprite (meio texel da textura REAL: a substituta HD tem mais texels)
+                vec2 sz = vec2(textureSize(tex, 0));
+                vec2 ins = min(0.5 / pc.texsz, 1.5 / sz);   // textura nativa: meio texel (= a amostragem do PSP); substituta HD: 1,5 texel dela (a fileira da borda tem halo da ampliacao)
+                vec2 lo = pc.uvr.xy / pc.texsz + ins, hi = pc.uvr.zw / pc.texsz - ins;
+                uv = clamp(uv, lo, max(hi, lo));
+            }
             vec4 t = fetch(uv);
             bool ta = (pc.flags & 2u) != 0u;
             vec3 vc = rgb; float va = a;

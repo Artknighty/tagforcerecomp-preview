@@ -10,6 +10,7 @@
 #   INPUTS=arq   usa outro arquivo de entradas (ex.: a sessao cortada + teclas novas) no lugar de gen/logs/<sessao>.inputs
 #   PRIMEIRO_PLANO=1  mostra a janela; COM_SOM=1 liga o som (padrao: escondida e muda, p/ nao atrapalhar)    
 #   RECENT=arq   copia uma lista texturas_recentes.txt para a pasta da reproducao (testa o pre-carregamento das texturas substitutas)
+#   TEXCACHE=pasta  copia um texcache/ de outra reproducao (pixels ja decodificados: testa a 2a visita as texturas)
 #   INI=arq      parte de uma copia desse .ini (INI=gen/tagforce_recomp.ini = config exata of the player, inclusive filtro/proporcao, que nao tem variavel)
 cd "$(dirname "$0")/.."
 ROOT=$(pwd); S="$1"; STEP="${2:-1000}"
@@ -26,6 +27,7 @@ copiar_mod() { src="${1%/}"; dst="$2/$(basename "$src")"; mkdir -p "$dst"
   for f in "$src"/*; do if [ "$(basename "$f")" = llm ] && [ "${TF_IA_LLM:-0}" = 0 ] && ! grep -qs '^llm=1' "$src/config.ini"; then continue; fi; cp -r "$f" "$dst/"; done; }
 if [ -z "$MODDIR" ]; then mkdir -p "$W/mods"; for d in "$ROOT"/gen/mods/*/; do [ -f "$d/plugin.dll" ] && [ ! -f "$d/disabled" ] && copiar_mod "$d" "$W/mods"; done; fi
 [ -n "$RECENT" ] && cp "$RECENT" "$W/texturas_recentes.txt"
+[ -n "$TEXCACHE" ] && cp -r "$TEXCACHE" "$W/texcache"   # cache em disco das texturas decodificadas de uma execucao anterior (teste "a quente")
 LAST=$(tr ',' '\n' < "$IN" | grep : | tail -1 | cut -d: -f1); END=${ENDF:-$((LAST + 600))}
 F=$(python -c "print(','.join(str(i) for i in list(range($STEP, $END, $STEP)) + [$END]))")
 [ -n "$SNAPS" ] && F="$SNAPS"
@@ -38,6 +40,8 @@ export TF_INI="$TF_LOG_DIR/teste.ini"   # .ini proprio: as configuracoes of the 
 # INI=arq: parte de uma COPIA desse .ini (ex.: INI=gen/tagforce_recomp.ini = a config exata of the player: filtro, proporcao, 60 FPS...; o original nunca e gravado)
 [ -n "$INI" ] && mkdir -p "$TF_LOG_DIR" && cp "$INI" "$TF_INI"
 [ -z "$PRIMEIRO_PLANO" ] && export TF_SEGUNDO_PLANO=1; [ -z "$COM_SOM" ] && export NO_AUDIO=1
+# janela escondida: caixa Sim/Nao (ex.: sair do jogo) respondida com Nao, senao o teste fica parado esperando um clique
+[ -z "$PRIMEIRO_PLANO" ] && [ -z "$TF_CONFIRM_AUTO" ] && export TF_CONFIRM_AUTO=0
 # MODO LEVE (padrao): sem cache da ISO na RAM (800 MB por processo) e renderizador por software: ~140 MB por duelo em vez de ~1 GB, mesmo resultado (testado: duelo identico) e mesma velocidade.
 # PESADO=1 desliga (testes de textura/cenario/capturas usam a GPU); PACE=1 (performance real) e TF_CAPTURAS tambem mantem a config completa.
 [ -z "$PESADO" ] && [ -z "$PACE" ] && [ -z "$TF_CAPTURAS" ] && export TF_NO_ISO_CACHE=1 TF_GPU=0

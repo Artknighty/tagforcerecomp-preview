@@ -15,10 +15,13 @@ void mods_patch_raw(uint32_t lba, uint8_t *buf, uint32_t nsectors);
 
 /* menu Mods */
 int mods_count(void);
+int mods_find(const char *folder);        /* indice do mod pela pasta (mods/<pasta>); -1 se nao existe */
+bool mods_menu_visible(int i);             /* pacotes Enhanced/Original sao controlados em Graphics > Textures */
 void mods_plugin_dirs(std::vector<std::pair<std::string, std::wstring>> &out);   /* {nome, pasta} dos mods ligados (plugins.cpp procura plugin.dll) */
 const wchar_t *mods_label(int i);         /* nome do mod */
 const wchar_t *mods_detail(int i);        /* "v1.0 \x00B7 autor" (o que o mod.txt tiver) */
 bool mods_enabled(int i);
 void mods_set_enabled(int i, bool on);    /* grava/apaga mods/<pasta>/disabled; vale no proximo inicio */
 void mods_texture_dirs(std::vector<std::wstring> &out);   /* pastas de texturas substitutas dos mods ligados */
+bool mods_enabled_has_file(const char *relative);   /* algum mod ligado tem este arquivo (ex.: marca "menu_estilo_pc.txt" do Enhanced) */
 void mods_open_folder(void);              /* abre mods/ no Explorer (cria com LEIA-ME se faltar) */

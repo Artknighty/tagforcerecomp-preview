@@ -184,9 +184,12 @@ HLE(sceIoGetFdList) { RET(0); }
 
 /* ---- assincrono: executa na hora e guarda o resultado para WaitAsync/PollAsync ---- */
 static void set_async(uint32_t fd, int64_t res) { File &f = g_files[fd]; f.has_async = true; f.async_res = res; }
-HLE(sceIoOpenAsync) { int64_t fd = do_open(mem_cstr(ARG(0)), ARG(1)); if (fd < 0) { RET(fd); return; } set_async((uint32_t)fd, fd); RET(fd); }
+HLE(sceIoOpenAsync) { int64_t fd = do_open(mem_cstr(ARG(0)), ARG(1)); if (fd < 0 || (uint64_t)fd >= 0x80000000ull) { RET(fd); return; } set_async((uint32_t)fd, fd); RET(fd); }   /* erros sao 0x8001xxxx positivos (sem entrada falsa na tabela) */
 HLE(sceIoReadAsync) { int64_t r = do_read(ARG(0), ARG(1), ARG(2)); if (!g_files.count(ARG(0))) { RET(ERR_BADF); return; } set_async(ARG(0), r); RET(0); }
-HLE(sceIoWriteAsync) { if (!g_files.count(ARG(0))) { RET(ERR_BADF); return; } set_async(ARG(0), ARG(2)); RET(0); }
+HLE(sceIoWriteAsync) {   /* nenhum modulo do jogo chama (conferido nos gen/ *.c em 2026-10-14); antes so fingia gravar */
+    auto it = g_files.find(ARG(0)); if (it == g_files.end() || it->second.kind != File::HOST) { RET(ERR_BADF); return; }
+    set_async(ARG(0), (int64_t)fwrite(mem_ptr(ARG(1)), 1, ARG(2), it->second.fp)); RET(0);
+}
 HLE(sceIoLseekAsync) { int64_t r = do_lseek(ARG(0), (int64_t)(((uint64_t)ARG(3) << 32) | ARG(2)), ARG(4)); if (!g_files.count(ARG(0))) { RET(ERR_BADF); return; } set_async(ARG(0), r); RET(0); }
 HLE(sceIoLseek32Async) { int64_t r = do_lseek(ARG(0), (int32_t)ARG(1), ARG(2)); if (!g_files.count(ARG(0))) { RET(ERR_BADF); return; } set_async(ARG(0), r); RET(0); }
 HLE(sceIoIoctlAsync) { if (!g_files.count(ARG(0))) { RET(ERR_BADF); return; } set_async(ARG(0), 0); RET(0); }
