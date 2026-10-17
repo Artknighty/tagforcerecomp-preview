@@ -45,7 +45,7 @@ experimental, what is missing, and what may change. If something is not listed h
 
 ## Known limitations of this preview
 
-- **The release zip is ~9 MB** (a slim LGPL FFmpeg with only the ATRAC3/3+ and H.264 decoders).
+- **The release zip is ~13 MB** (a slim LGPL FFmpeg with only the ATRAC3/3+ and H.264 decoders).
   Only the European release (ULES-00600) is supported by the zip; other versions need a source build
   ([VERSIONS.md](VERSIONS.md)). First-run preparation takes a few minutes; later starts take a few seconds (the translated code is
   compiled in memory).
