@@ -1,48 +1,48 @@
 # Changelog
 
-Formato: [Keep a Changelog](https://keepachangelog.com/pt-BR/1.1.0/). Versionamento: [SemVer](https://semver.org/lang/pt-BR/).
+Format: [Keep a Changelog](https://keepachangelog.com/en/1.1.0/). Versioning: [SemVer](https://semver.org/).
 
 ## [0.3.0] - 2026-10-18
 
-### Adicionado
-- Página **Mods** no lançador: liga/desliga mods e muda a ordem de prioridade (`mods/load_order.txt`).
-- Página **Cheats** no lançador; "Unlock everything" também na tecla F2.
-- Modo de janela (janela / tela cheia) no lançador e no menu Graphics.
-- Marcas rápidas no controle, sem caixa de nota: L3 = defeito gráfico, R3 = performance, Start+Select = áudio (salva os últimos 8 s em WAV).
-- Gravação contínua do monitor para caçar piscadas (`jogar_gravando.bat`).
+### Added
+- **Mods** page in the launcher: turn mods on/off and change their priority order (`mods/load_order.txt`).
+- **Cheats** page in the launcher; "Unlock everything" also on the F2 key.
+- Window mode (windowed / fullscreen) in the launcher and in the Graphics menu.
+- Quick marks on the controller, no note box: L3 = graphics glitch, R3 = performance, Start+Select = audio (saves the last 8 s as a WAV).
+- Continuous monitor recording to hunt flicker (`jogar_gravando.bat`).
 
-### Alterado
-- Cheats, CPU vs CPU e Monstros no Campo saem da lista de mods (têm menu próprio).
-- Transição de música/áudio entre áreas mais suave.
-- O cursor do mouse some em 3 s com controle ligado.
-- A marca F8 mostra o modo de FPS real (120/60/30).
+### Changed
+- Cheats, CPU vs CPU and Monsters on the Field no longer appear in the mod list (they have their own menu).
+- Smoother music/audio transition between areas.
+- The mouse cursor hides after 3 s when a controller is on.
+- The F8 mark shows the real FPS mode (120/60/30).
 
-### Corrigido
-- 120 FPS: letras de texto nascendo cinza ou deslizando na troca de mensagem; cabeça do NPC solta do corpo; barra do item do menu entortando; boneco do mapa congelando ou cortando ao trocar de pose.
+### Fixed
+- 120 FPS: text letters appearing gray or sliding when a message changes; NPC head detached from the body; menu item bar bending; map character freezing or clipping when changing pose.
 
 ## [0.2.0] - 2026-10-17
 
-### Adicionado
-- Opção de 120 FPS (interpolação com ritmo medido) e 60 FPS mais suave durante a sessão inteira.
-- Texturas HD comprimidas em BC7 (um quarto da memória), com cache em disco e carregamento em segundo plano.
-- Menu do título com Continue, New Game e Exit to Desktop (pergunta antes de sair); nome do jogador digitado dentro do jogo.
-- Opção Graphics dentro do jogo e no lançador, com seletor de texturas Original/Enhanced (atalho F5).
-- Cheat "Unlock everything": cartas, pacotes e duelistas do Free Duel.
-- Marca de problema F8 (ou F7 / L3+R3) única: grava gráficos e estado da CPU com uma só nota.
-- `tools/tf.py`: joga o jogo sozinho (botões, capturas, leitura de memória) para testes automáticos.
-- Decomp legível em C++ do título, boot, modo história, mapa e tela de resultado dos duelos.
-- Mapa dos 351 decks por duelista.
+### Added
+- 120 FPS option (interpolation with measured pacing) and smoother 60 FPS during the whole session.
+- HD textures compressed to BC7 (a quarter of the memory), with a disk cache and background loading.
+- Title menu with Continue, New Game and Exit to Desktop (asks before leaving); player name typed inside the game.
+- Graphics option inside the game and in the launcher, with an Original/Enhanced texture switch (F5).
+- "Unlock everything" cheat: cards, packs and Free Duel duelists.
+- Single problem mark F8 (or F7 / L3+R3): records graphics and CPU state with one note.
+- `tools/tf.py`: plays the game by itself (buttons, captures, memory reads) for automated tests.
+- Readable C++ decomp of the title, boot, story mode, map and duel result screen.
+- Map of the 351 decks by duelist.
 
-### Alterado
-- Menus, caixas de diálogo e tela de Duel Result redesenhados em azul-marinho/dourado no pacote Enhanced Textures.
-- A fonte HD agora faz parte do Enhanced Textures (sem opção própria).
-- Só uma instância por pasta de saves.
+### Changed
+- Menus, dialog boxes and the Duel Result screen redrawn in navy/gold in the Enhanced Textures package.
+- The HD font is now part of Enhanced Textures (no option of its own).
+- Only one instance per save folder.
 
-### Corrigido
-- Linhas e costuras na cabeça dos retratos em HD; linha no meio da arte das cartas em resolução alta.
-- Cartas da Polymerization sumindo; deck errado no Free Duel (Zane recebia o do Jaden).
-- Piscadas na troca de mensagem e na entrada de personagem com 60/120 FPS; quedas de desempenho na primeira execução.
-- Crash no mapa da história; agenda dos personagens (jogador e diretor) errada no mapa.
+### Fixed
+- Lines and seams on the head of HD portraits; line through the middle of card art at high resolution.
+- Polymerization cards disappearing; wrong deck in Free Duel (Zane got Jaden's).
+- Flicker on message change and character entrance with 60/120 FPS; slowdowns on first run.
+- Crash on the story map; wrong character schedule (player and director) on the map.
 
-### Removido
-- Opções "Integer scale" e "Texture Upscaling" (substituídas pelo pacote Enhanced).
+### Removed
+- "Integer scale" and "Texture Upscaling" options (replaced by the Enhanced package).
