@@ -1,5 +1,7 @@
 # Tag Force Recomp
 
+<p align="center"><img src="banner.png" alt="RECOMP banner: Yu-Gi-Oh! GX Tag Force, native PC port" width="800"></p>
+
 Static recompilation of **Yu-Gi-Oh! GX Tag Force** (PSP, European release ULES00600 v1.01) to **native Windows**. The game's MIPS
 (Allegrex) code is translated to C and runs on a custom runtime: HLE PSP kernel, GE (graphics chip) in software and on the GPU,
 audio, video, I/O and windowing. The goal is a real **PC version** and a foundation for **mods**, including mods that change how
