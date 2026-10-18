@@ -111,8 +111,10 @@ void audio_out_skip(bool on);
 extern volatile int g_diag_paused;
 static int g_marcag_n, g_burst_n; static uint64_t g_burst_next;
 static bool g_marcag_pedida, g_nota_aberta;
+static int g_marcag_rapida;   /* marca rapida do controle (sem caixa de nota, nota fixa): 0 = nao, 1 = L3 grafico, 2 = R3 performance, 3 = Start+Select audio */
 static void marca_cpu(void) { if (!g_nota_aberta) g_marcag_pedida = true; }   /* F7 / L3+R3: agora a mesma marca geral do F8 */
 static void marca_graf(void) { if (!g_nota_aberta) g_marcag_pedida = true; }
+static void marca_rapida(int tipo) { if (!g_nota_aberta) { g_marcag_pedida = true; g_marcag_rapida = tipo; } }   /* marca sem pausar o jogo */
 static void marca_nota_log(int n, const std::string &u0, const char *pref) {
     /* a nota pode ter varias linhas: no log vira uma linha so, com " / " no lugar de cada quebra (os relatorios leem o log por linha) */
     std::string u; for (size_t i = 0; i < u0.size(); i++) {

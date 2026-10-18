@@ -64,8 +64,12 @@ bool static_pair(const Rec &a, const Rec &b) {
 }
 uint64_t g_st_mid, g_st_skip, g_st_tris, g_st_tris_ok, g_st_nomatch, g_st_loop; double g_st_us;   /* g_st_us: tempo de CPU montando os quadros do meio (TF_INTERP_DEBUG); g_st_loop: triangulos no laco de uma rolagem (extrapolados) */
 const bool g_dbg = getenv("TF_INTERP_DEBUG") != nullptr;
-const long long g_dump_vb = getenv("TF_INTERP_DUMP") ? atoll(getenv("TF_INTERP_DUMP")) : -1;   /* quadro cujo pareamento e listado (TF_INTERP_DUMP) */
+const long long g_dump_vb = getenv("TF_INTERP_DUMP") ? atoll(getenv("TF_INTERP_DUMP")) : -1;   /* "a-b" lista o pareamento de todos os quadros de a ate b */
+const long long g_dump_hi = (getenv("TF_INTERP_DUMP") && strchr(getenv("TF_INTERP_DUMP"), '-')) ? atoll(strchr(getenv("TF_INTERP_DUMP"), '-') + 1) : g_dump_vb;
+static inline bool dump_vb_now(uint64_t vb) { return g_dump_vb >= 0 && (long long)vb >= g_dump_vb && (long long)vb <= g_dump_hi; }   /* quadro cujo pareamento e listado (TF_INTERP_DUMP) */
 const bool g_v1 = getenv("TF_INTERP_V1") != nullptr;   /* A/B: regras de antes das correcoes da loja (sem copia congelada, par 'que menos andou', sem isencao rigida, limite 12 px) */
+static const unsigned g_v1mask = getenv("TF_INTERP_BISECT") ? (unsigned)atoi(getenv("TF_INTERP_BISECT")) : 0u;   /* depuracao: bit n liga a regra ANTIGA so no ponto n (ver v1b) */
+static inline bool v1b(int bit) { return g_v1 || ((g_v1mask >> bit) & 1u); }
 const size_t MAX_DRAWS = 60000, MAX_VERTS = 3000000;
 }
 
@@ -83,7 +87,7 @@ static int freeze_fbtex(Rec &r, int src, int nw, int nh) {
     const uint32_t ver = g_fbver[src];
     for (const auto &e : r.fzmap) if ((int)e.src == src && e.ver == ver) return e.fb;
     static const bool off = getenv("TF_INTERP_NOFREEZE") != nullptr;   /* depuracao: amostra o alvo vivo (comportamento antigo) */
-    if (off || g_v1) return src;
+    if (off || v1b(0)) return src;
     Frozen fz{-1, nw, nh, g_ge_res};
     for (size_t i = 0; i < g_fpool.size(); i++)
         if (g_fpool[i].w == nw && g_fpool[i].h == nh && g_fpool[i].res == g_ge_res) { fz = g_fpool[i]; g_fpool.erase(g_fpool.begin() + i); break; }
@@ -178,6 +182,12 @@ bool same_kind(const Draw &a, const Draw &b) {
     GpuState x = a.s, y = b.s; x.fb = y.fb = 0; x.tex = a.otex; y.tex = b.otex; x.sx1 = y.sx1 = x.sy1 = y.sy1 = x.sx2 = y.sx2 = x.sy2 = y.sy2 = 0; x.uvclamp = y.uvclamp = 0; x.cu0 = y.cu0 = x.cv0 = y.cv0 = x.cu1 = y.cu1 = x.cv1 = y.cv1 = 0; /* a textura tem que ser a mesma: sprites de personagens diferentes usam o mesmo recorte de UV em texturas distintas */
     return !memcmp(&x, &y, sizeof x);
 }
+/* igual a same_kind, mas aceita textura (pagina) diferente: o boneco do mapa troca de pagina de textura ao mudar de pose */
+bool same_kind_anytex(const Draw &a, const Draw &b) {
+    if (a.n != b.n || a.cull != b.cull) return false;
+    GpuState x = a.s, y = b.s; x.fb = y.fb = 0; x.tex = y.tex = 0; x.sx1 = y.sx1 = x.sy1 = y.sy1 = x.sx2 = y.sx2 = x.sy2 = y.sy2 = 0; x.uvclamp = y.uvclamp = 0; x.cu0 = y.cu0 = x.cv0 = y.cv0 = x.cu1 = y.cu1 = x.cv1 = y.cv1 = 0; x.tw = y.tw = 0; x.th = y.th = 0;
+    return !memcmp(&x, &y, sizeof x);
+}
 inline uint32_t avg_col(uint32_t a, uint32_t b) { return ((a & 0xfefefefeu) >> 1) + ((b & 0xfefefefeu) >> 1) + (a & b & 0x01010101u); }
 
 uint64_t g_cur_vb; float g_T_mul = 1.f;   /* g_T_mul = 2 no autoteste (F0->F2 anda o dobro) */
@@ -252,7 +262,7 @@ bool interp_lists(const Rec &pv, Rec &cur, int target, int depth, std::vector<Fr
     /* pareia cada desenho novo com o desenho anterior de mesma forma que menos andou (janela em torno do ultimo pareado; ordem de desenho
      * pode mudar, ex.: o botao destacado do menu) */
     const size_t pn = pv.d.size(), cn = cur.d.size();
-    std::vector<int> match(cn, -1); std::vector<char> used(pn, 0); size_t hint = 0, nm = 0;
+    std::vector<int> match(cn, -1); std::vector<char> used(pn, 0); size_t hint = 0, nm = 0;   std::vector<char> uvchg(cn, 0);   /* uvchg: sprite 3D (boneco do mapa) que trocou de quadro de animacao (outro recorte da mesma textura) mas e do mesmo tamanho e esta perto: par com UV novo */
     for (size_t j = 0; j < cn; j++) {
         const Draw &c = cur.d[j]; int best = -1; float bestc = 1e30f;
         size_t lo = hint > 6 ? hint - 6 : 0, hi = std::min(pn, hint + 14);
@@ -263,10 +273,23 @@ bool interp_lists(const Rec &pv, Rec &cur, int target, int depth, std::vector<Fr
             for (uint32_t q = 0; q < c.n && uvok; q += step) { cost += fabsf(b[q].x - a[q].x) + fabsf(b[q].y - a[q].y); if (fabsf(b[q].u - a[q].u) > 2.f || fabsf(b[q].v - a[q].v) > 2.f) uvok = false; }
             if (!uvok) continue;   /* outro recorte da textura: nao e o mesmo objeto */
             cost /= (float)((c.n + step - 1) / step);
+            /* letra de texto 2D (um desenho de 1 quadrado, ou 2 com a sombra, no atlas da fonte): quando a mensagem do dialogo troca, o MESMO
+             * recorte aparece em outra palavra e o pareamento por UV o fazia deslizar ate la ("Nic to eet you" por ~50 ms no 120 FPS; sessao
+             * 20261018_121134). Texto nao anda mais que alguns px por quadro: acima disso e troca de conteudo, sem par (aparece como no quadro
+             * novo). TF_INTERP_BISECT bit 8 desliga */
+            if (!v1b(8) && (c.n == 6 || c.n == 12) && cur.v[c.off].z < 1.f) {
+                float gx0 = 1e9f, gx1 = -1e9f, gy0 = 1e9f, gy1 = -1e9f;
+                for (uint32_t q = 0; q < c.n; q++) { const GpuVtx &w = cur.v[c.off + q]; gx0 = std::min(gx0, w.x); gx1 = std::max(gx1, w.x); gy0 = std::min(gy0, w.y); gy1 = std::max(gy1, w.y); }
+                if (gx1 - gx0 <= 40.f && gy1 - gy0 <= 40.f && cost > 4.f * g_T_mul) continue;
+            }
             /* objetos identicos em fila (pacotes da pilha da loja, cartas da mao): o vizinho pode estar mais perto na tela que o proprio objeto
              * quando ele anda (um pacote subindo), e o par saia deslocado em cadeia. O jogo desenha na mesma ordem quase sempre: o candidato
              * que continua a sequencia do ultimo par (ou de mesmo indice) leva desconto, e so perde para um bem mais perto (g_v1 desliga) */
-            if (!g_v1 && (k == hint || k == j)) cost = cost * 0.25f - 4.f;
+            /* o desconto so vale para um candidato que andou o que uma camera anda por quadro (<= 20 px): sem esse limite, quando a ordem de desenho
+             * mudava entre dois quadros (indice igual = OUTRO objeto) o vizinho distante (NPC do lado, a ~45 px) ganhava do proprio objeto: a cabeca do NPC
+             * era pareada com a do vizinho e o quadro do meio a mostrava no caminho entre os dois, solta do corpo (sessao 20261018_003821, Duel Field;
+             * achado por TF_INTERP_BISECT=2) */
+            if (!v1b(1) && (k == hint || k == j) && cost <= 20.f * g_T_mul) cost = cost * 0.25f - 4.f;
             if (cost < bestc) { bestc = cost; best = (int)k; }
         }
         /* contador de digitos (LP caindo): cada digito e um desenho com o recorte do glifo; quando o valor muda, o MESMO glifo aparece no slot
@@ -288,12 +311,28 @@ bool interp_lists(const Rec &pv, Rec &cur, int target, int depth, std::vector<Fr
                 }
             }
         }
+        /* boneco do mapa que troca de quadro de animacao (parado -> andando, passo): o recorte da textura muda, o pareamento por UV recusava e o
+         * sprite aparecia no lugar novo ja no 1o quadro do meio, adiantado em relacao ao cenario, e depois ficava parado ate o quadro real
+         * ("pula e congela"; sessao 20261018_143032, NPC ao lado do usuario no Slifer Red Dorm). Mesma textura, mesmo tamanho (+-2 px) e a no maximo
+         * 20 px (o que a camera anda por quadro; a 10 px falhava com a camera em 15 px): e o mesmo boneco; interpola so a posicao e usa o UV do quadro novo. TF_INTERP_NOSPRITEUV=1 desliga */
+        static const bool no_spriteuv = getenv("TF_INTERP_NOSPRITEUV") != nullptr;
+        if (best < 0 && !no_spriteuv && c.n == 6 && cur.v[c.off].z >= 2.f && c.s.tex != 0 && !(c.s.tex & GPU_FBTEX)) {
+            auto bb = [](const GpuVtx *v, float *cx, float *cy, float *w, float *h) { float x0 = 1e9f, x1 = -1e9f, y0 = 1e9f, y1 = -1e9f; for (int q = 0; q < 6; q++) { x0 = std::min(x0, v[q].x); x1 = std::max(x1, v[q].x); y0 = std::min(y0, v[q].y); y1 = std::max(y1, v[q].y); } *cx = (x0 + x1) * .5f; *cy = (y0 + y1) * .5f; *w = x1 - x0; *h = y1 - y0; };
+            float bcx, bcy, bw, bh; bb(&cur.v[c.off], &bcx, &bcy, &bw, &bh); float bd = 20.f * g_T_mul;
+            for (size_t k = lo; k < hi; k++) {
+                if (used[k] || pv.d[k].n != 6 || pv.d[k].s.tex == 0 || (pv.d[k].s.tex & GPU_FBTEX) || !same_kind_anytex(pv.d[k], c)) continue;
+                float acx, acy, aw, ah; bb(&pv.v[pv.d[k].off], &acx, &acy, &aw, &ah);
+                const float d = hypotf(bcx - acx, bcy - acy);
+                if (fabsf(aw - bw) <= 2.f && fabsf(ah - bh) <= 2.f && d <= bd) { bd = d; best = (int)k; uvchg[j] = 1; }
+            }
+        }
         if (best >= 0) { match[j] = best; used[best] = 1; hint = best + 1; nm++; }
     }
-    if (depth == 0 && g_dump_vb >= 0) { if (g_cur_vb == (uint64_t)g_dump_vb) {
+    if (depth == 0 && g_dump_vb >= 0) { if (dump_vb_now(g_cur_vb)) {
         for (size_t j = 0; j < cn; j++) { const Draw &c = cur.d[j]; const GpuVtx &v0 = cur.v[c.off];
             float x0=1e9,y0=1e9,x1=-1e9,y1=-1e9; for (uint32_t q = 0; q < c.n; q++) { const GpuVtx &w = cur.v[c.off + q]; x0 = std::min(x0, w.x); x1 = std::max(x1, w.x); y0 = std::min(y0, w.y); y1 = std::max(y1, w.y); }
             fprintf(stderr, "[idump] bbox %.0f,%.0f-%.0f,%.0f z=%.0f ", x0, y0, x1, y1, v0.z); fprintf(stderr, "cur %zu n=%u tex=%x %dx%d x=%.1f y=%.1f u=%.1f v=%.1f col=%08x clr=%u blend=%u -> prev %d", j, c.n, c.s.tex, c.s.tw, c.s.th, v0.x, v0.y, v0.u, v0.v, v0.col, c.s.clear, c.s.blend, match[j]);
+            if (match[j] < 0 && c.n == 6 && c.s.tex != 0) { for (size_t k = 0; k < pn; k++) { if (pv.d[k].n != 6 || pv.d[k].otex != c.otex) continue; float bx0 = 1e9f, bx1 = -1e9f, by0 = 1e9f, by1 = -1e9f; for (int q = 0; q < 6; q++) { const GpuVtx &w = pv.v[pv.d[k].off + q]; bx0 = std::min(bx0, w.x); bx1 = std::max(bx1, w.x); by0 = std::min(by0, w.y); by1 = std::max(by1, w.y); } fprintf(stderr, " [cand %zu%s bbox %.0f,%.0f-%.0f,%.0f u=%.0f v=%.0f same=%d]", k, used[k] ? " usado" : "", bx0, by0, bx1, by1, pv.v[pv.d[k].off].u, pv.v[pv.d[k].off].v, (int)same_kind(pv.d[k], c)); } }
             if (match[j] >= 0) { const Draw &pd = pv.d[match[j]]; const GpuVtx &p0 = pv.v[pd.off]; float px0 = 1e9f, px1 = -1e9f; for (uint32_t q = 0; q < pd.n; q++) { px0 = std::min(px0, pv.v[pd.off + q].x); px1 = std::max(px1, pv.v[pd.off + q].x); } fprintf(stderr, " (x=%.1f y=%.1f, prev x %.0f..%.0f)", p0.x, p0.y, px0, px1); } fputc(10, stderr); } } }
     if (nm * 2 < cn || cn < 2) { g_st_nomatch++; return false; }   /* cena trocou: nao ha o que interpolar */
     g_out.assign(cur.v.begin(), cur.v.end());
@@ -304,7 +343,7 @@ bool interp_lists(const Rec &pv, Rec &cur, int target, int depth, std::vector<Fr
     auto front = [](const GpuVtx *t, int cm) { const float ar = (t[1].x - t[0].x) * (t[2].y - t[0].y) - (t[1].y - t[0].y) * (t[2].x - t[0].x); return fabsf(ar) >= 1e-6f && (ar > 0) != (cm == 1); };
     /* rolagem do cenario: deslocamento comum dos desenhos 3D (z grande) pareados, se quase todos andaram igual */
     float scx = 0, scy = 0; bool scroll = false;
-    if (!g_v1) {   /* usada para aceitar a partida da camera (todos os desenhos saltam juntos); mover os desenhos sem par junto (TF_INTERP_SCROLL) piorou */
+    if (!v1b(2)) {   /* usada para aceitar a partida da camera (todos os desenhos saltam juntos); mover os desenhos sem par junto (TF_INTERP_SCROLL) piorou */
         std::vector<float> dxs, dys;
         for (size_t j = 0; j < cn; j++) {
             if (match[j] < 0 || cur.d[j].s.clear) continue;
@@ -320,7 +359,7 @@ bool interp_lists(const Rec &pv, Rec &cur, int target, int depth, std::vector<Fr
         }
     }
     cur.disp.assign(cn, 1e9f); cur.vel.assign(cn, std::array<float, 2>{1e9f, 1e9f}); cur.vel2.assign(cn, std::array<float, 2>{1e9f, 1e9f});
-    const bool dump_now = depth == 0 && g_dump_vb >= 0 && g_cur_vb == (uint64_t)g_dump_vb;
+    const bool dump_now = depth == 0 && g_dump_vb >= 0 && dump_vb_now(g_cur_vb);
     static const bool no_loop = getenv("TF_INTERP_NOLOOP") != nullptr;   /* A/B: sem a regra do laco de rolagem (comportamento antigo: o meio do salto) */
     VMap &shared = g_vmap[depth]; shared.reset(cur.v.size());   /* posicao final de cada vertice do quadro novo (em todos os desenhos): vertices compartilhados nao podem se separar (rachaduras entre poligonos vizinhos) */
     /* triangulos nao interpolados so SEGUEM os vizinhos interpolados depois de todos processados: se definissem a posicao do vertice (por virem
@@ -346,7 +385,7 @@ bool interp_lists(const Rec &pv, Rec &cur, int target, int depth, std::vector<Fr
          * rasgava no quadro do meio. Os pares saem dos triangulos alinhados por indice (mesmo UV); quando a ordem muda (muitos pares errados),
          * os minimos quadrados entortam e a mediana da translacao e mais robusta: vale o modelo que explica mais pontos (<= 2 px). */
         float ex = 0, ey = 0, af[6] = {1, 0, 0, 0, 1, 0}; bool solid = false;   /* solid: o desenho andou como um bloco (>= 90% dos vertices com o deslocamento tipico) */
-        if (!g_v1) {
+        if (!v1b(3)) {
             static std::vector<float> mx, my, P; mx.clear(); my.clear(); P.clear();
             for (uint32_t k = 0; k + 2 < c.n && k + 2 < p.n; k += 3) {
                 const GpuVtx *b = &cur.v[c.off + k], *a = &pv.v[p.off + k]; bool ok = true;
@@ -384,7 +423,7 @@ bool interp_lists(const Rec &pv, Rec &cur, int target, int depth, std::vector<Fr
          * longe e outra coisa: teletransporte, cursor). Os triangulos so seguem a regra se andarem junto com o bloco, sem deformar. */
         if (match[j] < (int)pv.vel.size()) cur.vel2[j] = pv.vel[match[j]];
         float pvx = 0, pvy = 0; bool pvel = false, pring = false;   /* pring: a volta do anel (o par nao e vizinho dos pares dos desenhos ao lado) */
-        if (!g_v1 && !no_loop && solid && (size_t)match[j] < pv.vel.size() && pv.vel[match[j]][0] < 1e8f && pv.vel2[match[j]][0] < 1e8f) {
+        if (!v1b(4) && !no_loop && solid && (size_t)match[j] < pv.vel.size() && pv.vel[match[j]][0] < 1e8f && pv.vel2[match[j]][0] < 1e8f) {
             pvx = pv.vel[match[j]][0]; pvy = pv.vel[match[j]][1];
             const float pl = hypotf(pvx, pvy), dl = hypotf(ex, ey);
             const bool steady = fabsf(pvx - pv.vel2[match[j]][0]) + fabsf(pvy - pv.vel2[match[j]][1]) <= 0.25f + 0.1f * pl;
@@ -403,8 +442,19 @@ bool interp_lists(const Rec &pv, Rec &cur, int target, int depth, std::vector<Fr
                 pvel = flat && dl <= ext;
             }
         }
+        const bool glyph2d = !v1b(9) && (c.n == 6 || c.n == 12) && cur.v[c.off].z < 1.f && c.s.tex != 0;
         for (uint32_t k = 0; k + 2 < c.n; k += 3) {
             const GpuVtx *b = &cur.v[c.off + k]; GpuVtx *o = &g_out[c.off + k];
+            if (uvchg[j]) {   /* sprite que trocou de quadro de animacao: posicao interpolada, UV e cor do quadro novo */
+                const GpuVtx *a = &pv.v[p.off + k]; float md = 0;
+                for (int q = 0; q < 3; q++) md = std::max(md, hypotf(b[q].x - a[q].x, b[q].y - a[q].y));
+                g_st_tris++;
+                if (md > 24.f * g_T_mul) { pinned.push_back(c.off + k); continue; }
+                g_st_tris_ok++; dmax = std::max(dmax, md); dany = true;
+                for (int q = 0; q < 3; q++) { o[q] = b[q]; o[q].x = mix_f(a[q].x, b[q].x); o[q].y = mix_f(a[q].y, b[q].y); o[q].z = mix_f(a[q].z, b[q].z); }
+                commit(b, o);
+                continue;
+            }
             /* triangulo anterior equivalente: mesmo UV e deslocamento mais parecido com o do desenho, numa janela em volta (o alinhamento por
              * indice falha quando um desenho junta varios objetos e a ordem deles muda, ex.: o botao destacado do menu) */
             const GpuVtx *best = nullptr; float bestc = 1e30f; int bestmi = -1;
@@ -445,20 +495,27 @@ bool interp_lists(const Rec &pv, Rec &cur, int target, int depth, std::vector<Fr
             /* peca pequena que andou muito para o tamanho dela = outra particula (respingo que renasce em outro lugar), nao movimento; mas nao se ela
              * andou junto com o resto do desenho (frisos finos do cenario com a camera andando: 350 triangulos recusados num quadro da loja) */
             bool rigid = false;
-            if (best) { float dv = 0; for (int q = 0; q < 3; q++) dv = std::max(dv, dev(a[q], b[q])); rigid = !g_v1 && dv <= 2.f * g_T_mul; }
+            if (best) { float dv = 0; for (int q = 0; q < 3; q++) dv = std::max(dv, dev(a[q], b[q])); rigid = !v1b(5) && dv <= 2.f * g_T_mul; }
             if (ok && !rigid && md > (2.f * e + 6.f) * g_T_mul) ok = false;   /* g_T_mul: no autoteste o passo e o dobro */
             /* estava parada no quadro anterior e agora salta: passo de animacao por quadros (ex.: o tile da cachoeira troca de posicao a cada ~10 vblanks);
              * o movimento suave nunca comeca com um salto grande, e o meio do salto seria um estagio inexistente (um quadro de "flash"). Limite 20 px:
              * a cachoeira salta ~42 px; a camera do campo parte do repouso com 12,8 px por quadro (com 12 px, todo inicio de caminhada dava um tranco) */
             /* ... exceto quando o salto e a rolagem rigida do cenario inteiro (a camera comecando a andar: todos os desenhos estavam parados e saltam juntos) */
-            if (ok && prev_disp < 1.f && md > (g_v1 ? 12.f : 20.f) * g_T_mul && !(scroll && fabsf((b[0].x - a[0].x) - scx) <= 1.5f && fabsf((b[0].y - a[0].y) - scy) <= 1.5f)) ok = false;
+            if (ok && prev_disp < 1.f && md > (v1b(6) ? 12.f : 20.f) * g_T_mul && !(scroll && fabsf((b[0].x - a[0].x) - scx) <= 1.5f && fabsf((b[0].y - a[0].y) - scy) <= 1.5f)) ok = false;
+            /* faixa 2D da interface (um retangulo, n=6, ate 48 px de altura) que anda em passos de slot de 12+ px (o corpo da barra do item do menu desce 16 px por
+             * passo enquanto a ponta ao lado fica parada): o meio do passo (8 px) desalinhava as duas pecas e a barra aparecia torta por 1-2 subquadros, estagio
+             * que o original nao tem; aparece no lugar novo, como no original. Rolagem rigida do cenario fica de fora. TF_INTERP_BISECT bit 1024 desliga */
+            if (ok && !v1b(10) && c.n == 6 && b[0].rw == 1.f && b[1].rw == 1.f && b[2].rw == 1.f && b[0].z < 2.f && md > 12.f * g_T_mul && !scroll) {
+                float gy0 = 1e9f, gy1 = -1e9f; for (uint32_t q = 0; q < 6; q++) { gy0 = std::min(gy0, cur.v[c.off + q].y); gy1 = std::max(gy1, cur.v[c.off + q].y); }
+                if (gy1 - gy0 <= 48.f) ok = false;
+            }
             if (c.cull) face[(c.off + k) / 3] = (ok && best && front(best, c.cull) != front(b, c.cull)) ? 0 : (front(b, c.cull) ? 1 : 2);
-            if (!ok) { if (g_v1) commit(b, o); else pinned.push_back(c.off + k); if (dump_now) fprintf(stderr, "[idump2] cur %zu tri %u: NAO interpolado (par %d, md %.1f, e %.1f, prev_disp %.1f)%c", j, k / 3, bestmi, md, e, prev_disp, 10); continue; }
+            if (!ok) { if (v1b(7)) commit(b, o); else pinned.push_back(c.off + k); if (dump_now) fprintf(stderr, "[idump2] cur %zu tri %u: NAO interpolado (par %d, md %.1f, e %.1f, prev_disp %.1f)%c", j, k / 3, bestmi, md, e, prev_disp, 10); continue; }
             g_st_tris_ok++;
             for (int q = 0; q < 3; q++) {
                 o[q].x = mix_f(a[q].x, b[q].x); o[q].y = mix_f(a[q].y, b[q].y); o[q].z = mix_f(a[q].z, b[q].z);
                 o[q].u = mix_f(a[q].u, b[q].u); o[q].v = mix_f(a[q].v, b[q].v); o[q].rw = mix_f(a[q].rw, b[q].rw);
-                o[q].col = mix_col(a[q].col, b[q].col);
+                o[q].col = glyph2d ? b[q].col : mix_col(a[q].col, b[q].col);   /* letra de texto: cor do quadro novo (misturar fazia a letra nascer cinza por 2 subquadros no 'very fast') */
             }
             commit(b, o);
         }

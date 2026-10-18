@@ -19,11 +19,17 @@ static int32_t g_ring[RING * 2];
 static std::mutex g_mx;
 static uint64_t g_rd;                            /* quadros ja entregues ao dispositivo */
 static bool g_on;
-static volatile int g_fade;   /* quadros restantes de fade-in depois do avanco rapido (0 = normal) */
-static const int FADE_LEN = 44100 * 4 / 10;   /* 0,4 s */
+/* Transicao entre areas (avanco rapido do carregamento): o volume segue uma rampa continua (por amostra, na thread do dispositivo) em vez de
+ * cortar seco e subir linear: desce em ~70 ms (cabe na reserva que ja esta no anel, entao a musica antiga some sem estalo) e sobe em ~0,6 s
+ * com curva suave (smoothstep) quando a nova faixa comeca. g_pos: 0 = mudo, 1 = volume cheio. */
+static volatile bool g_skip;   /* avanco rapido (carregamento): o audio produzido fora de tempo e descartado, senao atrasa depois */
+static double g_pos = 1.0;
+static const double FADE_OUT_LEN = 44100 * 0.07, FADE_IN_LEN = 44100 * 0.6;
 static uint32_t g_realign;   /* quantas vezes um canal ficou para tras (falta de audio = estalo/engasgo) desde a ultima leitura */
 uint32_t audio_out_realigns(void) { std::lock_guard<std::mutex> lk(g_mx); uint32_t n = g_realign; g_realign = 0; return n; }
-static volatile bool g_skip;   /* avanco rapido (carregamento): o audio produzido fora de tempo e descartado, senao atrasa depois */
+static const uint32_t HIST = 44100 * 8;          /* caixa-preta do audio: o que foi entregue ao dispositivo nos ultimos 8 s (marca de audio) */
+static int16_t g_hist[HIST * 2];
+static uint64_t g_hist_n;
 static HWAVEOUT g_wo;
 static WAVEHDR g_hdr[NBUF];
 static int16_t g_buf[NBUF][BUFF * 2];
@@ -34,14 +40,16 @@ static void fill(int i) {
         std::lock_guard<std::mutex> lk(g_mx);
         for (uint32_t f = 0; f < BUFF; f++) {
             uint32_t k = (uint32_t)((g_rd + f) & (RING - 1)) * 2;
+            if (g_skip) g_pos = std::max(0.0, g_pos - 1.0 / FADE_OUT_LEN); else g_pos = std::min(1.0, g_pos + 1.0 / FADE_IN_LEN);
+            const double gain = g_pos * g_pos * (3.0 - 2.0 * g_pos);
             for (int c = 0; c < 2; c++) {
                 int32_t v = g_ring[k + c]; g_ring[k + c] = 0;
-                if (g_fade > 0) v = (int32_t)((int64_t)v * (FADE_LEN - g_fade) / FADE_LEN);
+                if (gain < 1.0) v = (int32_t)std::lround(v * gain);
                 g_buf[i][f * 2 + c] = (int16_t)(v > 32767 ? 32767 : v < -32768 ? -32768 : v);
+                g_hist[(g_hist_n + f) % HIST * 2 + c] = g_buf[i][f * 2 + c];
             }
         }
-        if (g_fade > 0) g_fade = g_fade > (int)BUFF ? g_fade - (int)BUFF : 0;
-        g_rd += BUFF;
+        g_hist_n += BUFF; g_rd += BUFF;
     }
     waveOutWrite(g_wo, &g_hdr[i], sizeof(WAVEHDR));
 }
@@ -66,8 +74,20 @@ void audio_out_init(void) {
     for (int i = 0; i < NBUF; i++) fill(i);
     CreateThread(nullptr, 0, audio_thread, nullptr, 0, nullptr);
 }
+/* Grava os ultimos segundos entregues ao dispositivo como WAV (44,1 kHz estereo 16 bits); devolve a duracao em s (0 = nada). */
+double audio_out_dump(const wchar_t *path) {
+    std::lock_guard<std::mutex> lk(g_mx);
+    const uint32_t n = (uint32_t)std::min<uint64_t>(g_hist_n, HIST);
+    if (!g_on || !n) return 0.0;
+    FILE *f = _wfopen(path, L"wb"); if (!f) return 0.0;
+    const uint32_t bytes = n * 4, riff = 36 + bytes, fmt = 16, rate = 44100, brate = 44100 * 4; const uint16_t pcm = 1, ch = 2, al = 4, bits = 16;
+    fwrite("RIFF", 1, 4, f); fwrite(&riff, 4, 1, f); fwrite("WAVEfmt ", 1, 8, f); fwrite(&fmt, 4, 1, f); fwrite(&pcm, 2, 1, f); fwrite(&ch, 2, 1, f);
+    fwrite(&rate, 4, 1, f); fwrite(&brate, 4, 1, f); fwrite(&al, 2, 1, f); fwrite(&bits, 2, 1, f); fwrite("data", 1, 4, f); fwrite(&bytes, 4, 1, f);
+    for (uint32_t i = 0; i < n; i++) { const uint32_t k = (uint32_t)((g_hist_n - n + i) % HIST) * 2; fwrite(&g_hist[k], 2, 2, f); }
+    fclose(f); return n / 44100.0;
+}
 /* Mistura 'frames' quadros (estereo ou mono, 16 bits) no anel a partir de *cursor (por canal) com volumes 0..0x8000. */
-void audio_out_skip(bool on) { if (g_skip && !on) g_fade = FADE_LEN; g_skip = on; }
+void audio_out_skip(bool on) { g_skip = on; }
 namespace {
 /* Controle de reserva por canal: o ritmo medio do jogo (tempo virtual -> real) nunca bate exatamente com o relogio do dispositivo (alguns decimos de %
  * por causa das esperas); sem controle a reserva encolhe ate zerar (engasgo) ou cresce ate descartar. */

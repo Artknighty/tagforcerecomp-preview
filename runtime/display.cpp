@@ -71,7 +71,9 @@ static void toggle_fullscreen(void) {
     }
     InvalidateRect(g_wnd, nullptr, TRUE);
     sync_menu();
+    if (g_ready) gfx_ini_set_fullscreen(g_fullscreen);   /* lembra o modo para a proxima vez */
 }
+void display_set_fullscreen(bool fs) { if (fs != g_fullscreen) toggle_fullscreen(); }
 static int current_scale(void) {   /* 1..4 se a area do jogo for exatamente 480x272 vezes n; 0 = tamanho livre */
     if (g_fullscreen) return 0;
     RECT cr; GetClientRect(g_wnd, &cr);
@@ -166,8 +168,8 @@ struct Hotkey { int vk; const wchar_t *key, *also, *help; void (*run)(void); };
 static const Hotkey kHotkeys[] = {
     {VK_F3,  L"F3",  L"",              L"show FPS",                                        toggle_fps_overlay},
     {VK_F5,  L"F5",  L"",              L"switch textures Original / Enhanced",             request_texture_pack_switch},   /* compara com o visual do PSP original */
-    {VK_F7,  L"F7",  L" or L3 + R3",   L"same as F8",                                      marca_cpu},                     /* atalho antigo, mesma marca geral */
-    {VK_F8,  L"F8",  L"",              L"report a problem: graphics, CPU, anything (note + captures + duel state)", marca_graf},   /* marca geral: nota + quadros + estado do duelo */
+    {VK_F7,  L"F7",  L"",              L"same as F8",                                      marca_cpu},                     /* atalho antigo, mesma marca geral */
+    {VK_F8,  L"F8",  L"",              L"report a problem: graphics, CPU, anything (note + captures + duel state); for something specific. Controller quick marks (no note): L3 = graphics glitch, R3 = performance problem, Start + Select = audio problem", marca_graf},   /* marca geral: nota + quadros + estado do duelo */
     {VK_F9,  L"F9",  L"",              L"turn the diagnostic captures on / off",           cap_toggle},
     {VK_F11, L"F11", L" or Alt+Enter", L"fullscreen",                                      toggle_fullscreen},
 };
@@ -184,6 +186,7 @@ void display_ask_exit(void);
 void display_ask_reset_text(const wchar_t *text);
 static int g_wheel_pend;       /* entalhes da roda do mouse ainda por entregar ao jogo (+ cima, - baixo) */
 bool display_pc_input(void);
+static bool g_pad_connected;   /* ha controle XInput ligado (read_pad atualiza) */
 static bool g_cursor_hidden;   /* cursor do mouse some apos 5 s parado sobre a area do jogo; qualquer movimento traz de volta */
 static LRESULT CALLBACK wndproc(HWND h, UINT m, WPARAM w, LPARAM l) {
     if (m == WM_SETCURSOR && g_cursor_hidden && LOWORD(l) == HTCLIENT) { SetCursor(nullptr); return TRUE; }
@@ -293,6 +296,7 @@ void display_init(void) {
         menu_dark_window(g_wnd);
         ShowWindow(g_wnd, getenv("TF_SEGUNDO_PLANO") ? SW_HIDE : mx ? SW_SHOWMAXIMIZED : SW_SHOW);   /* testes automaticos: janela escondida, sem roubar o foco (capturas vem do framebuffer) */
         if (fps) g_show_fps = true;
+        if (!getenv("TF_SEGUNDO_PLANO") &&gfx_ini_fullscreen()) fs = 1;   /* modo salvo (lancador / menu Graphics) */
         if (fs) toggle_fullscreen();
         sync_menu();
         if (g_gfx.renderer != GFX_RENDER_SOFTWARE) g_gfx.renderer = start_gpu(g_gfx.renderer);   /* renderizador por GPU (padrao); sem GPU cai no software */
@@ -464,6 +468,8 @@ static void toggle_fps_overlay(void) { g_show_fps = !g_show_fps; sync_menu(); }
 void display_toggle_fps(void) { toggle_fps_overlay(); }
 static void sync_menu(void) { menu_sync(g_fullscreen, g_show_fps, current_scale()); }
 void audio_out_skip(bool on);
+double audio_out_dump(const wchar_t *path);
+std::wstring diag_session_prefix(void);
 static int g_loading_run;   /* quadros seguidos com tela de carregamento */
 const uint32_t *mpeg_hd_present(int *w, int *h, uint32_t *ver);
 /* Marcas do jogador (F7/F8; capturas.inc): primeiro a caixa de nota, que pausa o jogo; grava so se confirmada. Chamado logo depois do laco de
@@ -477,8 +483,19 @@ static void marcas_processar(void) {
     if (text_input_busy()) return;   /* a caixa de texto do jogo (nome do jogador) esta aberta: a marca espera ela fechar */
     const unsigned long long q = g_frames;
     if (g_marcag_pedida) {
-        g_marcag_pedida = false; std::string nota;
-        if (!marca_nota_modal(true, &nota)) { fprintf(stderr, "[marca-graf] descartada no quadro %llu (Esc ou nota vazia)\n", q); display_notify("Graphics mark discarded"); }
+        g_marcag_pedida = false; std::string nota; const int tipo_r = g_marcag_rapida; const bool rapida = tipo_r != 0; g_marcag_rapida = 0;
+        if (tipo_r == 1) nota = "[controle L3] erro grafico (piscada/flicker/defeito visual)";
+        else if (tipo_r == 2) nota = "[controle R3] problema de performance (travada/quadros lentos)";
+        else if (tipo_r == 3) nota = "[controle Start+Select] problema de audio (estalo/corte/atraso/volume/musica errada)";
+        if (tipo_r == 3) {   /* marca de audio: sem capturas de tela; grava o som que saiu nos ultimos segundos (WAV) */
+            const int n = ++g_marcag_n; char t[64]; snprintf(t, sizeof t, "Audio mark #%d saved", n);
+            const std::wstring dir = diag_session_prefix() + L"_capturas/"; CreateDirectoryW(dir.c_str(), nullptr);
+            wchar_t wf[32]; swprintf(wf, 32, L"audio_%d.wav", n);
+            const double secs = audio_out_dump((dir + wf).c_str());
+            fprintf(stderr, "[marca-audio] #%d quadro %llu: problema de audio marcado pelo jogador (ultimos %.1f s gravados em %ls)%c", n, q, secs, wf, 10);
+            marca_nota_log(n, nota, "marca-audio"); display_notify(t); return;
+        }
+        if (!rapida && !marca_nota_modal(true, &nota)) { fprintf(stderr, "[marca-graf] descartada no quadro %llu (Esc ou nota vazia)\n", q); display_notify("Graphics mark discarded"); }
         else {
             const int n = ++g_marcag_n;
             fprintf(stderr, "[marca-graf] #%d quadro %llu (marcado pelo jogador: problema grafico)\n", n, q);
@@ -489,7 +506,7 @@ static void marcas_processar(void) {
                 RECT cr = {}; GetClientRect(g_wnd, &cr); DEVMODEW dm = {}; dm.dmSize = sizeof dm; MONITORINFOEXW mi = {}; mi.cbSize = sizeof mi;
                 if (!GetMonitorInfoW(MonitorFromWindow(g_wnd, MONITOR_DEFAULTTOPRIMARY), &mi) || !EnumDisplaySettingsW(mi.szDevice, ENUM_CURRENT_SETTINGS, &dm)) EnumDisplaySettingsW(nullptr, ENUM_CURRENT_SETTINGS, &dm);
                 fprintf(stderr, "[marca-graf] #%d saida: janela %ldx%ld (imagem interna %dx%d), filtro=%d proporcao=%d escala_inteira=%d sync=%d fps=%d, monitor %lux%lu a %lu Hz, %s\n", n, cr.right, cr.bottom,
-                        g_sw, g_sh, (int)g_gfx.filter, (int)g_gfx.aspect, (int)g_gfx.integer, (int)g_gfx.sync, (int)g_gfx.fps, dm.dmPelsWidth, dm.dmPelsHeight, dm.dmDisplayFrequency, pace_mid_suspended() ? "60 FPS SUSPENSO agora" : "60 FPS ativo");
+                        g_sw, g_sh, (int)g_gfx.filter, (int)g_gfx.aspect, (int)g_gfx.integer, (int)g_gfx.sync, (int)g_gfx.fps, dm.dmPelsWidth, dm.dmPelsHeight, dm.dmDisplayFrequency, pace_mid_suspended() ? "intermediarios SUSPENSOS agora" : (g_gfx.fps >= 2 ? "120 FPS ativo" : g_gfx.fps == 1 ? "60 FPS ativo" : "30 FPS (sem interpolacao)"));
             }
             ge_marca_texturas(n);
             if (!nota.empty()) marca_nota_log(n, nota, "marca-graf");
@@ -556,10 +573,10 @@ void display_present(void) {
         gfx_option_set(GFXOPT_TEXTURE_PACK, to); display_notify(to ? "Textures: Enhanced" : "Textures: Original (PSP)");
     }
     if (g_pending_renderer >= 0) { const int r = g_pending_renderer; g_pending_renderer = -1; pres_drain(); display_set_renderer(r); }   /* pedido pela tela Graphics do jogo: trocado aqui, entre dois quadros */
-    {   /* esconde o cursor depois de 5 s sem mexer o mouse (so com a janela do jogo ativa e o cursor sobre a area do jogo) */
+    {   /* esconde o cursor depois de 5 s (3 s com controle ligado) sem mexer o mouse (so com a janela do jogo ativa e o cursor sobre a area do jogo) */
         static POINT last; static ULONGLONG moved = GetTickCount64(); POINT pt; GetCursorPos(&pt);
         if (pt.x != last.x || pt.y != last.y) { last = pt; moved = GetTickCount64(); g_cursor_hidden = false; }
-        else if (!g_cursor_hidden && GetTickCount64() - moved >= 5000 && GetForegroundWindow() == g_wnd) {
+        else if (!g_cursor_hidden && GetTickCount64() - moved >= (g_pad_connected ? 3000u : 5000u) && GetForegroundWindow() == g_wnd) {
             RECT cr; GetClientRect(g_wnd, &cr); POINT cp = pt; ScreenToClient(g_wnd, &cp);
             if (PtInRect(&cr, cp)) { g_cursor_hidden = true; SetCursor(nullptr); }
         }
@@ -895,12 +912,16 @@ static uint32_t read_pad(void) {
     if (!get) return 0;
     /* XInputGetState numa porta sem controle e lenta (ate ~1 ms): portas vazias so sao consultadas de novo a cada ~2 s */
     static uint64_t retry[4];
-    uint32_t b = 0;
+    uint32_t b = 0; bool achou = false;
     for (DWORD i = 0; i < 4; i++) {
-        if (g_frames < retry[i]) continue;
+        if (g_frames < retry[i]) { continue; }
         XState s = {}; if (get(i, &s) != 0) { retry[i] = g_frames + 120; continue; }
+        achou = true;
         WORD x = s.pad.buttons;
-        { static bool l3r3; const bool ambos = (x & 0x00C0) == 0x00C0; if (ambos && !l3r3) marca_cpu(); l3r3 = ambos; }   /* L3 + R3 = "a CPU errou" */
+        { static WORD ult[4] = {0xFFFF, 0xFFFF, 0xFFFF, 0xFFFF}; if (x != ult[i]) { if (ult[i] == 0xFFFF) fprintf(stderr, "[pad] controle XInput %lu detectado%c", (unsigned long)i, 10); fprintf(stderr, "[pad] %lu botoes=0x%04x (L3=0x40 R3=0x80) quadro %llu%c", (unsigned long)i, (unsigned)x, (unsigned long long)g_frames, 10); ult[i] = x; } }   /* diagnostico: so quando muda */
+        {   /* marcas rapidas (sem caixa de nota): L3 = grafico, R3 = performance, Start + Select = audio (F8 segue sendo a marca detalhada, com nota) */
+          static bool l3, r3, ss; const bool bl = (x & 0x0040) != 0, br = (x & 0x0080) != 0, bs = (x & 0x0030) == 0x0030;
+          if (bl && !l3) marca_rapida(1); if (br && !r3) marca_rapida(2); if (bs && !ss) marca_rapida(3); l3 = bl; r3 = br; ss = bs; }
         if (x & 0x0001) b |= 0x10;   /* cima */
         if (x & 0x0002) b |= 0x40;   /* baixo */
         if (x & 0x0004) b |= 0x80;   /* esquerda */
@@ -921,6 +942,7 @@ static uint32_t read_pad(void) {
         if (s.pad.lt > 100) b |= 0x100;
         if (s.pad.rt > 100) b |= 0x200;
     }
+    g_pad_connected = achou;
     return b;
 }
 static uint32_t read_keys(void);

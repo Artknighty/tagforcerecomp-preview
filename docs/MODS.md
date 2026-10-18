@@ -40,8 +40,10 @@ Some sub-folders are **not** treated as ISO files: `textures/`, `movie/`, `llm/`
 
 - **Mods** menu: enabled mods show a check mark; clicking toggles and offers to restart (changes apply from game start).
   Disabling creates `mods/<folder>/disabled`; deleting that file enables the mod again.
-- Order: folders in alphabetical order. If two mods replace the same file, the **last** one wins (the log warns). Use prefixes
-  such as `10_Base`, `20_Text`, `90_Tweaks` to force priority.
+- Priority: `mods/load_order.txt` lists the mod folders from lowest to highest priority. If two mods change the same file,
+  texture, movie or hook, the **last** one wins (the log warns). Folders not in the file go at the end, alphabetically; the
+  texture packages always come first. The launcher's **Mods** page toggles mods and moves them up/down (top of the list =
+  highest priority); changes apply on the next start.
 
 ## Rules and limits for file replacement
 

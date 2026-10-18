@@ -44,6 +44,9 @@ void gfx_load(void) {
     if (g_gfx.filter < 0 || g_gfx.filter > 2) g_gfx.filter = GFX_FILTER_SHARP;
     if (g_gfx.aspect < 0 || g_gfx.aspect > 2) g_gfx.aspect = GFX_ASPECT_ORIGINAL;
 }
+/* modo de janela: [graficos] tela = 0 janela, 1 tela cheia (lancador, menu Graphics e F11 gravam a mesma chave) */
+bool gfx_ini_fullscreen(void) { return GetPrivateProfileIntW(L"graficos", L"tela", 0, ini_path().c_str()) == 1; }
+void gfx_ini_set_fullscreen(bool fs) { WritePrivateProfileStringW(L"graficos", L"tela", fs ? L"1" : L"0", ini_path().c_str()); }
 void gfx_save(void) {
     std::wstring ini = ini_path(); wchar_t b[16];
     swprintf(b, 16, L"%d", g_gfx.filter); WritePrivateProfileStringW(L"graficos", L"filtro", b, ini.c_str());

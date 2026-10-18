@@ -2,6 +2,24 @@
 
 Formato: [Keep a Changelog](https://keepachangelog.com/pt-BR/1.1.0/). Versionamento: [SemVer](https://semver.org/lang/pt-BR/).
 
+## [0.3.0] - 2026-10-18
+
+### Adicionado
+- Página **Mods** no lançador: liga/desliga mods e muda a ordem de prioridade (`mods/load_order.txt`).
+- Página **Cheats** no lançador; "Unlock everything" também na tecla F2.
+- Modo de janela (janela / tela cheia) no lançador e no menu Graphics.
+- Marcas rápidas no controle, sem caixa de nota: L3 = defeito gráfico, R3 = performance, Start+Select = áudio (salva os últimos 8 s em WAV).
+- Gravação contínua do monitor para caçar piscadas (`jogar_gravando.bat`).
+
+### Alterado
+- Cheats, CPU vs CPU e Monstros no Campo saem da lista de mods (têm menu próprio).
+- Transição de música/áudio entre áreas mais suave.
+- O cursor do mouse some em 3 s com controle ligado.
+- A marca F8 mostra o modo de FPS real (120/60/30).
+
+### Corrigido
+- 120 FPS: letras de texto nascendo cinza ou deslizando na troca de mensagem; cabeça do NPC solta do corpo; barra do item do menu entortando; boneco do mapa congelando ou cortando ao trocar de pose.
+
 ## [0.2.0] - 2026-10-17
 
 ### Adicionado

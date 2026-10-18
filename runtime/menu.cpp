@@ -17,7 +17,7 @@
 #include "mods.h"
 #include "gfx.h"
 
-void display_toggle_fullscreen(void);
+void display_toggle_fullscreen(void); void display_set_fullscreen(bool fs);
 void display_toggle_fps(void);
 void display_set_scale(int s);
 void display_ask_exit(void);
@@ -27,7 +27,7 @@ void display_ask_reset_text(const wchar_t *text);
 
 enum {
     ID_RESET = 1001, ID_EXIT,
-    ID_FULLSCREEN = 1101, ID_FPS, ID_SCALE1, ID_SCALE2, ID_SCALE3, ID_SCALE4,
+    ID_WINMODE0 = 1096, ID_WINMODE1, ID_FULLSCREEN = 1101, ID_FPS, ID_SCALE1, ID_SCALE2, ID_SCALE3, ID_SCALE4,
     ID_FILTER0 = 1150, ID_FILTER1, ID_FILTER2, ID_ASPECT0 = 1160, ID_ASPECT1, ID_ASPECT2, ID_RES1 = 1180, ID_RES2, ID_RES3, ID_RES4, ID_RES5, ID_RES6, ID_MSAA1 = 1210, ID_MSAA2, ID_MSAA4, ID_MSAA8, ID_FPS30 = 1224, ID_FPS60, ID_FPS120, ID_SYNC0 = 1230, ID_SYNC1, ID_SYNC2, ID_MODS_DUMP = 1288, ID_RENDER_SW = 1190, ID_RENDER_D3D, ID_RENDER_VK,
     ID_CONTROLS = 1201, ID_ABOUT, ID_PCINPUT = 1205, ID_MOUSEMENU,
     ID_MODS_FOLDER = 1290, ID_MODS_APPLY, ID_MOD_FIRST = 1300,   /* 1300 + i = liga/desliga o mod i */
@@ -266,7 +266,9 @@ HMENU menu_create(void) {
 
     /* Graphics: in sections, each choice in a submenu that shows the current value beside it */
     HMENU render = CreatePopupMenu(), res = CreatePopupMenu(), msaa = CreatePopupMenu(), fps = CreatePopupMenu(), sync = CreatePopupMenu(),
-          filtro = CreatePopupMenu(), prop = CreatePopupMenu();
+          filtro = CreatePopupMenu(), prop = CreatePopupMenu(), modo = CreatePopupMenu();
+    opcao(modo, ID_WINMODE0, L"&Windowed", L"", L"Windowed");
+    opcao(modo, ID_WINMODE1, L"&Fullscreen", L"F11", L"Fullscreen");
     opcao(render, ID_RENDER_SW, L"&Software", L"CPU", L"Software");
     opcao(render, ID_RENDER_D3D, L"&Direct3D 11", L"GPU", L"Direct3D 11");
     opcao(render, ID_RENDER_VK, L"&Vulkan", L"GPU", L"Vulkan");
@@ -296,6 +298,7 @@ HMENU menu_create(void) {
     titulo(g_gfxm, L"QUALITY");
     submenu(g_gfxm, render, IC_GPU, L"&Renderer");
     submenu(g_gfxm, res, IC_RES, L"&Resolution");
+    submenu(g_gfxm, modo, IC_TELA_CHEIA, L"&Window mode");
     submenu(g_gfxm, msaa, IC_AA, L"&Anti-aliasing (MSAA)");
     titulo(g_gfxm, L"MOTION");
     submenu(g_gfxm, fps, IC_QUADROS, L"&Frame rate");
@@ -355,6 +358,7 @@ HMENU menu_create(void) {
 void menu_sync(bool fullscreen, bool fps, int scale) {   /* selection marks (called when the state changes) */
     if (!g_bar) return;
     CheckMenuItem(g_view, ID_FULLSCREEN, fullscreen ? MF_CHECKED : MF_UNCHECKED);
+    if (g_gfxm) { CheckMenuItem(g_gfxm, ID_WINMODE0, fullscreen ? MF_UNCHECKED : MF_CHECKED); CheckMenuItem(g_gfxm, ID_WINMODE1, fullscreen ? MF_CHECKED : MF_UNCHECKED); }
     CheckMenuItem(g_view, ID_FPS, fps ? MF_CHECKED : MF_UNCHECKED);
     CheckMenuItem(g_view, ID_PCINPUT, display_pc_input() ? MF_CHECKED : MF_UNCHECKED);
     CheckMenuItem(g_view, ID_MOUSEMENU, display_mouse_menus() ? MF_CHECKED : MF_UNCHECKED);
@@ -405,6 +409,7 @@ bool menu_command(HWND h, int id) {
     case ID_RESET: display_ask_reset(); return true;
     case ID_EXIT: display_ask_exit(); return true;
     case ID_FULLSCREEN: display_toggle_fullscreen(); return true;
+    case ID_WINMODE0: case ID_WINMODE1: display_set_fullscreen(id == ID_WINMODE1); return true;
     case ID_FPS: display_toggle_fps(); return true;
     case ID_SCALE1: case ID_SCALE2: case ID_SCALE3: case ID_SCALE4: display_set_scale(id - ID_SCALE1 + 1); return true;
     case ID_FILTER0: case ID_FILTER1: case ID_FILTER2: g_gfx.filter = id - ID_FILTER0; gfx_save(); gfx_menu_sync(); InvalidateRect(h, nullptr, FALSE); return true;

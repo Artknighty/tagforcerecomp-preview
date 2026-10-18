@@ -13,6 +13,12 @@ bool mods_size(uint32_t lba, uint64_t *size);   /* tamanho do arquivo do mod (ge
 /* leitura de setores pelo dispositivo bruto (umd1:): corrige o tamanho nos registros de diretorio dos arquivos trocados */
 void mods_patch_raw(uint32_t lba, uint8_t *buf, uint32_t nsectors);
 
+/* API do lancador (sem mods_init): trabalha direto em <root> (pasta mods/). Ordem = prioridade, da menor para a maior (o ultimo vence). */
+struct ModEntry { std::string folder; std::wstring label, detail; bool enabled, visible; };   /* visible=false: pacotes de textura (Graphics > Textures) */
+std::vector<ModEntry> mods_list_dir(const std::wstring &root);
+void mods_dir_set_enabled(const std::wstring &root, const std::string &folder, bool on);
+void mods_dir_move(const std::wstring &root, const std::string &folder, int dir);   /* dir>0: sobe a prioridade; dir<0: desce */
+
 /* menu Mods */
 int mods_count(void);
 int mods_find(const char *folder);        /* indice do mod pela pasta (mods/<pasta>); -1 se nao existe */

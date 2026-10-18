@@ -11,6 +11,7 @@ struct GfxSettings { int filter; int aspect; bool integer; int res; int renderer
 extern GfxSettings g_gfx;
 void gfx_load(void);
 void gfx_save(void);
+bool gfx_ini_fullscreen(void); void gfx_ini_set_fullscreen(bool fs);   /* modo de janela salvo (tela=0/1) */
 /* pinta a imagem sw x sh (0x00RRGGBB) na area cw x ch do dc, com as opcoes atuais */
 void gfx_paint(HDC dc, const uint32_t *pix, int sw, int sh, int cw, int ch);   /* pix = imagem sw x sh */
 void gfx_dest_rect(int cw, int ch, int *ox, int *oy, int *ow, int *oh);   /* onde a imagem aparece dentro da area do cliente */

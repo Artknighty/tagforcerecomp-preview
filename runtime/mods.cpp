@@ -6,7 +6,8 @@
  * Quando o jogo abre um arquivo do disco (pelo caminho ou, como faz na maioria das vezes, por "sce_lbn0x..", o setor
  * inicial), o runtime entrega o arquivo do mod. A troca e indexada pelo LBA do arquivo na ISO; aberturas por LBN que
  * caem no MEIO de um arquivo trocado (sub-trechos de um pacote) leem o trecho correspondente do arquivo do mod.
- * Ordem: pastas em ordem alfabetica; se dois mods trocam o mesmo arquivo, vale o ultimo (o log avisa).
+ * Ordem: mods/load_order.txt (menor -> maior prioridade; editado na pagina Mods do lancador); sem o arquivo, ordem alfabetica.
+ * Se dois mods trocam o mesmo arquivo/textura, vale o ultimo (o log avisa).
  * Nao se trocam modulos de codigo (BOOT.BIN, *.prx): o codigo e recompilado e a imagem precisa bater. */
 #include "hle.h"
 #include "mods.h"
@@ -64,6 +65,75 @@ static void walk(const std::wstring &base, const std::wstring &rel, std::vector<
     FindClose(h);
 }
 
+/* Ordem de prioridade: mods/load_order.txt, uma pasta por linha, da MENOR para a MAIOR prioridade (quem vem depois vence em
+ * arquivos, texturas, videos e ganchos de plugin). Pastas fora do arquivo entram no fim (maior prioridade), em ordem alfabetica;
+ * os pacotes de textura (Enhanced/TexturasPC) entram no inicio: qualquer mod do usuario vence o pacote. */
+static bool is_pack_folder(const std::string &f) { return f == "EnhancedTextures" || f == "TexturasPC"; }
+/* fora da lista do lancador: pacotes de textura (Graphics > Textures) e mods com menu proprio no jogo (Cheats) ou sem uso no dia a dia */
+static bool is_launcher_hidden(const std::string &f) { return is_pack_folder(f) || f == "Cheats" || f == "CPUvsCPU" || f == "MonstrosNoCampo"; }
+static std::vector<std::string> read_order_file(const std::wstring &root) {
+    std::vector<std::string> o; FILE *f = _wfopen((root + L"\\load_order.txt").c_str(), L"rb"); if (!f) return o;
+    char line[512];
+    while (fgets(line, sizeof line, f)) {
+        std::string l = line; while (!l.empty() && (l.back() == '\n' || l.back() == '\r' || l.back() == ' ')) l.pop_back();
+        if (l.size() >= 3 && (uint8_t)l[0] == 0xef && (uint8_t)l[1] == 0xbb && (uint8_t)l[2] == 0xbf) l.erase(0, 3);
+        if (!l.empty() && l[0] != '#') o.push_back(l);
+    }
+    fclose(f); return o;
+}
+static void write_order_file(const std::wstring &root, const std::vector<std::string> &folders) {
+    FILE *f = _wfopen((root + L"\\load_order.txt").c_str(), L"wb"); if (!f) return;
+    fputs("# Mod priority, lowest first: a mod listed later wins when two mods change the same file/texture. Edit in the launcher (Mods page).\r\n", f);
+    for (auto &s : folders) fprintf(f, "%s\r\n", s.c_str());
+    fclose(f);
+}
+/* pastas de root em ordem de prioridade (baixa -> alta) */
+static std::vector<std::string> ordered_folders(const std::wstring &root) {
+    WIN32_FIND_DATAW fd; HANDLE h = FindFirstFileW((root + L"\\*").c_str(), &fd);
+    std::vector<std::wstring> dirs;
+    if (h != INVALID_HANDLE_VALUE) {
+        do { std::wstring n = fd.cFileName; if ((fd.dwFileAttributes & FILE_ATTRIBUTE_DIRECTORY) && n != L"." && n != L"..") dirs.push_back(n); } while (FindNextFileW(h, &fd));
+        FindClose(h);
+    }
+    std::sort(dirs.begin(), dirs.end(), [](const std::wstring &a, const std::wstring &b) { return _wcsicmp(a.c_str(), b.c_str()) < 0; });
+    std::vector<std::string> alpha, packs, out, listed = read_order_file(root);
+    for (auto &d : dirs) { std::string n = to_utf8(d); (is_pack_folder(n) ? packs : alpha).push_back(n); }
+    auto has = [](const std::vector<std::string> &v, const std::string &s) { for (auto &x : v) if (_stricmp(x.c_str(), s.c_str()) == 0) return true; return false; };
+    for (auto &p : packs) if (!has(listed, p)) out.push_back(p);
+    std::vector<std::string> all = alpha; all.insert(all.end(), packs.begin(), packs.end());
+    for (auto &l : listed) for (auto &a : all) if (_stricmp(a.c_str(), l.c_str()) == 0 && !has(out, a)) out.push_back(a);   /* o que o arquivo cita, na ordem dele (pasta que sumiu e ignorada) */
+    for (auto &a : alpha) if (!has(listed, a)) out.push_back(a);
+    return out;
+}
+static Mod make_mod(const std::wstring &root, const std::string &folder) {
+    Mod m; m.dir = root + L"\\" + to_wide(folder); m.name = m.folder = folder; m.enabled = !exists(m.dir + L"\\disabled");
+    std::string author, version; read_meta(m, &author, &version);
+    m.label = to_wide(m.name);
+    m.detail = to_wide(version.empty() ? "" : "v" + version); if (!author.empty()) m.detail += (m.detail.empty() ? L"" : L" \x00B7 ") + to_wide(author);
+    return m;
+}
+/* API do lancador (nao precisa de mods_init): lista, liga/desliga e reordena direto na pasta */
+std::vector<ModEntry> mods_list_dir(const std::wstring &root) {
+    std::vector<ModEntry> v;
+    for (auto &f : ordered_folders(root)) { Mod m = make_mod(root, f); v.push_back({f, m.label, m.detail, m.enabled, !is_launcher_hidden(f)}); }
+    return v;
+}
+void mods_dir_set_enabled(const std::wstring &root, const std::string &folder, bool on) {
+    Mod m = make_mod(root, folder); const std::wstring marker = m.dir + L"\\disabled";
+    if (on) DeleteFileW(marker.c_str());
+    else if (FILE *f = _wfopen(marker.c_str(), L"wb")) { fputs("Mod switched off in the Mods menu. Delete this file (or use the menu) to switch it on.\n", f); fclose(f); }
+}
+/* sobe (dir=+1: maior prioridade) ou desce (dir=-1) o mod, trocando com o vizinho visivel mais proximo; grava load_order.txt */
+void mods_dir_move(const std::wstring &root, const std::string &folder, int dir) {
+    std::vector<std::string> o = ordered_folders(root); int i = -1;
+    for (int k = 0; k < (int)o.size(); k++) if (o[k] == folder) i = k;
+    if (i < 0) return;
+    int j = i + (dir > 0 ? 1 : -1);
+    while (j >= 0 && j < (int)o.size() && is_launcher_hidden(o[j])) j += dir > 0 ? 1 : -1;   /* escondidos do lancador: pula */
+    if (j < 0 || j >= (int)o.size()) return;
+    std::swap(o[i], o[j]); write_order_file(root, o);
+}
+
 static void build_dir_patches(void);
 void mods_init(void) {
     {   /* migracao: o mod embutido antigo desligava com [mods] caixa_booster=0 no .ini; hoje e o plugin mods/CaixaDeBoosters */
@@ -74,17 +144,8 @@ void mods_init(void) {
             WritePrivateProfileStringW(L"mods", L"caixa_booster", nullptr, ini.c_str());
         }
     }
-    WIN32_FIND_DATAW fd; HANDLE h = FindFirstFileW((mods_root() + L"\\*").c_str(), &fd);
-    if (h == INVALID_HANDLE_VALUE) return;
-    std::vector<std::wstring> dirs;
-    do { std::wstring n = fd.cFileName; if ((fd.dwFileAttributes & FILE_ATTRIBUTE_DIRECTORY) && n != L"." && n != L"..") dirs.push_back(n); } while (FindNextFileW(h, &fd));
-    FindClose(h);
-    std::sort(dirs.begin(), dirs.end(), [](const std::wstring &a, const std::wstring &b) { return _wcsicmp(a.c_str(), b.c_str()) < 0; });
-    for (auto &d : dirs) {
-        Mod m; m.dir = mods_root() + L"\\" + d; m.name = m.folder = to_utf8(d); m.enabled = !exists(m.dir + L"\\disabled");
-        std::string author, version; read_meta(m, &author, &version);
-        m.label = to_wide(m.name);
-        m.detail = to_wide(version.empty() ? "" : "v" + version); if (!author.empty()) m.detail += (m.detail.empty() ? L"" : L" \x00B7 ") + to_wide(author);
+    for (auto &d : ordered_folders(mods_root())) {   /* ordem de prioridade: o ultimo vence */
+        Mod m = make_mod(mods_root(), d);
         int idx = (int)g_mods.size(); g_mods.push_back(m);
         if (!m.enabled) { fprintf(stderr, "[mods] %s: desligado\n", m.name.c_str()); continue; }
         std::vector<std::pair<std::wstring, uint64_t>> files; walk(m.dir, L"", files);

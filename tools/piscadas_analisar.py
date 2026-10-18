@@ -4,7 +4,7 @@
 Uma piscada e um padrao A-B-A: o quadro antes e o quadro depois do bloco B (1 a MAXB saidas) sao quase iguais entre si, mas o bloco difere
 de ambos. Funciona para qualquer duracao e em qualquer ponto da sessao, o que a caixa-preta de 1,5 s do F8 nao cobre.
 
-Uso: python tools/piscadas_analisar.py <arquivo.bin | base_da_tela --tela> [--png pasta] [--min 60] [--max-pares 40]
+Uso: python tools/piscadas_analisar.py <arquivo.bin | base_da_tela --tela | --continuo <pasta de tela_continua>> [--png pasta] [--min 60] [--max-pares 40]
   --min N      pixels (de 160x90) que precisam diferir para contar como 'grande' (padrao 60)
   --png pasta  grava A | B | A de cada piscada (ate --max-pares) para ver a olho
 Para gerar o arquivo num replay: TF_SEQ_AUTO=gen/seq.bin TF_SEQ_RING=600 TF_RES=1 PACE=1 sh tools/replay.sh ...
@@ -41,6 +41,26 @@ def ler_tela(base):
     return out, T
 
 
+def ler_continuo(pasta):
+    """gravacao do tools/tela_continua (segmentos seg_NNNN.bin/.tsv, miniatura 160x90); meta = (tag, acumulados, ms, indice); marcas = [(posicao, origem)]"""
+    import glob
+    meta, th, marcas, pos = [], [], [], 0
+    for tsv in sorted(glob.glob(os.path.join(pasta, 'seg_*.tsv'))):
+        linhas = [l.rstrip().split('\t') for l in open(tsv, encoding='utf-8', errors='replace') if l.strip()]
+        rec = [l for l in linhas if not l[0].startswith('#')]
+        dados = np.fromfile(tsv[:-4] + '.bin', np.uint8)
+        k = min(len(rec), len(dados) // (160 * 90 * 3))
+        dados = dados[:k * 160 * 90 * 3].reshape(k, 90, 160, 3)
+        idx0 = {int(l[0]): j for j, l in enumerate(rec[:k])}
+        for l in linhas:
+            if l[0] == '#marca':
+                ref = int(l[1]); marcas.append((pos + min([j for i, j in idx0.items() if i >= ref] or [k - 1]), l[3], float(l[2])))
+        for j in range(k):
+            meta.append(('I', 1 if int(rec[j][3]) > 1 else 0, float(rec[j][1]), int(rec[j][0])))
+        th.append(dados); pos += k
+    return meta, np.concatenate(th), marcas
+
+
 def dist(T, i, j):
     """pixels que mudaram (> 24 em algum canal) entre os quadros i e j (vetorizado: i e j sao arrays)"""
     return (np.abs(T[i].astype(np.int16) - T[j].astype(np.int16)).max(axis=3) > 24).sum(axis=(1, 2))
@@ -50,7 +70,11 @@ def main():
     a = sys.argv[1]; grande = int(sys.argv[sys.argv.index('--min') + 1]) if '--min' in sys.argv else 60
     pasta = sys.argv[sys.argv.index('--png') + 1] if '--png' in sys.argv else None
     maxp = int(sys.argv[sys.argv.index('--max-pares') + 1]) if '--max-pares' in sys.argv else 40
-    meta, T = (ler_tela(a[:-4] if a.endswith('.tsv') else a) if '--tela' in sys.argv else ler(a)); F = len(T); print(f'{F} quadros, {meta[-1][2] / 1000:.1f} s')
+    marcas = []
+    if '--continuo' in sys.argv: meta, T, marcas = ler_continuo(a if a != '--continuo' else sys.argv[sys.argv.index('--continuo') + 1])
+    else: meta, T = (ler_tela(a[:-4] if a.endswith('.tsv') else a) if '--tela' in sys.argv else ler(a))
+    F = len(T); print(f'{F} quadros, {meta[-1][2] / 1000:.1f} s'); atras = sum(1 for m in meta if m[1])
+    print(f'  imagens com acumulados > 1 (quadro que nunca chegou ao monitor): {atras}')
     MAXB = 8; achados = {}
     for b in range(1, MAXB + 1):
         i = np.arange(1, F - b)            # primeiro quadro do bloco B
@@ -75,11 +99,14 @@ def main():
     for n, (k, b, x, y) in enumerate(ev):
         tags = ''.join(meta[j][0] for j in range(k, k + b)); fr = meta[k][3]
         print(f'  #{n + 1:3d} saida {k:6d}  t={meta[k][2] / 1000:7.2f}s  quadro {fr}  bloco {b} [{tags}]  difere {x}/{y} px  susp={meta[k][1]}')
+        perto = [m for m in marcas if -240 <= m[0] - k <= 24]   # marca do jogador logo depois (<= 2 s a 120 Hz)
+        if perto: print(f'        ^ {len(perto)} marca(s) do jogador logo depois ({perto[0][1]}, {(perto[0][0] - k) / 120:.2f} s)')
         if pasta and n < maxp:
             from PIL import Image
             os.makedirs(pasta, exist_ok=True)
             im = np.concatenate([T[k - 1], T[k], T[k + b - 1] if b > 1 else T[k], T[k + b]], axis=1)
             Image.fromarray(im).resize((im.shape[1] * 3, im.shape[0] * 3), Image.NEAREST).save(os.path.join(pasta, f'{n + 1:03d}_q{fr}_{tags}.png'))
+    for pos, orig, ms in marcas: print(f'marca ({orig}) na saida {pos}, t={ms / 1000:.2f}s')
 
 
 if __name__ == '__main__': main()

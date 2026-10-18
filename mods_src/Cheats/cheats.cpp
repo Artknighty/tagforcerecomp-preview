@@ -56,10 +56,11 @@ static uint32_t chama(TfCpu *c, uint32_t fn, uint32_t a0) {
 static int g_ver = 0;        /* 1. see the opponent's cards */
 static int g_canto = 1;      /*    panel corner: 0 top left, 1 top right, 2 bottom left, 3 bottom right */
 static int g_mult = 1;       /* 2. DP multiplier */
+static int g_unlock_auto = 0; /* 3. unlock everything by itself once per start, when the save is loaded (set in the launcher) */
 static const int MULT_MAX = 10;
 static std::wstring cfg_path(void) { return std::wstring(A->mod_dir) + L"\\config.ini"; }
 static void cfg_save(void) {
-    if (FILE *f = _wfopen(cfg_path().c_str(), L"w")) { fprintf(f, "show_opponent_cards=%d\npanel_corner=%d\ndp_multiplier=%d\n", g_ver, g_canto, g_mult); fclose(f); }
+    if (FILE *f = _wfopen(cfg_path().c_str(), L"w")) { fprintf(f, "show_opponent_cards=%d\npanel_corner=%d\ndp_multiplier=%d\nunlock_on_start=%d\n", g_ver, g_canto, g_mult, g_unlock_auto); fclose(f); }
 }
 static void cfg_load(void) {
     bool tem_mult = false;
@@ -68,6 +69,7 @@ static void cfg_load(void) {
         while (fgets(l, sizeof l, f)) {
             /* (the old Portuguese key names are still read, so existing config files keep working) */
             if (sscanf(l, "show_opponent_cards=%d", &v) == 1 || sscanf(l, "ver_cartas_adversario=%d", &v) == 1) g_ver = v != 0;
+            else if (sscanf(l, "unlock_on_start=%d", &v) == 1) g_unlock_auto = v != 0;
             else if (sscanf(l, "panel_corner=%d", &v) == 1 || sscanf(l, "canto_painel=%d", &v) == 1) g_canto = std::max(0, std::min(3, v));
             else if (sscanf(l, "dp_multiplier=%d", &v) == 1 || sscanf(l, "multiplicador_dp=%d", &v) == 1) { g_mult = std::max(1, std::min(MULT_MAX, v)); tem_mult = true; }
         }
@@ -269,6 +271,7 @@ static int unlock_get(void) { return 0; }   /* a one-shot menu item: always show
 static void unlock_set(int v) { if (v) g_unlock_pending = true; }
 static void unlock_quadro(TfCpu *c) {
     if (const char *e = getenv("TF_CHEAT_UNLOCK")) { static bool done; const int from = atoi(e); if (!done && from && save_loaded() && A->frame() > (uint64_t)(from > 1 ? from : 600)) { done = true; g_unlock_pending = true; } }   /* tests: the frame to apply at */
+    if (g_unlock_auto) { static bool auto_done; if (!auto_done && save_loaded()) { auto_done = true; g_unlock_pending = true; } }   /* "Unlock on start" (launcher) */
     if (!g_unlock_pending) return;
     if (!save_loaded()) { A->log("Unlock everything: no save is loaded yet"); g_unlock_pending = false; return; }
     g_unlock_pending = false; unlock_all(c);
@@ -285,7 +288,7 @@ extern "C" __declspec(dllexport) int tfmod_init(const TfModApi *api) {
     A->add_toggle(L"&See the opponent's cards", VK_F6, ver_get, ver_set);
     A->add_slider(L"Card panel position (0 top left, 1 top right, 2 bottom left, 3 bottom right)", L"", 0, 3, 1, canto_get, canto_set);
     A->add_slider(L"&DP multiplier in duels", L"x", 1, MULT_MAX, 1, mult_get, mult_set);
-    A->add_toggle(L"&Unlock everything (cards, packs, duelists)", 0, unlock_get, unlock_set);
+    A->add_toggle(L"&Unlock everything (cards, packs, duelists)", VK_F2, unlock_get, unlock_set);
     A->hook(F_QUADRO, hk_quadro);
     A->hook(F_RECOMPENSA, hk_recompensa);
     A->hook(F_NUMERO, hk_numero);
