@@ -8,10 +8,13 @@
 #include <stdint.h>
 #include <stdlib.h>
 #include <stdio.h>
+#include <string.h>
 #include <mutex>
 #include <algorithm>
 #include <cmath>
 
+uint64_t k_now_us(void);
+extern volatile uint64_t g_diag_frames;
 static const uint32_t RING = 1u << 16;          /* quadros de audio (~1.5 s) */
 static const uint32_t BUFF = 1024;              /* quadros por buffer do waveOut (~23 ms) */
 static const int NBUF = 4;
@@ -91,13 +94,13 @@ void audio_out_skip(bool on) { g_skip = on; }
 namespace {
 /* Controle de reserva por canal: o ritmo medio do jogo (tempo virtual -> real) nunca bate exatamente com o relogio do dispositivo (alguns decimos de %
  * por causa das esperas); sem controle a reserva encolhe ate zerar (engasgo) ou cresce ate descartar. */
-struct ReserveCtl { const uint64_t *key; double ema; };
+struct ReserveCtl { const uint64_t *key; double ema; double last; double frac; };
 ReserveCtl g_ctl[8]; int g_nctl;
 ReserveCtl *ctl_for(const uint64_t *cursor) {
     for (int q = 0; q < g_nctl; q++) if (g_ctl[q].key == cursor) return &g_ctl[q];
-    return g_nctl < 8 ? &(g_ctl[g_nctl++] = {cursor, 0.0}) : nullptr;
+    return g_nctl < 8 ? &(g_ctl[g_nctl++] = {cursor, 0.0, 0.0, 0.0}) : nullptr;
 }
-const uint64_t RESERVE_TARGET = 2600;   /* reserva alvo a frente do ponto de leitura (~59 ms) */
+const uint64_t RESERVE_TARGET = 3300;   /* reserva alvo a frente do ponto de leitura (~75 ms; a producao chega em rajadas de 3 blocos por quadro e quadros de 25 ms sao comuns) */
 }
 void audio_out_mix(uint64_t *cursor, const int16_t *src, uint32_t frames, bool stereo, int lvol, int rvol) {
     if (!g_on || !src || g_skip || !frames) return;
@@ -107,20 +110,32 @@ void audio_out_mix(uint64_t *cursor, const int16_t *src, uint32_t frames, bool s
         if (*cursor) {
             g_realign++;
             static const bool dbg = getenv("TF_LAT_DEBUG") != nullptr;
-            if (dbg) fprintf(stderr, "[audio] realinhou: cursor-leitura = %lld%c", (long long)*cursor - (long long)g_rd, 10);
+            if (dbg) { LARGE_INTEGER q, f; QueryPerformanceCounter(&q); QueryPerformanceFrequency(&f); const double now = q.QuadPart * 1000.0 / f.QuadPart;
+                fprintf(stderr, "[audio] realinhou: canal %d cursor-leitura = %lld, bloco %u, %.1f ms desde a ultima mistura do canal, reserva media %.0f, t=%.0f ms%c", ctl ? (int)(ctl - g_ctl) : -1, (long long)*cursor - (long long)g_rd, frames, ctl && ctl->last ? now - ctl->last : -1.0, ctl ? ctl->ema : 0.0, now, 10); }
         }
         *cursor = g_rd + RESERVE_TARGET;
         if (ctl) ctl->ema = (double)RESERVE_TARGET;
     }
+    {   /* depuracao (TF_LAT_DEBUG): quantas amostras cada canal entregou por segundo real */
+        static const bool dbg2 = getenv("TF_LAT_DEBUG") != nullptr;
+        if (dbg2) { static double t0; static uint64_t v0, fr0, n[8]; static int calls[8]; LARGE_INTEGER q, f; QueryPerformanceCounter(&q); QueryPerformanceFrequency(&f); const double now = q.QuadPart * 1000.0 / f.QuadPart;
+            const int ci = ctl ? (int)(ctl - g_ctl) : 7; n[ci] += frames; calls[ci]++;
+            if (now - t0 >= 1000.0) { if (t0) { fprintf(stderr, "[audio] por s real (virtual %llu us, %llu quadros):", (unsigned long long)(k_now_us() - v0), (unsigned long long)(g_diag_frames - fr0)); for (int i = 0; i < g_nctl; i++) fprintf(stderr, " canal%d=%llu amostras em %d blocos (reserva %.0f);", i, (unsigned long long)n[i], calls[i], g_ctl[i].ema); fprintf(stderr, "%c", 10); } t0 = now; v0 = k_now_us(); fr0 = g_diag_frames; memset(n, 0, sizeof n); memset(calls, 0, sizeof calls); } }
+    }
     uint32_t out = frames;
     if (ctl) {
-        /* correcao proporcional e minima (<= ~0,4%, zona morta de ~400 quadros): so absorve o desvio de ritmo; correcoes grandes ou que ligam e
-         * desligam por bloco soam como tremor de altura (o som "perde velocidade") */
+        /* correcao proporcional: pequena (<= ~0,4%) enquanto a reserva so oscila; correcoes pequenas que ligam e desligam por bloco soam como tremor de altura.
+         * Se a reserva esta muito abaixo do alvo, o jogo esta rodando mais devagar que o tempo real (ex.: 120 FPS em cena pesada: ~52 quadros/s = ~87% do
+         * audio por segundo) e a alternativa era um buraco de ~60 ms de silencio uma vez por segundo; entao o bloco e esticado ate 25% (altura cai junto com
+         * a velocidade do jogo, em vez de picotar). A fracao de amostra que sobra fica no 'frac' do canal. */
         if (ctl->ema == 0.0) ctl->ema = (double)RESERVE_TARGET;
         ctl->ema += 0.05 * ((double)((long long)*cursor - (long long)g_rd) - ctl->ema);
-        const int dmax = std::max(1, (int)(frames / 256));
-        const int d = std::max(-dmax, std::min(dmax, (int)std::lround(((double)RESERVE_TARGET - ctl->ema) / 1200.0)));
-        out = (uint32_t)((int)frames + d);
+        const double dev = (double)RESERVE_TARGET - ctl->ema;
+        double st;
+        if (dev > 400.0) st = 0.004 + std::min(0.246, (dev - 400.0) / 1000.0 * 0.246);
+        else st = std::max(-0.004, std::min(0.004, dev / 1200.0 / 256.0 * 4.0));
+        const double want = (double)frames * (1.0 + st) + ctl->frac;
+        out = (uint32_t)std::max(1.0, std::floor(want)); ctl->frac = want - (double)out;
     }
     if (*cursor + out > g_rd + RING - 2 * BUFF) return;            /* muito a frente: descarta */
     for (uint32_t f = 0; f < out; f++) {
@@ -135,4 +150,5 @@ void audio_out_mix(uint64_t *cursor, const int16_t *src, uint32_t frames, bool s
         g_ring[k] += (l * lvol) >> 15; g_ring[k + 1] += (r * rvol) >> 15;
     }
     *cursor += out;
+    if (ctl) { LARGE_INTEGER q, f; QueryPerformanceCounter(&q); QueryPerformanceFrequency(&f); ctl->last = q.QuadPart * 1000.0 / f.QuadPart; }
 }

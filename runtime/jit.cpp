@@ -44,6 +44,13 @@ static bool load_tcc(const std::wstring &dir) {
     return true;
 }
 static void tcc_error(void *, const char *m) { fprintf(stderr, "[jit] %s\n", m); }
+static std::string tcc_path(const std::wstring &w) {   /* TCC usa caminhos narrow via CRT/Win32, que neste build seguem a pagina ANSI, nao UTF-8. */
+    int n = WideCharToMultiByte(CP_ACP, 0, w.c_str(), -1, nullptr, 0, nullptr, nullptr);
+    if (n <= 1) return {};
+    std::string s(n, '\0');
+    WideCharToMultiByte(CP_ACP, 0, w.c_str(), -1, &s[0], n, nullptr, nullptr);
+    s.pop_back(); return s;
+}
 
 static void jit_selftest(void);
 bool jit_generic(void) { return g_gen_nmodules == 0; }
@@ -72,7 +79,7 @@ bool jit_init(void) {
     if (!tccdir.empty() && tccdir.back() != L'\\') tccdir += L'\\';
     if (!gen.empty() && gen.back() != L'\\') gen += L'\\';
     if (!load_tcc(tccdir)) { fprintf(stderr, "[jit] libtcc.dll nao encontrada em %ls\n", tccdir.c_str()); return false; }
-    std::string incdir = to_utf8(exe_dir()) + "include";
+    std::string incdir = tcc_path(exe_dir()) + "include";
     if (const char *i = getenv("TF_JIT_INC")) incdir = i;
     FILE *mf = _wfopen((gen + L"modulos.tsv").c_str(), L"rb"); if (!mf) { fprintf(stderr, "[jit] sem modulos.tsv\n"); return false; }
     std::string man; { char b[4096]; size_t n; while ((n = fread(b, 1, sizeof b, mf)) > 0) man.append(b, n); } fclose(mf);
@@ -88,8 +95,8 @@ bool jit_init(void) {
         FILE *f = _wfopen((gen + to_wide(c) + L".c").c_str(), L"rb"); if (!f) { fprintf(stderr, "[jit] sem %s.c\n", c.c_str()); return false; }
         std::string src; { std::vector<char> b(1 << 20); size_t n; while ((n = fread(b.data(), 1, b.size(), f)) > 0) src.append(b.data(), n); } fclose(f);
         TCCState *s = T.nw();
-        T.errf(s, nullptr, tcc_error); T.libpath(s, to_utf8(tccdir).c_str()); T.opts(s, "-w -nostdinc");   /* -nostdinc: so os cabecalhos abaixo */
-        T.inc(s, incdir.c_str()); T.inc(s, (to_utf8(tccdir) + "include").c_str()); T.otype(s, 1);   /* 1 = TCC_OUTPUT_MEMORY */
+        T.errf(s, nullptr, tcc_error); T.libpath(s, tcc_path(tccdir).c_str()); T.opts(s, "-w -nostdinc");   /* -nostdinc: so os cabecalhos abaixo */
+        T.inc(s, incdir.c_str()); T.inc(s, (tcc_path(tccdir) + "include").c_str()); T.otype(s, 1);   /* 1 = TCC_OUTPUT_MEMORY */
         if (!getenv("TF_JIT_NOTRACE")) T.def(s, "PSP_TRACE", "1");   /* TF_JIT_NOTRACE=1: sem o rastreio de funcoes (TRC) */
         T.addsym(s, "psp_call", (const void *)psp_call); T.addsym(s, "psp_hook", (const void *)psp_hook); T.addsym(s, "psp_watch_hit", (const void *)psp_watch_hit);
         T.addsym(s, "vfpu_exec", (const void *)vfpu_exec); T.addsym(s, "psp_break", (const void *)psp_break); T.addsym(s, "psp_syscall", (const void *)psp_syscall);
@@ -121,8 +128,8 @@ bool jit_init(void) {
 static void jit_selftest(void) {
     static const char *src = "#include \"psp_rt.h\"\nint selftest(float *v, int n, int *out) { for (int i = 0; i < n; i++) for (int m = 0; m < 4; m++) out[i * 4 + m] = f2i_(v[i], m); return 0; }\n";
     TCCState *s = T.nw(); T.errf(s, nullptr, tcc_error); T.opts(s, "-w -nostdinc"); T.otype(s, 1);
-    std::string incdir = getenv("TF_JIT_INC") ? getenv("TF_JIT_INC") : ""; T.inc(s, incdir.c_str());
-    std::wstring tccdir = _wgetenv(L"TF_JIT_TCC") ? _wgetenv(L"TF_JIT_TCC") : L""; T.libpath(s, to_utf8(tccdir).c_str()); T.inc(s, (to_utf8(tccdir) + "\\include").c_str());
+    std::string incdir = getenv("TF_JIT_INC") ? getenv("TF_JIT_INC") : tcc_path(exe_dir()) + "include"; T.inc(s, incdir.c_str());
+    std::wstring tccdir = _wgetenv(L"TF_JIT_TCC") ? _wgetenv(L"TF_JIT_TCC") : exe_dir() + L"tcc\\"; T.libpath(s, tcc_path(tccdir).c_str()); T.inc(s, (tcc_path(tccdir) + "include").c_str());
     T.addsym(s, "__builtin_clz", (const void *)jit_clz); T.addsym(s, "__builtin_bswap32", (const void *)jit_bswap32); T.addsym(s, "isunordered", (const void *)jit_isunordered);
     T.addsym(s, "tf_nearbyint", (const void *)jit_nearbyint); T.addsym(s, "tf_sqrtf", (const void *)jit_sqrtf); T.addsym(s, "tf_floor", (const void *)jit_floor); T.addsym(s, "tf_ceil", (const void *)jit_ceil); T.addsym(s, "tf_trunc", (const void *)jit_trunc);
     if (T.cstr(s, src) < 0 || T.reloc(s, (void *)1) < 0) { fprintf(stderr, "[jit] selftest nao compilou\n"); return; }

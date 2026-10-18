@@ -13,13 +13,14 @@ double gpu_now_us(void) { LARGE_INTEGER c, f; QueryPerformanceCounter(&c); Query
 static const GpuBackend *g_b;
 /* 120 FPS com a thread de apresentacao (display.cpp): ela apresenta enquanto a thread do jogo desenha; toda chamada ao backend passa por esta
  * trava (recursiva: as funcoes daqui chamam umas as outras). Os desenhos do jogo pegam a trava por chamada (~20 ns cada). */
+double g_gl_wait_us;   /* tempo esperando a trava da GPU (diagnostico) */
 static std::mutex g_gpu_mu; static thread_local int t_gpu_depth;   /* trava + profundidade por thread (as funcoes daqui chamam umas as outras) */
 struct GpuLock {   /* TF_GPU_LOCK_LOG: registra esperas longas pela trava (diagnostico da thread de apresentacao) */
     GpuLock() {
         if (t_gpu_depth++) return;
         if (g_gpu_mu.try_lock()) return;
-        static const bool lg = getenv("TF_GPU_LOCK_LOG") != nullptr; const double t0 = lg ? gpu_now_us() : 0;
-        g_gpu_mu.lock();
+        static const bool lg = getenv("TF_GPU_LOCK_LOG") != nullptr; const double t0 = gpu_now_us();
+        g_gpu_mu.lock(); g_gl_wait_us += gpu_now_us() - t0;
         if (lg) { const double w = (gpu_now_us() - t0) / 1000.0; if (w > 3.0) fprintf(stderr, "[trava] thread %lu esperou %.1f ms pela GPU%c", GetCurrentThreadId(), w, 10); }
     }
     ~GpuLock() { if (--t_gpu_depth == 0) g_gpu_mu.unlock(); }

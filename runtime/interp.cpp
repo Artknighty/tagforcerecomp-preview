@@ -20,6 +20,7 @@ namespace {
  * reescreve o alvo, entao refazer o desenho no quadro intermediario leria a imagem do FUTURO (o reflexo saia um quadro adiantado e o
  * meio "pulava" para frente). Por isso, ao gravar, a imagem e copiada para um quadro sombra proprio (uma copia por alvo e versao). */
 struct Frozen { int fb, w, h, res; };
+static bool g_rtt_cache_on; static std::vector<std::pair<int, int>> g_rtt_cache; static std::vector<Frozen> g_rtt_held;   /* (definidos junto de g_fpool: interp_reset usa) */
 std::vector<Frozen> g_fpool;                  /* copias livres para reuso */
 uint32_t g_fgen = 1;                          /* geracao: interp_reset invalida as copias (os ids da GPU deixam de valer) */
 std::unordered_map<int, uint32_t> g_fbver;    /* versao de cada quadro sombra (muda a cada desenho/upload nele) */
@@ -46,7 +47,7 @@ Rec g_old; bool g_have_old;            /* 120 FPS: o quadro antes de g_prev, gua
 uint64_t g_last_fresh, g_old_vb;
 int g_scratch = -1, g_scratch_res;
 /* 120 FPS com a thread de apresentacao: Q1, Q2 e Q3 desenhados de uma vez, cada um no seu buffer (interp_use_scratch troca o g_scratch ativo) */
-static int g_scr[3] = {-1, -1, -1}, g_scr_res[3], g_scr_k;
+static int g_scr[6] = {-1, -1, -1, -1, -1, -1}, g_scr_res[6], g_scr_k;   /* dois jogos de 3 (display.cpp alterna a cada quadro novo) */
 void scratch_use(int k) { g_scr[g_scr_k] = g_scratch; g_scr_res[g_scr_k] = g_scratch_res; g_scr_k = k; g_scratch = g_scr[k]; g_scratch_res = g_scr_res[k]; }
 bool g_mid_ready;                      /* interp_prepare desenhou um intermediario em g_scratch que ainda nao foi mostrado */
 /* par parado: o quadro novo e igual ao anterior (mesmos desenhos, estados, texturas e vertices; sem alvos de textura): todo intermediario seria a
@@ -167,10 +168,11 @@ int interp_real_copy(int src) {
 void interp_reset(void) {
     for (int &f : g_rcopy) { if (f >= 0) gpu_fb_destroy(f); f = -1; }
     free_dead(true);
+    for (const Frozen &f : g_rtt_held) g_fpool.push_back(f); g_rtt_held.clear(); g_rtt_cache.clear(); g_rtt_cache_on = false;
     g_pend.clear(); g_prev.clear(); g_have_prev = false; g_old.clear(); g_have_old = false; g_mid_ready = false; g_last_fresh = 0;
     g_lastlist.clear();
     g_fgen++; for (const Frozen &x : g_fpool) gpu_fb_destroy(x.fb); g_fpool.clear(); g_fbver.clear();   /* copias ainda presas (autoteste) nao voltam ao pool */
-    for (int k = 0; k < 3; k++) { if (k != g_scr_k && g_scr[k] >= 0) gpu_fb_destroy(g_scr[k]); g_scr[k] = -1; }
+    for (int k = 0; k < 6; k++) { if (k != g_scr_k && g_scr[k] >= 0) gpu_fb_destroy(g_scr[k]); g_scr[k] = -1; }
     if (g_scratch >= 0) gpu_fb_destroy(g_scratch);
     g_scratch = -1;
 }
@@ -256,7 +258,13 @@ bool fit_affine(const std::vector<float> &P, float m[6]) {   /* P: ax, ay, bx, b
 }
 int mid_rtt(const FzEntry &ec, const FzEntry &ep, std::vector<Frozen> &tmp);
 /* pareia as listas de desenho do quadro anterior (pv) e do novo (cur) e desenha o quadro do meio em `target`. depth 1 = lista de um alvo de textura */
+/* 120 FPS: alvos refeitos do 1o intermediario do par, guardados ate interp_extra_done (nao voltam ao pool antes: outro alvo refeito os sobrescreveria entre os intermediarios) */
+struct PreC { bool valid = false, solid = false, velset = false; float ex = 0, ey = 0, af[6] = {}; };
+static std::vector<PreC> g_pcache;
+static std::vector<int8_t> g_bcache; static uint64_t g_bcache_vb = ~0ull; static size_t g_bcache_nv, g_bcache_pv;
+static double g_pf_calc, g_pf_rtt, g_pf_draw; static int g_pf_n;
 bool interp_lists(const Rec &pv, Rec &cur, int target, int depth, std::vector<Frozen> &tmp) {
+    const double tcalc0 = gpu_now_us();
     std::vector<GpuVtx> &g_out = g_outs[depth];
     static const float T0 = getenv("TF_INTERP_MAX") ? (float)atof(getenv("TF_INTERP_MAX")) : 96.f; const float T = T0 * g_T_mul;   /* deslocamento maximo (pixels nativos) para interpolar um triangulo */
     /* pareia cada desenho novo com o desenho anterior de mesma forma que menos andou (janela em torno do ultimo pareado; ordem de desenho
@@ -361,6 +369,13 @@ bool interp_lists(const Rec &pv, Rec &cur, int target, int depth, std::vector<Fr
     cur.disp.assign(cn, 1e9f); cur.vel.assign(cn, std::array<float, 2>{1e9f, 1e9f}); cur.vel2.assign(cn, std::array<float, 2>{1e9f, 1e9f});
     const bool dump_now = depth == 0 && g_dump_vb >= 0 && dump_vb_now(g_cur_vb);
     static const bool no_loop = getenv("TF_INTERP_NOLOOP") != nullptr;   /* A/B: sem a regra do laco de rolagem (comportamento antigo: o meio do salto) */
+    static const bool no_bcache = getenv("TF_INTERP_NOBCACHE") != nullptr, selftest_on = getenv("TF_INTERP_SELFTEST") != nullptr;
+    bool bcache_on = false;
+    if (depth == 0 && !no_bcache && !selftest_on) {
+        const size_t nt = cur.v.size() / 3 + 1;
+        if (!(g_bcache_vb == g_cur_vb && g_bcache_nv == cur.v.size() && g_bcache_pv == pv.v.size() && g_bcache.size() == nt)) { g_bcache.assign(nt, -2); g_pcache.assign(cn, PreC()); g_bcache_vb = g_cur_vb; g_bcache_nv = cur.v.size(); g_bcache_pv = pv.v.size(); }
+        bcache_on = true;
+    }
     VMap &shared = g_vmap[depth]; shared.reset(cur.v.size());   /* posicao final de cada vertice do quadro novo (em todos os desenhos): vertices compartilhados nao podem se separar (rachaduras entre poligonos vizinhos) */
     /* triangulos nao interpolados so SEGUEM os vizinhos interpolados depois de todos processados: se definissem a posicao do vertice (por virem
      * antes na lista), o vizinho interpolado herdaria um vertice no lugar novo e esticaria (pacotes da vitrine da loja tortos no quadro do meio) */
@@ -385,7 +400,11 @@ bool interp_lists(const Rec &pv, Rec &cur, int target, int depth, std::vector<Fr
          * rasgava no quadro do meio. Os pares saem dos triangulos alinhados por indice (mesmo UV); quando a ordem muda (muitos pares errados),
          * os minimos quadrados entortam e a mediana da translacao e mais robusta: vale o modelo que explica mais pontos (<= 2 px). */
         float ex = 0, ey = 0, af[6] = {1, 0, 0, 0, 1, 0}; bool solid = false;   /* solid: o desenho andou como um bloco (>= 90% dos vertices com o deslocamento tipico) */
-        if (!v1b(3)) {
+        /* 120 FPS: movimento do desenho (mediana, ajuste afim, solid) nao depende de t: o 1o intermediario do par guarda, os outros leem (fit_affine +
+         * medianas eram ~30% do tempo do interp_lists) */
+        PreC *pc = bcache_on && j < g_pcache.size() ? &g_pcache[j] : nullptr;
+        if (pc && pc->valid) { ex = pc->ex; ey = pc->ey; memcpy(af, pc->af, sizeof af); solid = pc->solid; if (pc->velset) cur.vel[j] = {ex, ey}; }
+        else if (!v1b(3)) {
             static std::vector<float> mx, my, P; mx.clear(); my.clear(); P.clear();
             for (uint32_t k = 0; k + 2 < c.n && k + 2 < p.n; k += 3) {
                 const GpuVtx *b = &cur.v[c.off + k], *a = &pv.v[p.off + k]; bool ok = true;
@@ -409,6 +428,7 @@ bool interp_lists(const Rec &pv, Rec &cur, int target, int depth, std::vector<Fr
                 }
                 if (in_a > in_t) memcpy(af, m, sizeof af);
             }
+            if (pc) { pc->valid = true; pc->ex = ex; pc->ey = ey; memcpy(pc->af, af, sizeof af); pc->solid = solid; pc->velset = !mx.empty(); }
         }
         auto dev = [&](const GpuVtx &a, const GpuVtx &b) { return fabsf(af[0] * a.x + af[1] * a.y + af[2] - b.x) + fabsf(af[3] * a.x + af[4] * a.y + af[5] - b.y); };   /* distancia ao previsto */
         /* LACO DE ROLAGEM: fundos que rolam sem fim (xadrez do Duel Result: +1 px por quadro e, a cada 32, volta 31 px; o desenho com textura
@@ -458,7 +478,12 @@ bool interp_lists(const Rec &pv, Rec &cur, int target, int depth, std::vector<Fr
             /* triangulo anterior equivalente: mesmo UV e deslocamento mais parecido com o do desenho, numa janela em volta (o alinhamento por
              * indice falha quando um desenho junta varios objetos e a ordem deles muda, ex.: o botao destacado do menu) */
             const GpuVtx *best = nullptr; float bestc = 1e30f; int bestmi = -1;
-            for (int mi = 0; mi <= 24; mi++) {
+            /* 120 FPS: os tres intermediarios do par (t = 0,25 / 0,5 / 0,75) repetem esta busca com o mesmo resultado (so a mistura depende de t):
+             * o 1o a guarda por triangulo e os outros leem (era ~2 ms de CPU por intermediario no mapa, 6 ms por quadro novo; o 120 FPS caia
+             * para ~52 quadros/s reais). TF_INTERP_NOBCACHE=1 desliga (A/B) */
+            const size_t bci = (c.off + k) / 3; bool hit = false;
+            if (bcache_on) { const int8_t cv = g_bcache[bci]; if (cv != -2) { hit = true; bestmi = cv; if (cv >= 0) { const int64_t kk = (int64_t)k + (int64_t)((cv & 1) ? -((cv + 1) / 2) : (cv / 2)) * 3; best = &pv.v[p.off + kk]; } } }
+            if (!hit) for (int mi = 0; mi <= 24; mi++) {
                 int64_t kk = (int64_t)k + (int64_t)((mi & 1) ? -((mi + 1) / 2) : (mi / 2)) * 3;   /* 0, -1, +1, -2, +2... triangulos */
                 if (kk < 0 || kk + 2 >= (int64_t)p.n) continue;
                 const GpuVtx *a = &pv.v[p.off + kk]; bool ok = true; float cost = 0;
@@ -469,6 +494,7 @@ bool interp_lists(const Rec &pv, Rec &cur, int target, int depth, std::vector<Fr
                 if (ok && cost < bestc) { bestc = cost; best = a; bestmi = mi; }
                 if (bestc < 0.75f) break;   /* ja bate com o previsto (< 0,25 px por vertice): os outros candidatos so custariam tempo */
             }
+            if (bcache_on && !hit) g_bcache[bci] = (int8_t)bestmi;
             if (dump_now && bestmi != 0) fprintf(stderr, "[idump2] cur %zu tri %u: E=(%.1f,%.1f) par %d custo %.1f (b0 %.1f,%.1f)\n", j, k / 3, ex, ey, bestmi, bestc, b[0].x, b[0].y);
             g_st_tris++;
             bool ok = best != nullptr;
@@ -549,6 +575,7 @@ bool interp_lists(const Rec &pv, Rec &cur, int target, int depth, std::vector<Fr
             if (hide) { o[1].x = o[2].x = o[0].x; o[1].y = o[2].y = o[0].y; }
         }
     }
+    const double tcalc1 = gpu_now_us(); double trtt = 0, tdraw = 0;
     std::vector<std::pair<int, int>> rtt_mid;   /* copia congelada -> alvo refeito interpolado neste quadro do meio */
     for (size_t j = 0; j < cn; j++) { GpuState s = cur.d[j].s; s.fb = target;
         if (match[j] >= 0) { const GpuState &ps = pv.d[match[j]].s; s.sx1 = mix_i(ps.sx1, s.sx1); s.sy1 = mix_i(ps.sy1, s.sy1); s.sx2 = mix_i(ps.sx2, s.sx2); s.sy2 = mix_i(ps.sy2, s.sy2); }   /* o recorte (scissor) tambem anda */
@@ -561,12 +588,19 @@ bool interp_lists(const Rec &pv, Rec &cur, int target, int depth, std::vector<Fr
                 const FzEntry *ec = nullptr, *ep = nullptr;
                 for (const auto &e : cur.fzmap) if (e.fb == fc) ec = &e;
                 for (const auto &e : pv.fzmap) if (e.fb == fp) ep = &e;
-                got = ec && ep ? mid_rtt(*ec, *ep, tmp) : -1;
+                const double tr0 = gpu_now_us();
+                /* 120 FPS: o alvo refeito do 1o intermediario do par (t = 0,25) serve aos outros dois (o reflexo erra 1/4 de quadro: invisivel; refazer custava
+                 * 2,4 ms de CPU por intermediario no mapa). TF_INTERP_RTT_POR_T=1 refaz em cada um */
+                bool reused = false;
+                if (g_rtt_cache_on && depth == 0) for (const auto &r : g_rtt_cache) if (r.first == fc) { got = r.second; reused = true; }
+                if (!reused) { got = ec && ep ? mid_rtt(*ec, *ep, tmp) : -1; if (g_rtt_cache_on && depth == 0) g_rtt_cache.push_back({fc, got}); }
+                trtt += gpu_now_us() - tr0;
                 rtt_mid.push_back({fc, got});
             }
             if (got >= 0) s.tex = (uint32_t)GPU_FBTEX | (uint32_t)got;
         }
-        gpu_draw(s, &g_out[cur.d[j].off], (int)cur.d[j].n); }
+        const double td0 = gpu_now_us(); gpu_draw(s, &g_out[cur.d[j].off], (int)cur.d[j].n); tdraw += gpu_now_us() - td0; }
+    if (depth == 0) { g_pf_calc += tcalc1 - tcalc0; g_pf_rtt += trtt; g_pf_draw += tdraw; if (++g_pf_n >= 300) { if (g_dbg) fprintf(stderr, "[interp] CPU por intermediario: pareamento+vertices %.2f ms, alvo refeito %.2f, gpu_draw %.2f (ms; medios por chamada)%c", g_pf_calc / 1000.0 / g_pf_n, g_pf_rtt / 1000.0 / g_pf_n, g_pf_draw / 1000.0 / g_pf_n, 10); g_pf_calc = g_pf_rtt = g_pf_draw = 0; g_pf_n = 0; } }
     return true;
 }
 /* alvo de textura do quadro do meio: as listas dos dois quadros (cada uma comeca num clear de cor) pareadas e desenhadas num alvo temporario */
@@ -588,7 +622,7 @@ bool render_mid(const Rec &pv, Rec &cur, int res) {
     if (g_scratch < 0) { g_scratch = gpu_fb_create(480, 272, res); g_scratch_res = res; if (g_scratch < 0) return false; }
     std::vector<Frozen> tmp;
     bool ok = interp_lists(pv, cur, g_scratch, 0, tmp);
-    for (const Frozen &f : tmp) g_fpool.push_back(f);
+    for (const Frozen &f : tmp) (g_rtt_cache_on ? g_rtt_held : g_fpool).push_back(f);
     return ok;
 }
 
@@ -670,6 +704,7 @@ bool interp_prepare(int gfb, uint64_t vb, bool allow, int res, float t) {
     static const bool selftest = getenv("TF_INTERP_SELFTEST") != nullptr;
     if (selftest && allow && gap == 2 && g_gap_prev == 2 && g_have_prev && g_have_prev2 && !cur.taint && !g_prev.taint && !g_prev2.taint && !cur.d.empty()) { g_cur_vb = vb; selftest_run(cur, gfb, vb, res); }
     if (allow && gap == 2 && g_have_prev && !cur.taint && !g_prev.taint && !cur.d.empty()) {   /* jogo a 30 fps: o vblank do meio ganha o quadro intermediario */
+        static const bool rtt_per_t = getenv("TF_INTERP_RTT_POR_T") != nullptr; for (const Frozen &f : g_rtt_held) g_fpool.push_back(f); g_rtt_held.clear(); g_rtt_cache.clear(); g_rtt_cache_on = t != 0.5f && !rtt_per_t;
         g_cur_vb = vb; g_t = t; const double t0 = gpu_now_us(); const uint64_t loops0 = g_st_loop; const bool parado = static_pair(g_prev, cur);
         if (parado) { g_static_fb = gfb; done = true; g_st_static++; gpu_kick(); /* solta o quadro real retido (gpu_hold): e ele que vai aparecer */ } else { g_static_fb = -1; gpu_mid_scope(true); done = render_mid(g_prev, cur, res); if (done) { g_gpu_prof_tag = 'M'; gpu_kick(); } gpu_mid_scope(false); }
         g_st_us += gpu_now_us() - t0;
@@ -715,5 +750,5 @@ bool interp_extra(float t, int res) {
     g_gpu_prof_tag = 'M'; gpu_kick(); g_mid_ready = true;
     return true;
 }
-void interp_extra_done(void) { g_old.clear(); g_have_old = false; }   /* devolve as copias congeladas de g_old ao pool */
+void interp_extra_done(void) { g_old.clear(); g_have_old = false; for (const Frozen &f : g_rtt_held) g_fpool.push_back(f); g_rtt_held.clear(); g_rtt_cache.clear(); g_rtt_cache_on = false; }   /* devolve as copias congeladas de g_old ao pool */
 void interp_use_scratch(int k) { scratch_use(k); }   /* (scratch_use fica no namespace anonimo, junto do g_scratch) */

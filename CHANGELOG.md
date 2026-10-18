@@ -2,6 +2,19 @@
 
 Format: [Keep a Changelog](https://keepachangelog.com/en/1.1.0/). Versioning: [SemVer](https://semver.org/).
 
+## [0.3.1] - 2026-10-18
+
+### Adicionado
+- Logotipo de Yu-Gi-Oh! GX Tag Force como ícone do executável.
+
+### Melhorado
+- Mais estabilidade no ritmo de 120 FPS durante a exploração do mapa.
+- Transições de áudio mais suaves em cenas pesadas.
+
+### Corrigido
+- Corrigido o fechamento logo ao iniciar a versão pública.
+- Corrigida a inicialização quando o pacote é extraído em um caminho com caracteres acentuados.
+
 ## [0.3.0] - 2026-10-18
 
 ### Added

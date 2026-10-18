@@ -378,6 +378,8 @@ static void frame_stats(void) {
         static const double div_min = getenv("TF_DIV_MIN") ? atof(getenv("TF_DIV_MIN")) : 25.0;   /* teste: TF_DIV_MIN=0 mede todos os quadros */
         static int told; if (ms > div_min && told < 3000) { told++; fprintf(stderr, "[perf] quadro pesado %llu: %.1f ms (texturas criadas na GPU: %d, %.0f MB, %.1f ms = memoria %.1f + copia %.1f; esperando PNGs: %.1f ms; pipelines %.1f ms; esperando a GPU %.1f ms)%c", (unsigned long long)g_frames, ms, tn, tmb, tms, ams, cms, wms, pms, gwms, 10);
             const double cpu = std::max(0.0, ms - g_div_ge_ms - g_pump_ms - g_pad_ms - g_div_tail_ms);   /* o resto da janela: emulacao da CPU do jogo e o que mais estiver nela */
+            extern double g_gl_wait_us, g_q_wait_total_ms; static double gl0, q0w; const double glw = (g_gl_wait_us - gl0) / 1000.0, qw = g_q_wait_total_ms - q0w; gl0 = g_gl_wait_us; q0w = g_q_wait_total_ms;
+            fprintf(stderr, "[perf] esperas neste quadro: trava da GPU %.1f ms, fila do Vulkan %.1f ms%c", glw, qw, 10);
             fprintf(stderr, "[perf] divisao %llu: jogo (CPU) %.1f ms | GE %.1f | janela %.1f | controle %.1f | apresentacao do quadro anterior %.1f ms (inclui a espera do vblank)%c", (unsigned long long)g_frames, cpu, g_div_ge_ms, g_pump_ms, g_pad_ms, g_div_tail_ms, 10); }
     }
     g_modal_seen = false;
@@ -558,6 +560,26 @@ static void pres_drain(void) { if (!g_pq_started) return; std::unique_lock<std::
  * g_def_exit: o modo acabou e o real adiado sai no inicio da proxima chamada de quadro novo (esse quadro fica sem intermediario) */
 static bool g_def_mid, g_def_real, g_def_exit, g_def_real_armed; static int g_def_fb = -1; static int64_t g_def_due, g_def_ws;
 static int g_real_fb_shown = -1; static uint32_t g_real_ver_shown;   /* ultimo quadro real apresentado e a versao dele (interp_fb_version) */   /* 120 FPS: falta o 3o intermediario do quadro (t = 0,75); sai no inicio da chamada seguinte, antes do real */
+/* 120 FPS, thread de apresentacao: o 2o e o 3o intermediarios do quadro novo (t = 0,5 / 0,75) sao desenhados na chamada SEGUINTE, a do 2o vblank, que
+ * so espera a saida (no mapa o jogo leva ~8 ms ate o quadro novo e cada intermediario ~3 ms de CPU: tudo na chamada do quadro novo estourava os 33 ms
+ * do quadro e o 120 FPS rodava a ~52 quadros/s reais). Eles so saem 8,3 e 16,7 ms depois do 1o, entao dao tempo. Se vier outro quadro novo (jogo a 60) ou
+ * sair do modo antes, saem no inicio dessa chamada, antes de qualquer outra coisa. TF_APRESENTADOR_TARDE=0 desenha tudo na chamada do quadro novo. */
+struct AsyncPend { bool on = false; int sb = 0; int64_t t0 = 0, h = 0; int rc = -1; };
+static AsyncPend g_ap; static double g_flush_ms = 4.0;   /* g_flush_ms: media do que async_flush custa (entra na conta do custo do quadro novo) */
+static void async_flush(void) {
+    if (!g_ap.on) return;
+    g_ap.on = false; const int64_t tf0 = pace_now();
+    extern void interp_use_scratch(int); extern int interp_take_fb(void);
+    int q[2] = {-1, -1};
+    gpu_mid_scope(true);
+    interp_use_scratch(g_ap.sb + 1); if (interp_extra(0.5f, g_gfx.res)) q[0] = interp_take_fb();
+    interp_use_scratch(g_ap.sb + 2); if (interp_extra(0.75f, g_gfx.res)) q[1] = interp_take_fb();
+    gpu_mid_scope(false);
+    interp_extra_done(); interp_use_scratch(0);
+    for (int k = 1; k < 3; k++) if (q[k - 1] >= 0) pres_push(g_ap.t0 + k * g_ap.h, q[k - 1], 1);
+    pres_push(g_ap.t0 + 3 * g_ap.h, g_ap.rc, 0);
+    g_flush_ms += (pace_ms(pace_now() - tf0) - g_flush_ms) * 0.2;
+}
 void display_request_renderer(int r) { g_pending_renderer = r; }   /* a troca de renderizador reinicia a GPU: so entre quadros (display_present) */
 void display_present(void) {
     static const bool ge_stats = getenv("GE_STATS") != nullptr, no_pace = getenv("NO_PACE") != nullptr, load_dbg = getenv("TF_LOAD_DEBUG") != nullptr;
@@ -656,6 +678,7 @@ void display_present(void) {
     static const bool no_async = getenv("TF_APRESENTADOR") && atoi(getenv("TF_APRESENTADOR")) == 0;
     const bool async = !no_async && fps120 && pace_on && pace_have_exit() && gfb >= 0 && g_gfx.renderer == GFX_RENDER_VULKAN && pace_monitor_hz() >= 100 && interp_enabled()
                        && !real_flushed && !g_q3_pending && !g_def_mid && !g_def_exit;
+    async_flush();
     if (async) pace_defer_reset("120 FPS pela thread de apresentacao");
     else pres_drain();   /* daqui em diante a thread do jogo apresenta: o que estava na fila sai antes */
     if (!(pace_on && gfb >= 0)) { pace_defer_reset("limitador desligado ou sem GPU"); g_def_mid = false; g_def_exit = false; }
@@ -810,20 +833,45 @@ void display_present(void) {
                    * apagaria o que ainda nao foi mostrado: imagens velhas/novas misturadas dentro do grupo (a piscada). So o ultimo job (o real) pode estar
                    * pendente. TF_PRES_BACKPRESSURE=0 desliga (A/B). */
                   static const bool bp = !(getenv("TF_PRES_BACKPRESSURE") && atoi(getenv("TF_PRES_BACKPRESSURE")) == 0);
-                  if (bp && g_pq_started) { std::unique_lock<std::mutex> lk(g_pq_mu); g_pq_cv.wait(lk, [] { return g_pq.size() <= 1; }); }
+                  const int64_t tb0 = pace_now();
+                  /* DOIS JOGOS de buffers (2026-10-18): o grupo k usa o jogo k%2, entao so o grupo k-2 precisa ter saido (no maximo os 4 jobs do grupo k-1
+                   * pendentes). Com um jogo so, esperava-se o grupo anterior inteiro (menos o real): no mapa, com a fase em ~12 ms e o ultimo intermediario
+                   * as 16,7 ms depois dela, o jogo ficava 3-6 ms parado aqui a cada quadro novo e o 120 FPS rodava a ~52 quadros/s reais. TF_PRES_SETS=1 volta ao antigo */
+                  static const bool one_set = getenv("TF_PRES_SETS") && atoi(getenv("TF_PRES_SETS")) == 1;
+                  static unsigned grp; const int sb = one_set ? 0 : (int)(grp++ & 1) * 3; const size_t pend_ok = one_set ? 1 : 4;
+                  if (bp && g_pq_started) { std::unique_lock<std::mutex> lk(g_pq_mu); g_pq_cv.wait(lk, [pend_ok] { return g_pq.size() <= pend_ok; }); }
+                  const int64_t tb1 = pace_now();
                   extern void interp_use_scratch(int); extern int interp_take_fb(void); extern int interp_real_copy(int);
                   const int64_t h = pace_step_ticks() / 2; int q[3] = {-1, -1, -1};
-                  interp_use_scratch(0); const bool m1 = interp_prepare(gfb, g_frames, async_mid && allow, g_gfx.res, 0.25f); if (m1) q[0] = interp_take_fb();
+                  interp_use_scratch(sb); const bool m1 = interp_prepare(gfb, g_frames, async_mid && allow, g_gfx.res, 0.25f); if (m1) q[0] = interp_take_fb();
+                  const int64_t tm1 = pace_now();
                   const bool parado = m1 && interp_mid_static();
-                  if (m1 && !parado) {
-                      interp_use_scratch(1); if (interp_extra(0.5f, g_gfx.res)) q[1] = interp_take_fb();
-                      interp_use_scratch(2); if (interp_extra(0.75f, g_gfx.res)) q[2] = interp_take_fb();
+                  /* So em cena pesada (o custo do quadro novo, desde a saida anterior, passou de ~92% do passo em 1/4 dos ultimos 16 grupos; volta ao normal abaixo de 75%): em
+                   * cena leve, desenhar os intermediarios depois deixava a thread do jogo disputando a trava da GPU com a apresentacao do 1o e as imagens saiam fora
+                   * do ritmo (5-8% dos intervalos curtos/longos em alguns replays). TF_APRESENTADOR_TARDE=0 nunca adia, =2 sempre */
+                  static const int tarde_env = getenv("TF_APRESENTADOR_TARDE") ? atoi(getenv("TF_APRESENTADOR_TARDE")) : 1;
+                  static bool tarde_on;
+                  const bool tarde = tarde_env == 2 || (tarde_env == 1 && tarde_on);
+                  const bool later = m1 && !parado && tarde;   /* q[1], q[2] saem de async_flush na chamada seguinte */
+                  if (m1 && !parado && !later) {
+                      interp_use_scratch(sb + 1); if (interp_extra(0.5f, g_gfx.res)) q[1] = interp_take_fb();
+                      interp_use_scratch(sb + 2); if (interp_extra(0.75f, g_gfx.res)) q[2] = interp_take_fb();
                   }
-                  interp_extra_done(); interp_use_scratch(0);
+                  if (!later) { interp_extra_done(); interp_use_scratch(0); }
+                  const int64_t tm2 = pace_now();
                   if (!m1) gpu_kick();   /* sem intermediario: solta o quadro real retido */
                   int rc = interp_real_copy(gfb); if (rc < 0) rc = gfb;   /* o jogo pode redesenhar o mesmo quadro sombra antes da hora do real */
-                  if (m1 && !parado) { pres_push(mid_target, q[0], 1, true); for (int k = 1; k < 3; k++) if (q[k] >= 0) pres_push(mid_target + k * h, q[k], 1); pres_push(mid_target + 3 * h, rc, 0); }
+                  if (later) { pres_push(mid_target, q[0], 1, true); g_ap = {true, sb, mid_target, h, rc}; }
+                  else if (m1 && !parado) { pres_push(mid_target, q[0], 1, true); for (int k = 1; k < 3; k++) if (q[k] >= 0) pres_push(mid_target + k * h, q[k], 1); pres_push(mid_target + 3 * h, rc, 0); }
                   else for (int k = 0; k < 4; k++) pres_push(mid_target + k * h, rc, k < 3, k == 0 && m1);   /* par parado ou cena trocou: a imagem real nas 4 horas (contador F3 e malha de fase seguem a 120) */
+                  if (m1 && !parado && tarde_env == 1) {
+                      static double ch[16]; static int chn;
+                      ch[chn++ & 15] = pace_ms(pace_now() - pace_last_exit()) + (later ? g_flush_ms : 0.0);
+                      if (chn >= 6) { double v[16]; const int n = std::min(chn, 16); std::copy(ch, ch + n, v); std::nth_element(v, v + n / 4, v + n, std::greater<double>());
+                          const double c = v[n / 4], st = pace_ms(pace_step_ticks());   /* 3o maior de 16: 1/4 dos grupos passam disso */
+                          if (c > 0.92 * st) tarde_on = true; else if (c < 0.75 * st) tarde_on = false; }
+                  }
+                  if (getenv("TF_LAT_DEBUG")) { static double sb, sd, s1, s2; static int n; sb += pace_ms(tb1 - tb0); sd += pace_ms(pace_now() - tb1); s1 += pace_ms(tm1 - tb1); s2 += pace_ms(tm2 - tm1); if (++n >= 300) { fprintf(stderr, "[lat] async: espera de contrapressao %.2f ms, desenho+envio %.2f ms (1o %.2f, 2o e 3o %.2f; medios/quadro novo)%c", sb / n, sd / n, s1 / n, s2 / n, 10); sb = sd = s1 = s2 = 0; n = 0; } }
               }
               latch_buttons(); return;
           }

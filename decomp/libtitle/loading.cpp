@@ -9,7 +9,8 @@ static void swap_LoadMenuArchive(SwapCtx &x) {
     const uint32_t i = x.arg(0);
     GuestStack frame(x, 272);
     const uint32_t path = frame.addr() + 16;
-    x.callImport("sprintf", path, x.addr(off(0x08f246f8)) + (i << 6));
+    /* The public JIT build does not resolve this import through its symbol name. Use the import NID instead. */
+    x.callNid(0x7661e728, path, x.addr(off(0x08f246f8)) + (i << 6));
     const int32_t size = (int32_t)ehsys::FileSize(x, 3, path);
     if (size <= 0) { x.ret((uint32_t)size); return; }
     const uint32_t block = ehsys::Alloc(x, state(x).heap, (uint32_t)size);

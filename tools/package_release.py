@@ -19,6 +19,7 @@ ROOT = os.path.dirname(os.path.dirname(os.path.abspath(__file__)))
 TCC_URL = 'https://download.savannah.gnu.org/releases/tinycc/tcc-0.9.27-win64-bin.zip'
 PY_URL = 'https://www.python.org/ftp/python/3.11.0/python-3.11.0-embed-amd64.zip'
 MSYS = r'C:\msys64\ucrt64\bin'
+MSYS_USR = r'C:\msys64\usr\bin'
 # translator: everything build_modules.py -> recomp.py imports, plus the module tables
 TOOLS = ['build_modules.py', 'recomp.py', 'allegrex.py', 'pspmod.py', 'elfscan.py', 'imports.py', 'merge.tsv', 'modules.tsv', 'modules_ULUS10136.tsv']
 PY_KEEP = ['python.exe', 'python311.dll', 'python3.dll', 'vcruntime140.dll', 'vcruntime140_1.dll', 'LICENSE.txt', 'python311.zip']
@@ -55,9 +56,9 @@ def main():
     version = args[args.index('--version') + 1] if '--version' in args else 'preview'
     pkg = os.path.join(out, 'TagForceRecomp')
     cache = os.path.join(out, 'cache')
-    env = dict(os.environ, PATH=MSYS + os.pathsep + os.environ['PATH'])
-    if os.path.isdir(pkg): shutil.rmtree(pkg)
-    os.makedirs(pkg)
+    env = dict(os.environ, PATH=MSYS + os.pathsep + MSYS_USR + os.pathsep + os.environ['PATH'])
+    if os.path.isdir(pkg) and '--no-build' not in args: shutil.rmtree(pkg)
+    os.makedirs(pkg, exist_ok=True)
     os.chdir(ROOT)
 
     # 1. the generic runtime
@@ -65,7 +66,9 @@ def main():
     if '--no-build' not in args:
         run([sys.executable, 'tools/spv2h.py'], env=env)   # Vulkan shaders -> gen/gpu_spv.h
         rc = os.path.join(out, 'app.rc')
-        open(rc, 'w').write('1 24 "%s"\n' % os.path.join(ROOT, 'runtime', 'app.manifest').replace('\\', '/'))
+        manifest = os.path.join(ROOT, 'runtime', 'app.manifest').replace('\\', '/')
+        icon = os.path.join(ROOT, 'runtime', 'app.ico').replace('\\', '/')
+        open(rc, 'w').write('1 24 "%s"\n1 ICON "%s"\n' % (manifest, icon))
         res = os.path.join(out, 'app_res.o'); run(['windres', rc, '-O', 'coff', '-o', res], env=env)
         srcs = ['runtime/%s.cpp' % n for n in RUNTIME] + ['decomp/decomp.cpp'] + sorted(f.replace(os.sep, '/') for d in DECOMP_DIRS for f in glob.glob(d + '/*.cpp'))
         run(['g++', '-std=c++17', '-O2', '-DPSP_TRACE', '-DTF_GAME_ID="ULES-00600"', '-Wall', '-Wno-misleading-indentation', '-Iruntime', '-o', exe] + srcs + [res,
@@ -78,12 +81,27 @@ def main():
 
     # 2. slim LGPL-only FFmpeg (tools/build_ffmpeg_lite.sh builds it once into gen/ffmpeg_lite)
     if not glob.glob('gen/ffmpeg_lite/avcodec-*.dll'):
-        run([os.path.join(os.path.dirname(MSYS), 'usr', 'bin', 'bash.exe'), '-lc', 'sh tools/build_ffmpeg_lite.sh'], env=dict(env, MSYSTEM='UCRT64', CHERE_INVOKING='1'))
+        run([os.path.join(MSYS_USR, 'bash.exe'), '-lc', 'sh tools/build_ffmpeg_lite.sh'], env=dict(env, MSYSTEM='UCRT64', CHERE_INVOKING='1'))
     for f in glob.glob('gen/ffmpeg_lite/*'): shutil.copy(f, pkg)
 
     # 3. behavior mods
     mods = [d for d in sorted(os.listdir('mods_src')) if os.path.isdir(os.path.join('mods_src', d)) and d not in SKIP_MODS]
-    run(['sh', 'tools/build_plugins.sh'] + mods, env=dict(env, MODS_OUT=os.path.join(pkg, 'mods')))
+    mods_out = os.path.join(pkg, 'mods')
+    for mod in mods:
+        src = os.path.join('mods_src', mod)
+        dst = os.path.join(mods_out, mod)
+        os.makedirs(dst, exist_ok=True)
+        for name in os.listdir(src):
+            source = os.path.join(src, name)
+            if name.lower().endswith(('.cpp', '.c', '.h')):
+                continue
+            target = os.path.join(dst, name)
+            if os.path.isdir(source): shutil.copytree(source, target, dirs_exist_ok=True)
+            else: shutil.copy2(source, target)
+        srcs = sorted(glob.glob(os.path.join(src, '*.cpp')) + glob.glob(os.path.join(src, '*.c')))
+        if srcs:
+            run(['g++', '-std=c++17', '-O2', '-Wall', '-Wno-misleading-indentation', '-shared', '-static', '-s',
+                 '-Imods_sdk', '-o', os.path.join(dst, 'plugin.dll')] + srcs + ['-lwinhttp', '-lws2_32'], env=env)
 
     # 4. TinyCC
     tz = fetch(TCC_URL, os.path.join(cache, 'tcc.zip'))

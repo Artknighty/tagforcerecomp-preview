@@ -18,10 +18,11 @@ for f in $GV/*.c; do
 done
 wait
 python tools/spv2h.py   # sombreadores do Vulkan (GLSL -> SPIR-V, gen/gpu_spv.h)
-# icone do .exe/janela/barra de tarefas: gen/app.ico (python tools/make_icon.py; arte do jogo, fora do git); sem ele o .exe fica sem icone
+# Icone do .exe/janela/barra de tarefas: imagem de Yu-Gi-Oh! GX Tag Force em runtime/app.ico
 # manifesto (runtime/app.manifest: controles comuns v6 = estilo atual do Windows e tema escuro dos controles) sempre; icone se houver
 echo '1 24 "runtime/app.manifest"' > gen/app.rc
-[ -f gen/app.ico ] && echo '1 ICON "gen/app.ico"' >> gen/app.rc
+if [ -f runtime/app.ico ]; then ICON=runtime/app.ico; elif [ -f gen/app.ico ]; then ICON=gen/app.ico; else ICON=; fi
+[ -n "$ICON" ] && echo "1 ICON \"$ICON\"" >> gen/app.rc
 RES=""; windres gen/app.rc -O coff -o gen/app_res.o && RES=gen/app_res.o
 # Build incremental do runtime: cada .cpp vira um .o em $GV/obj (tools/cc_one.sh), em paralelo, e so recompila o que mudou
 # (fonte ou algum header listado no .d, gerado com -MMD). Mudou OPT ou o id do jogo: refaz tudo.

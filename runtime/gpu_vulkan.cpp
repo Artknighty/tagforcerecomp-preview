@@ -51,7 +51,7 @@ VK_GLOBAL_FUNCS(X) VK_INSTANCE_FUNCS(X) VK_DEVICE_FUNCS(X)
 static PFN_vkGetInstanceProcAddr vkGetInstanceProcAddr_;
 
 static HWND g_hwnd; static HMODULE g_lib;
-static VkInstance g_inst; static VkPhysicalDevice g_pd; static VkDevice g_dev; static VkQueue g_q; static uint32_t g_qf;
+static VkInstance g_inst; static VkPhysicalDevice g_pd; static VkDevice g_dev; static VkQueue g_q, g_qpres; static uint32_t g_qf; static bool g_sepq;
 static VkSurfaceKHR g_surf; static VkSwapchainKHR g_swap; static VkFormat g_swapFmt; static VkExtent2D g_swapExt;
 static std::vector<VkImage> g_swapImg; static std::vector<VkImageView> g_swapView; static std::vector<VkSemaphore> g_renderDone;
 static VkPhysicalDeviceMemoryProperties g_mem; static char g_adapter[128] = "?"; static bool g_dbg, g_inited;
@@ -59,8 +59,10 @@ static VkFormat g_dsFmt = VK_FORMAT_D16_UNORM; static bool g_hasSt;   /* formato
 static bool g_bc7;   /* textureCompressionBC ligado (vk_tex_create_bc7) */
 /* thread de apresentacao (display.cpp): g_qmu sincroniza a fila (vkQueueSubmit2/vkQueuePresentKHR/WaitIdle vindos das duas threads);
  * g_presmu = uma apresentacao por vez; g_acqSem: semaforos proprios do acquire (o slot atual pode mudar enquanto a trava da GPU esta solta) */
-static std::mutex g_qmu, g_presmu; static VkSemaphore g_acqSem[8]; static unsigned g_acqI;
+static std::mutex g_qmu, g_presmu, g_pqmu;   /* g_pqmu: fila exclusiva das apresentacoes (g_sepq) */ static VkSemaphore g_acqSem[8]; static unsigned g_acqI;
 void gpu_lock_yield_begin(int *saved); void gpu_lock_yield_end(int saved);
+double g_q_wait_total_ms; static double g_qWaitMs; static int g_qWaitN;   /* TF_GPU_PROF: tempo esperando g_qmu (a fila presa por um vkQueuePresentKHR de outra thread) */
+struct QGuard { QGuard() { if (g_qmu.try_lock()) return; const double t0 = gpu_now_us(); g_qmu.lock(); { const double w = (gpu_now_us() - t0) / 1000.0; g_qWaitMs += w; g_q_wait_total_ms += w; } g_qWaitN++; } ~QGuard() { g_qmu.unlock(); } };
 static VkImageAspectFlags ds_aspect(void) { return VK_IMAGE_ASPECT_DEPTH_BIT | (g_hasSt ? VK_IMAGE_ASPECT_STENCIL_BIT : 0); }
 static const VkImageLayout DS_LAYOUT = VK_IMAGE_LAYOUT_DEPTH_STENCIL_ATTACHMENT_OPTIMAL;
 static const char *vkres(VkResult r) { static char b[24]; snprintf(b, sizeof b, "VkResult %d", (int)r); return b; }
@@ -149,7 +151,7 @@ static void prof_read(int slot) {
         static const char *nm = "RMPO";
         for (int k = 0; k < 4; k++) { ProfAcc &b = g_pacc[k]; if (!b.n) continue; std::sort(b.all.begin(), b.all.end());
             fprintf(stderr, " %c %d x %.2f ms (p90 %.2f max %.2f);", nm[k], b.n, b.sum / b.n, b.all[b.all.size() * 9 / 10], b.mx); b = ProfAcc(); }
-        if (g_npres) fprintf(stderr, " CPU parada por apresentacao: acquire %.2f ms, present %.2f ms;", g_acqMs / g_npres, g_qpMs / g_npres); g_acqMs = g_qpMs = 0; g_npres = 0;
+        if (g_npres) fprintf(stderr, " CPU parada por apresentacao: acquire %.2f ms, present %.2f ms; esperas pela fila %d x %.2f ms;", g_acqMs / g_npres, g_qpMs / g_npres, g_qWaitN, g_qWaitN ? g_qWaitMs / g_qWaitN : 0.0); g_qWaitMs = 0; g_qWaitN = 0; g_acqMs = g_qpMs = 0; g_npres = 0;
         fprintf(stderr, " quadro real retido: atras do intermediario %d, solto antes por gravacao %d / envio %d / espera %d", g_heldWhy[0], g_heldWhy[1], g_heldWhy[2], g_heldWhy[3]); memset(g_heldWhy, 0, sizeof g_heldWhy);
         fputc(10, stderr); g_pN = 0; g_pIdle = 0; g_pSpan0 = 0;
     }
@@ -221,7 +223,7 @@ static void submit_slot(bool wait_done) {
     VkSubmitInfo2 si = {VK_STRUCTURE_TYPE_SUBMIT_INFO_2}; si.commandBufferInfoCount = n; si.pCommandBufferInfos = ci;
     if (g_waitSem) { ws.semaphore = g_waitSem; ws.stageMask = ST_COL; si.waitSemaphoreInfoCount = 1; si.pWaitSemaphoreInfos = &ws; }
     if (g_sigSem) { ss.semaphore = g_sigSem; ss.stageMask = VK_PIPELINE_STAGE_2_ALL_COMMANDS_BIT; si.signalSemaphoreInfoCount = 1; si.pSignalSemaphoreInfos = &ss; }
-    if (n || g_waitSem || g_sigSem) { { std::lock_guard<std::mutex> ql(g_qmu); CHKV(vkQueueSubmit2(g_q, 1, &si, s.fence)); } s.inflight = true; s.serial = g_serial; }
+    if (n || g_waitSem || g_sigSem) { { QGuard ql; CHKV(vkQueueSubmit2(g_q, 1, &si, s.fence)); } s.inflight = true; s.serial = g_serial; }
     g_waitSem = g_sigSem = VK_NULL_HANDLE;
     if (wait_done && s.inflight) { vkWaitForFences(g_dev, 1, &s.fence, VK_TRUE, ~0ull); vkResetFences(g_dev, 1, &s.fence); s.inflight = false; }
     s.upRec = s.cbRec = false; g_serial++;
@@ -257,10 +259,10 @@ static void submit_held_why(int why) {
     ci[n] = {VK_STRUCTURE_TYPE_COMMAND_BUFFER_SUBMIT_INFO}; ci[n++].commandBuffer = s.cb;
     if (g_prof) { ci[n] = {VK_STRUCTURE_TYPE_COMMAND_BUFFER_SUBMIT_INFO}; ci[n++].commandBuffer = s.tsb; }
     VkSubmitInfo2 si = {VK_STRUCTURE_TYPE_SUBMIT_INFO_2}; si.commandBufferInfoCount = n; si.pCommandBufferInfos = ci;
-    { std::lock_guard<std::mutex> ql(g_qmu); CHKV(vkQueueSubmit2(g_q, 1, &si, s.fence)); } s.inflight = true;
+    { QGuard ql; CHKV(vkQueueSubmit2(g_q, 1, &si, s.fence)); } s.inflight = true;
 }
 /* espera terminar tudo o que foi enviado (leituras sincronas, destruicao) */
-static void wait_all(void) { if (g_dev) { submit_held_why(3); std::lock_guard<std::mutex> ql(g_qmu); vkDeviceWaitIdle(g_dev); } for (int i = 0; i < NF; i++) { Slot &o = g_slot[i]; if (o.inflight) { vkWaitForFences(g_dev, 1, &o.fence, VK_TRUE, ~0ull); vkResetFences(g_dev, 1, &o.fence); o.inflight = false; } prof_read(i); } }
+static void wait_all(void) { if (g_dev) { submit_held_why(3); QGuard ql; std::lock_guard<std::mutex> pq(g_pqmu); vkDeviceWaitIdle(g_dev); } for (int i = 0; i < NF; i++) { Slot &o = g_slot[i]; if (o.inflight) { vkWaitForFences(g_dev, 1, &o.fence, VK_TRUE, ~0ull); vkResetFences(g_dev, 1, &o.fence); o.inflight = false; } prof_read(i); } }
 static size_t st_alloc(size_t n, size_t align = 16) {   /* espaco no anel de upload do slot atual; -1 = sem espaco */
     Slot &s = S(); size_t o = (s.stUsed + align - 1) & ~(align - 1);
     if (o + n > s.st.size) return (size_t)-1;
@@ -657,7 +659,7 @@ static void vk_hold(void) {
         vkEndCommandBuffer(s.up); s.upRec = false;
         VkCommandBufferSubmitInfo ci = {VK_STRUCTURE_TYPE_COMMAND_BUFFER_SUBMIT_INFO}; ci.commandBuffer = s.up;
         VkSubmitInfo2 si = {VK_STRUCTURE_TYPE_SUBMIT_INFO_2}; si.commandBufferInfoCount = 1; si.pCommandBufferInfos = &ci;
-        { std::lock_guard<std::mutex> ql(g_qmu); CHKV(vkQueueSubmit2(g_q, 1, &si, VK_NULL_HANDLE)); }
+        { QGuard ql; CHKV(vkQueueSubmit2(g_q, 1, &si, VK_NULL_HANDLE)); }
     }
     vkEndCommandBuffer(s.cb); s.cbRec = false;
     s.serial = g_serial++; g_held = g_cur; g_gpu_prof_tag = 'O';
@@ -922,7 +924,12 @@ static void present_source(VkDescriptorSet srcSet, Img *srcImg, int sw, int sh) 
     g_waitSem = as; g_sigSem = g_renderDone[idx]; g_gpu_prof_tag = 'P';
     submit_slot(false);
     VkPresentInfoKHR pi = {VK_STRUCTURE_TYPE_PRESENT_INFO_KHR}; VkSemaphore rd = g_renderDone[idx]; pi.waitSemaphoreCount = 1; pi.pWaitSemaphores = &rd; pi.swapchainCount = 1; pi.pSwapchains = &g_swap; pi.pImageIndices = &idx;
-    const double tq0 = gpu_now_us(); { int sv; gpu_lock_yield_begin(&sv); { std::lock_guard<std::mutex> ql(g_qmu); r = vkQueuePresentKHR(g_q, &pi); } gpu_lock_yield_end(sv); } g_qpMs += (gpu_now_us() - tq0) / 1000.0; g_npres++;
+    const double tq0 = gpu_now_us(); { int sv; gpu_lock_yield_begin(&sv);
+        /* FILA PROPRIA (2026-10-18): o vkQueuePresentKHR prende a fila 2-4 ms (driver NVIDIA, 120 FPS). Na mesma fila, todo envio da thread do jogo
+         * (texturas, listas do GE, intermediarios) esperava por ele: o GE do quadro novo levava 12-13 ms em vez de 8-9 e o 120 FPS rodava a ~52
+         * quadros/s reais no mapa. Com a fila de apresentacao separada (mesma familia, so a sincronizacao por semaforo) nada disso espera. TF_VK_UMA_FILA=1 desliga */
+        if (g_sepq) { std::lock_guard<std::mutex> pq(g_pqmu); r = vkQueuePresentKHR(g_qpres, &pi); } else { QGuard ql; r = vkQueuePresentKHR(g_q, &pi); }
+        gpu_lock_yield_end(sv); } g_qpMs += (gpu_now_us() - tq0) / 1000.0; g_npres++;
     if (g_dbg && r != VK_SUCCESS) { static int np; if (np++ < 20) fprintf(stderr, "[vulkan] present: %s\n", vkres(r)); }
     if (r == VK_ERROR_OUT_OF_DATE_KHR) { destroy_swap(); }
     g_gpu_us[2] += gpu_now_us() - tp;
@@ -936,7 +943,7 @@ static void vk_present_fb(int id) {
 static void vk_present_pixels(const uint32_t *xrgb, int w, int h) {
     if (!g_dev) return;
     record_pend(); end_render();
-    if (g_pixT.i && (g_pixT.w != w || g_pixT.h != h)) { { std::lock_guard<std::mutex> ql(g_qmu); vkDeviceWaitIdle(g_dev); } free_img(g_pixT); }   /* tamanho novo (video substituto HD) */
+    if (g_pixT.i && (g_pixT.w != w || g_pixT.h != h)) { { QGuard ql; std::lock_guard<std::mutex> pq(g_pqmu); vkDeviceWaitIdle(g_dev); } free_img(g_pixT); }   /* tamanho novo (video substituto HD) */
     if (!g_pixT.i) { make_img(g_pixT, w, h, VK_FORMAT_B8G8R8A8_UNORM, VK_IMAGE_USAGE_SAMPLED_BIT | VK_IMAGE_USAGE_TRANSFER_DST_BIT, VK_IMAGE_ASPECT_COLOR_BIT); if (!g_pixSet) g_pixSet = alloc_set(g_lay1); write_set(g_pixSet, 0, g_pixT.v); }
     VkCommandBuffer cb = cbuf();
     if (!upload_img(cb, g_pixT, xrgb, 4, (uint32_t)w, w, h)) { submit_slot(false); cb = cbuf(); if (!upload_img(cb, g_pixT, xrgb, 4, (uint32_t)w, w, h)) return; }
@@ -1032,7 +1039,9 @@ static bool build_device(void) {
     vkGetPhysicalDeviceFeatures2(g_pd, &f2);
     if (!f13.dynamicRendering || !f13.synchronization2) { fprintf(stderr, "[vulkan] falta dynamicRendering/synchronization2\n"); return false; }
     VkPhysicalDeviceVulkan13Features en13 = {VK_STRUCTURE_TYPE_PHYSICAL_DEVICE_VULKAN_1_3_FEATURES}; en13.dynamicRendering = VK_TRUE; en13.synchronization2 = VK_TRUE;
-    float prio = 1.f; VkDeviceQueueCreateInfo qi = {VK_STRUCTURE_TYPE_DEVICE_QUEUE_CREATE_INFO}; qi.queueFamilyIndex = g_qf; qi.queueCount = 1; qi.pQueuePriorities = &prio;
+    VkDeviceQueueCreateInfo qi = {VK_STRUCTURE_TYPE_DEVICE_QUEUE_CREATE_INFO}; qi.queueFamilyIndex = g_qf; qi.queueCount = 1; float prio2[2] = {1.f, 1.f}; qi.pQueuePriorities = prio2;
+    { uint32_t nq = 0; vkGetPhysicalDeviceQueueFamilyProperties(g_pd, &nq, nullptr); std::vector<VkQueueFamilyProperties> qp(nq); vkGetPhysicalDeviceQueueFamilyProperties(g_pd, &nq, qp.data());
+      if (g_qf < nq && qp[g_qf].queueCount >= 2 && !getenv("TF_VK_UMA_FILA")) qi.queueCount = 2; }
     const char *dext[] = {"VK_KHR_swapchain"};
     VkPhysicalDeviceFeatures en = {}; en.textureCompressionBC = f2.features.textureCompressionBC; g_bc7 = f2.features.textureCompressionBC == VK_TRUE;   /* texturas substitutas em BC7 */
     VkDeviceCreateInfo dc = {VK_STRUCTURE_TYPE_DEVICE_CREATE_INFO}; dc.pNext = &en13; dc.pEnabledFeatures = &en; dc.queueCreateInfoCount = 1; dc.pQueueCreateInfos = &qi; dc.enabledExtensionCount = 1; dc.ppEnabledExtensionNames = dext;
@@ -1041,6 +1050,8 @@ static bool build_device(void) {
     VK_DEVICE_FUNCS(X)
 #undef X
     vkGetDeviceQueue(g_dev, g_qf, 0, &g_q);
+    g_sepq = qi.queueCount >= 2; if (g_sepq) vkGetDeviceQueue(g_dev, g_qf, 1, &g_qpres);
+    if (g_dbg) fprintf(stderr, "[vulkan] fila de apresentacao %s%c", g_sepq ? "propria" : "a mesma dos envios", 10);
     return true;
 }
 static bool build_resources(void) {
