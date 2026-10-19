@@ -16,3 +16,36 @@ __pycache__/
 texcache/
 texturas_recentes.txt
 texturas_despejo/
+
+# Local-only files (maintainer notes, agent instructions, internal docs, hooks, local game data)
+/HANDOFF*
+/AGENTS.md
+/CLAUDE.md
+/CONTEXT.md
+/docs/adr/
+/docs/agents/
+/docs/historico/
+/docs/diario/
+/docs/registro/
+/docs/ARMADILHAS.md
+/docs/ENV.md
+/docs/FERRAMENTAS.md
+/tools/check_docs.sh
+/tools/exportar_publico.py
+/tools/githooks/
+/public_clone/
+/art/
+/logs/
+/tagforce_recomp.ini
+/tagforce_vk_cache.bin
+/Char tagforce.png
+
+# Leftovers of a local package/run in the project root
+/START HERE.txt
+/FFMPEG-LGPL.txt
+/*.dll
+/tcc/
+/include/
+/tools/python/
+/tools/translator_version.txt
+/.gitattributes
