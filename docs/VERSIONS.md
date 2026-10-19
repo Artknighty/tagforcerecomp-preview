@@ -42,8 +42,8 @@ Tests: `TF_ISO=<ISO> sh tools/test/play.sh ...` (use `TF_FRESH_SAVE=1`; the Euro
 ## What is version specific
 
 * Code, module bases, function addresses: generated per version (above).
-* Plugins/mods (`mods_src/*`) hook function addresses of the **European** build. On other versions they must not be used
-  until their addresses are ported (see `mods_sdk/tfmod.h`).
+* Plugins/mods (`plugins/src/*`) hook function addresses of the **European** build. On other versions they must not be used
+  until their addresses are ported (see `plugins/sdk/tfmod.h`).
 * The C++ decomp swaps (`decomp/`) name **European** function addresses: on other versions they are switched off at start-up
   (log line `[decomp] disabled: ...`), so those versions run the translated code only and miss the PC changes made there (the in-game
   Graphics screen, the title menu changes...).

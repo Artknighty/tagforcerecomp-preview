@@ -11,8 +11,8 @@ experimental, what is missing, and what may change. If something is not listed h
   everything from source ([README](../README.md#build-from-source-developers)).
 - **A working PC port of the game, as far as it has been played.** The whole game has been played through the main modes (see
   [What works](../README.md#what-works)), but by a very small group of testers.
-- **A mod platform.** Behavior plugins ([`mods_sdk/tfmod.h`](../mods_sdk/tfmod.h)), file/texture/movie replacement and the example
-  mods in [`mods_src/`](../mods_src/). See [MODS.md](MODS.md).
+- **A mod platform.** Behavior plugins ([`plugins/sdk/tfmod.h`](../plugins/sdk/tfmod.h)), file/texture/movie replacement and the example
+  mods in [`plugins/src/`](../plugins/src/). See [MODS.md](MODS.md).
 
 ## Tested configuration
 
@@ -60,7 +60,7 @@ experimental, what is missing, and what may change. If something is not listed h
 - **Language.** The documentation and the user interface are in English. Many source comments, log messages, some folder names
   (for example `gen/jogo/`, the installed game data) and some `.ini` keys are still in Portuguese, the maintainers' first language.
   They are being translated gradually; new code should use English.
-- **Names and formats can still change.** Only the plugin API ([`tfmod.h`](../mods_sdk/tfmod.h)) has a compatibility rule (it only
+- **Names and formats can still change.** Only the plugin API ([`tfmod.h`](../plugins/sdk/tfmod.h)) has a compatibility rule (it only
   grows). Folder names, `.ini` keys, mod folder names, log formats and tool command lines may be renamed between preview versions.
 - **Single-player only.** Do not expect online features.
 

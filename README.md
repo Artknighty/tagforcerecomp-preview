@@ -43,9 +43,9 @@ Every mod is a folder in `mods/`, switched on or off in the window's **Mods** me
 |---|---|
 | Files | replaces files from the disc (text, data, movies) |
 | Textures | replacement texture packs (PPSSPP format) |
-| **Behavior (plugins)** | a `plugin.dll` that hooks game functions by address; stable, versioned API in [`mods_sdk/tfmod.h`](mods_sdk/tfmod.h) |
+| **Behavior (plugins)** | a `plugin.dll` that hooks game functions by address; stable, versioned API in [`plugins/sdk/tfmod.h`](plugins/sdk/tfmod.h) |
 
-Behavior mods in this repository (sources in [`mods_src/`](mods_src/)):
+Behavior mods in this repository (sources in [`plugins/src/`](plugins/src/)):
 
 | Mod | What it does |
 |---|---|
@@ -119,8 +119,7 @@ Full map with every subfolder: [`docs/STRUCTURE.md`](docs/STRUCTURE.md).
 | `tools/` | build, test and analysis scripts, plus the translator (Allegrex → C) in `tools/translator/` |
 | `runtime/` | C++ runtime: HLE kernel, GE, GPU backends, audio, video, window, mods |
 | `decomp/` | hand-written readable C++ replacing translated game functions one by one: title, story mode, map, duel result screen and more (see [`docs/DECOMP.md`](docs/DECOMP.md)) |
-| `mods_sdk/` | plugin API (`tfmod.h`) |
-| `mods_src/` | sources of behavior mods |
+| `plugins/` | sources of behavior mods (`src/`) and their API header (`sdk/tfmod.h`) |
 | `assets/` | branding images and the icon generator |
 | `docs/` | documentation ([preview status](docs/PREVIEW.md), [mods](docs/MODS.md), [AI](docs/AI.md), [decks](docs/DECKS.md), [testing](docs/TESTING.md), [architecture](docs/ARCHITECTURE.md), [repository layout](docs/STRUCTURE.md), [game versions](docs/VERSIONS.md)) |
 | `gen/` | everything that comes from your ISO (**not in Git**) |

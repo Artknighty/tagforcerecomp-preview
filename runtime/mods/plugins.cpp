@@ -1,4 +1,4 @@
-/* Mods de comportamento (plugins): carrega mods/<pasta>/plugin.dll dos mods ligados e entrega a API de mods_sdk/tfmod.h.
+/* Mods de comportamento (plugins): carrega mods/<pasta>/plugin.dll dos mods ligados e entrega a API de plugins/sdk/tfmod.h.
  * Os ganchos dos plugins entram na cadeia de ganchos do host (hooks.h), na ordem de carga dos mods, com o plugin como dono. */
 #include "hle.h"
 #include "hooks.h"
@@ -8,7 +8,7 @@
 #include "hotkeys.h"
 #include "util.h"
 #include "gameid.h"
-#include "../../mods_sdk/tfmod.h"
+#include "../../plugins/sdk/tfmod.h"
 #include <windows.h>
 #include <algorithm>
 #include <stdarg.h>

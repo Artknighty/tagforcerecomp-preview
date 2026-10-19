@@ -63,7 +63,7 @@ writes `gen/decks_db/{cartas,decks,protagonistas}.json` and a readable `DECKS.md
 
 ## The mod
 
-`mods_src/DecksAprimorados` hooks the deck reader (`0884a694`). For every index that has a file
+`plugins/src/DecksAprimorados` hooks the deck reader (`0884a694`). For every index that has a file
 `mods/DecksAprimorados/decks/RCPnnn.txt` it returns that deck; for all others it runs the original. It therefore works in duels,
 Free Duel, the recipe viewer and Story Mode, and turning the mod off restores the original decks. File format:
 

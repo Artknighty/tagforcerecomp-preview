@@ -1,7 +1,7 @@
 # Better AI mod (`IAAprimorada`) and the AI toolchain
 
 The CPU duelists in the original game choose plays with a table of hand-written rules per card and a greedy attack simulation. This
-mod (`mods_src/IAAprimorada`, a behavior plugin) improves those decisions without replacing the engine: it hooks the game's AI
+mod (`plugins/src/IAAprimorada`, a behavior plugin) improves those decisions without replacing the engine: it hooks the game's AI
 routines, adds a few decisions the original never makes, and can optionally ask a **small language model** or a **learned board
 evaluation** to choose. Everything falls back to rules, so it can never freeze the game.
 

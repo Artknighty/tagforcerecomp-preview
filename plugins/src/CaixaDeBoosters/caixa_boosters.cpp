@@ -1,4 +1,4 @@
-/* Mod "Booster box" (plugin, API 2 in mods_sdk/tfmod.h). In the card shop, pressing R on the pack selection makes the game's own message
+/* Mod "Booster box" (plugin, API 2 in plugins/sdk/tfmod.h). In the card shop, pressing R on the pack selection makes the game's own message
  * window ask "Buy all N packs for X DP?" (YES/NO); YES buys ALL the remaining packs of that booster at once (limited by DP), instead of
  * one at a time. With DP for only one pack, the same window says so (OK).
  *
@@ -18,7 +18,7 @@
  *   091c72d4  shop_purchase_animate_pack (once per logical frame during the purchase)
  *   091ca5a4  shop_dp_animate_change(delta in r4)     091c6550  shop entry (every logical frame)
  *   091da478  libshop stub for player_dp(0) */
-#include "../../mods_sdk/tfmod.h"
+#include "../../sdk/tfmod.h"
 #include <algorithm>
 #include <stdio.h>
 

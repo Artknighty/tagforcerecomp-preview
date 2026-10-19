@@ -5,7 +5,7 @@
 The package contains NO game data and no game code. It holds:
   TagForceRecomp.exe   the generic runtime (build with runtime/core/generic_index.cpp: no game modules linked in)
   avcodec/avutil.dll   slim LGPL-only FFmpeg with just the ATRAC3/3+ and H.264 decoders (tools/build/build_ffmpeg_lite.sh)
-  mods/                the behavior mods of mods_src/ (plugin.dll), switched on or off in the Mods menu
+  mods/                the behavior mods of plugins/src/ (plugin.dll), switched on or off in the Mods menu
   tcc/ include/        TinyCC (LGPL) and the one runtime header the generated code includes
   tools/               the Allegrex -> C translator (tools/translator/, Python scripts) and the embedded Python that runs it
   gen/nids_hle.tsv     names of the system calls the runtime implements
@@ -85,10 +85,10 @@ def main():
     for f in glob.glob('gen/ffmpeg_lite/*'): shutil.copy(f, pkg)
 
     # 3. behavior mods
-    mods = [d for d in sorted(os.listdir('mods_src')) if os.path.isdir(os.path.join('mods_src', d)) and d not in SKIP_MODS]
+    mods = [d for d in sorted(os.listdir('plugins/src')) if os.path.isdir(os.path.join('plugins/src', d)) and d not in SKIP_MODS]
     mods_out = os.path.join(pkg, 'mods')
     for mod in mods:
-        src = os.path.join('mods_src', mod)
+        src = os.path.join('plugins/src', mod)
         dst = os.path.join(mods_out, mod)
         os.makedirs(dst, exist_ok=True)
         for name in os.listdir(src):
@@ -101,7 +101,7 @@ def main():
         srcs = sorted(glob.glob(os.path.join(src, '*.cpp')) + glob.glob(os.path.join(src, '*.c')))
         if srcs:
             run(['g++', '-std=c++17', '-O2', '-Wall', '-Wno-misleading-indentation', '-shared', '-static', '-s',
-                 '-Imods_sdk', '-o', os.path.join(dst, 'plugin.dll')] + srcs + ['-lwinhttp', '-lws2_32'], env=env)
+                 '-Iplugins/sdk', '-o', os.path.join(dst, 'plugin.dll')] + srcs + ['-lwinhttp', '-lws2_32'], env=env)
 
     # 4. TinyCC
     tz = fetch(TCC_URL, os.path.join(cache, 'tcc.zip'))

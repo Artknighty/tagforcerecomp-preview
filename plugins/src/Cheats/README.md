@@ -20,5 +20,5 @@ Requires Tag Force Recomp with mod API version 4 or newer.
 ## Adding a cheat (for modders)
 
 `cheats.cpp` has one section per cheat (state + config + hook/per-frame code) and registers them in `tfmod_init` with the mod API
-(`mods_sdk/tfmod.h`): `use_menu(TFMOD_MENU_CHEATS)` (items go to the Cheats menu), `add_toggle` (on/off item, optional in-game key), `add_slider` (value), `panel` (info panel on screen),
+(`plugins/sdk/tfmod.h`): `use_menu(TFMOD_MENU_CHEATS)` (items go to the Cheats menu), `add_toggle` (on/off item, optional in-game key), `add_slider` (value), `panel` (info panel on screen),
 `message_box`, `hook`/`call` (game functions). The duel memory map used here is documented at the top of `cheats.cpp`.

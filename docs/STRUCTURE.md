@@ -6,13 +6,12 @@ A map of the repository. For how the pieces fit together at run time, see [`ARCH
 assets/       branding and icon sources
 decomp/       readable C++ rewrite of the game, one folder per game module
 docs/         guides (this folder)
-mods_sdk/     C header that behavior mods (plugins) are built against
-mods_src/     source of the behavior mods, one folder per mod
+plugins/      source of the behavior mods (`src/`, one folder per mod) and the header they build against (`sdk/`)
 runtime/      the native runtime: HLE PSP kernel, GPU renderers, audio, UI
 tools/        build, test, analysis and translator scripts
 ```
 
-Folders such as `gen/`, `jogo/`, `ms0/`, `mods/` and `ref/` are created locally (translated code, installed game data, saves,
+Folders such as `gen/`, `jogo/`, `ms0/`, `mods/` (installed mods: compiled plugins and data mods such as textures) and `ref/` are created locally (translated code, installed game data, saves,
 installed mods, reference material) and are never committed.
 
 ## `runtime/`
@@ -57,11 +56,11 @@ A function-by-function C++ rewrite of the game, one folder per game module (`boo
 README. `common/` holds the headers they share: the byte-swap helpers, the engine call names (`ehsys.h`), the PC-style
 drawing hook, and the duelist and deck tables. `decomp.cpp` registers the rewritten functions. See [`DECOMP.md`](DECOMP.md).
 
-## `mods_src/` and `mods_sdk/`
+## `plugins/`
 
-Each folder in `mods_src/` is one behavior mod (CPU vs CPU, Better AI, Better Decks, Cheats, Booster box, Monsters on the
+`plugins/` holds source code only; the built mods live in `mods/` (see below). Each folder in `plugins/src/` is one behavior mod (CPU vs CPU, Better AI, Better Decks, Cheats, Booster box, Monsters on the
 field) with its `README.md`, `mod.txt` and C++ source. `tools/build/build_plugins.sh` compiles them to `mods/<Mod>/plugin.dll`
-against `mods_sdk/tfmod.h`. See [`MODS.md`](MODS.md).
+against `plugins/sdk/tfmod.h`. See [`MODS.md`](MODS.md).
 
 ## `assets/`
 

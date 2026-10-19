@@ -113,13 +113,13 @@ A behavior mod is a DLL in the mod folder:
 mods/
   BoosterBox/
     mod.txt          name=, author=, version=, description=
-    plugin.dll       exports tfmod_init (API in mods_sdk/tfmod.h)
+    plugin.dll       exports tfmod_init (API in plugins/sdk/tfmod.h)
 ```
 
 It is switched on and off in the **Mods** menu like any other mod (applies on restart). The game loads the `plugin.dll` of the
 enabled mods at start-up, in alphabetical folder order, and calls `tfmod_init(api)`.
 
-### The API (`mods_sdk/tfmod.h`, C only, version 5)
+### The API (`plugins/sdk/tfmod.h`, C only, version 5)
 
 The game code is recompiled, so a code mod does not "patch" the ISO: it **intercepts game functions by their PSP address**. Every
 recompiled function checks a bitmap on entry; if there is a hook, it runs with the PSP registers (`reg(c, 4..7)` = arguments, `r2` =
@@ -140,7 +140,7 @@ result, `r31` = return address) and returns `0` = continue with the original (th
 | `add_slider(title, unit, min, max, def, get, set)` (v3) | register an integer setting; the runtime adds a **Mods** menu item that opens a dark modal slider dialog (`runtime/ui/slider_dialog.cpp`) |
 | `add_toggle(title, vk, get, set)` (v4) | register an on/off setting: a checkable **Mods** menu item and, optionally, an in-game key (Windows virtual-key code, e.g. `VK_F6`). Keys that belong to the game are refused (the item stays menu-only): the window's F-keys (F3, F5, F7, F8, F9, F11, listed in Help > Controls), F10, Esc, Enter and the keyboard keys of the PSP buttons in both layouts (arrows, W A S D, Z X C E F R Q, Space, Backspace, Tab, Shift, Ctrl) |
 | `panel(corner, title, lines, n)` (v4) | information panel in a corner of the screen (0 top-left, 1 top-right, 2 bottom-left, 3 bottom-right); call it every frame it should stay visible; it never blocks the game. Plain text works; an optional markup (documented in `tfmod.h`) gives section headers with counters (`"#Hand\t5"`), colored card rows (`"@ed{M4}Drillago\t*4\tATK\|1600\tDEF\|1100"`: frame color, attribute dot, badge, table-aligned columns, level star) and a title icon/right text (`"@eOpponent\tLP 8000"`) |
-| `sprite(id, rgba, w, h, x, y, dw, dh, alpha)` (v5) | RGBA image over the game (GPU renderers only), in 480x272 PSP pixels; call every frame it should stay; redrawn on a thread (1-3 frames of latency). Example: `mods_src/MonstrosNoCampo` |
+| `sprite(id, rgba, w, h, x, y, dw, dh, alpha)` (v5) | RGBA image over the game (GPU renderers only), in 480x272 PSP pixels; call every frame it should stay; redrawn on a thread (1-3 frames of latency). Example: `plugins/src/MonstrosNoCampo` |
 | `quad_near(x, y, tol, wmin, wmax)` (v5) | 1 if the game drew a textured 3D quad (a card on the field...) centered near (x, y) in the frame on screen — tells whether a field slot is really visible (not hidden by a cut-in) |
 | `use_menu(menu)` (v4) | which window menu the following `add_slider`/`add_toggle` go to: `TFMOD_MENU_MODS` (default) or `TFMOD_MENU_CHEATS` (the **Cheats** menu, separate from Mods) |
 
@@ -149,15 +149,15 @@ newer functions. Everything runs on the game thread inside the frame: never bloc
 
 Optional export: `void tfmod_marca(int n)` is called (on the game thread, with the game paused) when the player saves the "the CPU made
 a mistake" mark number `n` (F7 or L3+R3, after typing the note): a good place to dump to the log whatever explains the move
-(`mods_src/CPUvsCPU` dumps the board; `tools/analysis/marcas_cpu.py` builds the report).
+(`plugins/src/CPUvsCPU` dumps the board; `tools/analysis/marcas_cpu.py` builds the report).
 
 When a hook calls game functions (`call`) before letting the original run, save and restore **all** registers around the call: the PSP
 passes up to 8 arguments in a0–a3 and t0–t3, and `r2` holds the original's result when the hook wraps it (see `chama()` in
-`mods_src/Cheats/cheats.cpp`).
+`plugins/src/Cheats/cheats.cpp`).
 
 ### Creating a mod
 
-Copy `mods_src/CaixaDeBoosters` (a small, well-commented example) to `mods_src/MyMod`, edit the `.cpp` and `mod.txt` and run
+Copy `plugins/src/CaixaDeBoosters` (a small, well-commented example) to `plugins/src/MyMod`, edit the `.cpp` and `mod.txt` and run
 `sh tools/build/build_plugins.sh MyMod` (MSYS2 UCRT64; `package_release.py` and the first `build.sh` build all of them). The result goes to `gen/mods/MyMod/`
 (`plugin.dll` plus the other files of the folder). The DLL is statically linked: it only depends on Windows. To find what to hook,
 `TF_HOOK_TRACE=addr,addr` logs (frame, arguments) of each call. Careful: overlapping modules (libfield and libshop share the same
@@ -165,19 +165,19 @@ base 0x091C4600) — check `module_loaded("libshop")` inside the hook.
 
 ### Bundled behavior mods
 
-- **Booster box** (`mods_src/CaixaDeBoosters`): in the card shop, on the pack selection screen, press **R** (Tab on the keyboard, or W
+- **Booster box** (`plugins/src/CaixaDeBoosters`): in the card shop, on the pack selection screen, press **R** (Tab on the keyboard, or W
   in the classic layout; RB on a controller): the game's own message window asks "Buy all N packs for X DP?" and YES buys every remaining pack of that booster
   at once (limited by DP). The text is placed in PSP memory with `guest_alloc` and a hook on the game's string reader delivers it when
   the window is built.
-- **Cheats** (`mods_src/Cheats`, see its README): optional cheats, each off by default, in their own **Cheats** menu (separate from Mods).
+- **Cheats** (`plugins/src/Cheats`, see its README): optional cheats, each off by default, in their own **Cheats** menu (separate from Mods).
   **See the opponent's cards** (F6): a panel lists the CPU's hand and its face-down cards, one row per card in the color of its frame
   (Normal, Effect, Fusion, Ritual, Spell, Trap) with attribute, level and ATK/DEF (or the Spell/Trap type, e.g. Quick-Play); it only
   reads the duel state. **DP multiplier** (formerly the separate "DP multiplier" mod): 1x (default) to 10x the DP earned at
   the end of each duel, set in the Cheats menu or in game by holding **L + R** and pressing **Up/Down**; a hook on the duel reward
   routine measures the DP actually earned, adds the extra with the game's own "add DP" function (which respects the 999,999,999 cap)
   and scales the parcels the result screen reads. The value saved by the old mod is imported.
-- **CPU vs CPU** (`mods_src/CPUvsCPU`): the CPU also controls your side (see [`AI.md`](AI.md)); doubles as the test arena.
-- **Better AI** (`mods_src/IAAprimorada`) and **Better Decks** (`mods_src/DecksAprimorados`): see [`AI.md`](AI.md) and [`DECKS.md`](DECKS.md).
+- **CPU vs CPU** (`plugins/src/CPUvsCPU`): the CPU also controls your side (see [`AI.md`](AI.md)); doubles as the test arena.
+- **Better AI** (`plugins/src/IAAprimorada`) and **Better Decks** (`plugins/src/DecksAprimorados`): see [`AI.md`](AI.md) and [`DECKS.md`](DECKS.md).
 
 ## Other bundled helpers
 

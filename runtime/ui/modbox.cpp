@@ -2,7 +2,7 @@
  * O mod chama modbox_show() / modbox_panel() a cada quadro em que a caixa / o painel deve aparecer; o display pergunta com modbox_pixels().
  * Desenho com GDI+ (antialias, degrades, cantos arredondados): cada elemento num bitmap proprio, composto com alfa no overlay (alfa reto,
  * como o overlay da GPU espera); a sombra e calculada direto nos pixels. A marcacao das linhas (secoes, linhas de carta, colunas, barra)
- * esta em mods_sdk/tfmod.h. O desenho (~5-10 ms por elemento) roda numa thread propria: a thread do jogo nunca espera; enquanto a imagem
+ * esta em plugins/sdk/tfmod.h. O desenho (~5-10 ms por elemento) roda numa thread propria: a thread do jogo nunca espera; enquanto a imagem
  * nova nao fica pronta (1 quadro), o display recebe a anterior. */
 #include "modbox.h"
 #include "gpu.h"
@@ -175,7 +175,7 @@ static void sombra(std::vector<uint32_t> &dst, float x, float y, float w, float 
     }
 }
 
-/* ------------------------------------------------------------------ marcacao das linhas (mods_sdk/tfmod.h) */
+/* ------------------------------------------------------------------ marcacao das linhas (plugins/sdk/tfmod.h) */
 struct Linha { char tipo = 'p'; wchar_t moldura = 0, atrib = L'-'; std::wstring selo, texto; std::vector<std::wstring> cols; };   /* p simples, h secao, c carta */
 static Linha ler(std::wstring s) {
     Linha r;

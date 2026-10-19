@@ -253,7 +253,7 @@ void mods_open_folder(void) {
                   "Optional: mods\\MyMod\\mod.txt with the lines name=, author=, version=, description=\r\n"
                   "On/off: Mods menu (applies after restarting the game).\r\n"
                   "Textures: mods\\MyMod\\textures\\ (PPSSPP format). Videos: mods\\MyMod\\movie\\<name>.h264\r\n"
-                  "Behavior (plugins): mods\\MyMod\\plugin.dll with the API in mods_sdk/tfmod.h (example: mods_src/CaixaDeBoosters).\r\n"
+                  "Behavior (plugins): mods\\MyMod\\plugin.dll with the API in plugins/sdk/tfmod.h (example: plugins/src/CaixaDeBoosters).\r\n"
                   "The game's code modules (BOOT.BIN, *.prx) cannot be replaced. Full guide: docs/MODS.md.\r\n", f);
             fclose(f);
         }

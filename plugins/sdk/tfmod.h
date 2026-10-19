@@ -5,7 +5,7 @@
  *     mods/MyMod/plugin.dll    uses this API; exports tfmod_init
  * At startup the game loads plugin.dll from the enabled mods (Mods menu) and calls tfmod_init(api). The plugin installs hooks on game
  * functions (by their PSP address) and, inside them, reads/writes PSP memory and registers, calls game functions and shows message
- * boxes. Example source: mods_src/CaixaDeBoosters. Build with: sh tools/build/build_plugins.sh (MSYS2 UCRT64, g++).
+ * boxes. Example source: plugins/src/CaixaDeBoosters. Build with: sh tools/build/build_plugins.sh (MSYS2 UCRT64, g++).
  *
  * Game version: hook addresses are valid for ONE version of the game. By default a plugin is valid only for the European one
  * (ULES-00600); for another version, export `const char *tfmod_game_ids = "ULES-00600,ULUS-10136";` (the list of versions the
@@ -79,7 +79,7 @@ typedef struct TfModApi {
     /* Information panel over the game (translucent; it neither pauses nor blocks anything). Call it every frame in which it should be
      * visible. corner: 0 = top left, 1 = top right, 2 = bottom left, 3 = bottom right (the top ones sit below the 20 px strip at the top,
      * where the game usually has bars). One panel per corner; short lines (~40 characters). Plain text works; the markup below
-     * (optional) makes the panel look like a table of cards (full example: mods_src/Cheats):
+     * (optional) makes the panel look like a table of cards (full example: plugins/src/Cheats):
      *   title     L"@eText\tRight"        @e = eye icon; whatever follows the \t goes on the right, in gold (e.g. L"LP 8000")
      *   section   L"#Hand\t5"             uppercase header with a counter on the right (optional)
      *   card      L"@MA{seal}Name\tc1\tc2..."  colored row: M = frame (n normal, e effect, f fusion, r ritual, s spell, t trap,
@@ -115,7 +115,7 @@ __declspec(dllexport)
 int tfmod_init(const TfModApi *api);
 /* Optional: void tfmod_marca(int n), exported the same way, called (on the game thread, with the game paused) when the player records the
  * "the CPU made a mistake" mark number n (F7 or L3 + R3, after typing the note): a good place to dump into the log the state that
- * explains the move (e.g. mods_src/CPUvsCPU dumps the board). tools/analysis/marcas_cpu.py gathers everything into a report. */
+ * explains the move (e.g. plugins/src/CPUvsCPU dumps the board). tools/analysis/marcas_cpu.py gathers everything into a report. */
 
 #ifdef __cplusplus
 }

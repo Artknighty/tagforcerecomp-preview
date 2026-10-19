@@ -1,4 +1,4 @@
-/* Mod "Cheats" (plugin, API 4 in mods_sdk/tfmod.h): optional cheats, for testing the game (e.g. watching what the CPU holds) and for
+/* Mod "Cheats" (plugin, API 4 in plugins/sdk/tfmod.h): optional cheats, for testing the game (e.g. watching what the CPU holds) and for
  * players who want them. Each cheat is switched on/off in the window's Cheats menu (some also by key) and the state is kept in config.ini in the mod folder.
  * To add a cheat: a section like the ones below (state + cfg + hook/frame) and its registration in tfmod_init.
  *
@@ -27,7 +27,7 @@
  *        +0x8FF4 + pack*0x2A:      pack (byte0 shop value, byte1 bits 0-1 state: 0 locked, 1 seen, 2 available), packs 0..47
  *   BOOT 08833fc4 ehsys_end_of_frame (every logical frame): panel, L + R + UP/DOWN and the pending unlock. */
 #include "tfmod.h"
-#include "../../decomp/common/duelists.h"
+#include "../../../decomp/common/duelists.h"
 #include <windows.h>
 #include <algorithm>
 #include <map>
@@ -106,7 +106,7 @@ static const InfoCarta &info(TfCpu *c, uint32_t id) {   /* consulta ao banco de 
     }
     return cache[id] = in;
 }
-/* linha de carta na marcacao do painel (mods_sdk/tfmod.h): "@" moldura atributo {selo} nome \t colunas */
+/* linha de carta na marcacao do painel (plugins/sdk/tfmod.h): "@" moldura atributo {selo} nome \t colunas */
 static std::wstring linha_carta(TfCpu *c, uint32_t id, const wchar_t *selo) {
     const InfoCarta &in = info(c, id);
     const bool magia = in.cat == 13 || in.atrib == 8, armadilha = in.cat == 14 || in.atrib == 9;
