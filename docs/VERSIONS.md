@@ -2,12 +2,12 @@
 
 The recompiled code is valid for **one build of the game**: every PRX module and `BOOT.BIN` has different code and
 addresses in each release. So each supported version has its own generated C code, its own installed data folder and its
-own executable. Nothing of this is distributed; everything is produced on your machine from your own ISO.
+own module table. The executable is the same for every version. Nothing of this is distributed; everything is produced on your machine from your own ISO.
 
-| Version | Game ID | Generated code | Data folder | Executable | Module table |
-|---|---|---|---|---|---|
-| European (default) | `ULES-00600` | `gen/` | `gen/jogo/` | `TagForceRecomp.exe` | `tools/translator/modules.tsv` |
-| American, and translations built on it (e.g. the PT-BR patch) | `ULUS-10136` | `gen/ULUS10136/` | `gen/jogo_ULUS10136/` | `gen/run_ULUS10136.exe` | `tools/translator/modules_ULUS10136.tsv` |
+| Version | Game ID | Generated code | Data folder | Module table |
+|---|---|---|---|---|
+| European (default) | `ULES-00600` | `gen/` | `gen/jogo/` | `tools/translator/modules.tsv` |
+| American, and translations built on it (e.g. the PT-BR patch) | `ULUS-10136` | `gen/ULUS10136/` | `gen/jogo_ULUS10136/` | `tools/translator/modules_ULUS10136.tsv` |
 
 The version is read from `UMD_DATA.BIN` on the disc (`tools/game/id_jogo.py`, `runtime/core/gameid.cpp`).
 
@@ -17,12 +17,12 @@ The version is read from `UMD_DATA.BIN` on the disc (`tools/game/id_jogo.py`, `r
 sh tools/build.sh && sh tools/install_dev.sh "<path to the ISO>"
 ```
 
-The script detects the version from the ISO, installs the data in the right folder, translates the modules and builds the
-matching executable (needs a `tools/modules_<ID>.tsv`; it stops with a message if the version is not supported yet).
+The script detects the version from the ISO, installs the data in the right folder and translates the modules (needs a
+`tools/translator/modules_<ID>.tsv`; it stops with a message if the version is not supported yet).
 Several versions can coexist: just run it once per ISO.
 
-At run time you can open any ISO from any executable. The launcher and `--iso`/`--data` read the game ID; if it differs from
-the one the running executable was built for, the right `run_<ID>.exe` is started (or a message tells you to build it).
+At run time you can open any ISO with the same executable: the launcher and `--iso`/`--data` read the game ID and use the code
+translated for that version.
 `gen/tagforce_recomp.ini` keeps the last ISO; saves go to `ms0/PSP/SAVEDATA/<ID>0001`, so versions do not share saves
 (the language field inside the save is version specific, so a save from another version is not loadable).
 
@@ -31,7 +31,7 @@ Tests: `TF_ISO=<ISO> sh tools/test/play.sh ...` (use `TF_FRESH_SAVE=1`; the Euro
 
 ## Adding a new version
 
-1. Copy `tools/translator/modules.tsv` to `tools/modules_<ID>.tsv` (ID without the dash, e.g. `ULUS10136`).
+1. Copy `tools/translator/modules.tsv` to `tools/translator/modules_<ID>.tsv` (ID without the dash, e.g. `ULUS10136`).
 2. `sh tools/install_dev.sh <ISO>`. The first load of each module tells you if its base is wrong
    (`[modulo] ... nenhuma base recompilada livre` / `regiao ocupada` in the log).
 3. Check that the modules that are loaded together do not overlap: a module's recompiled code is placed at the base in the

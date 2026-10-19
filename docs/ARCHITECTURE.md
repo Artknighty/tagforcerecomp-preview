@@ -7,7 +7,7 @@ ISO ──(runtime reads)──> BOOT.BIN + gmodule/*.prx         tools/translat
                                └──────────> runtime/ (C++): HLE kernel, software GE, VFPU, I/O, sound, fonts, UI, GPU backends
 ```
 
-## Generator (`tools/`)
+## Generator (`tools/translator/`)
 
 - `allegrex.py` — instruction decoder; `pspmod.py` — module loader and relocations; `imports.py` — imports/exports and **variable
   imports**; `recomp.py` — the translator; `build_modules.py` — all modules listed in `modules.tsv`; `merge.tsv` — regions of
@@ -20,25 +20,27 @@ ISO ──(runtime reads)──> BOOT.BIN + gmodule/*.prx         tools/translat
 
 ## Runtime (`runtime/`)
 
-| File(s) | Role |
-|---|---|
-| `host.cpp` | 1 GiB virtual PSP memory, `psp_call` by address, crash handler, hook dispatch |
-| `kernel.cpp` | allocator, cooperative threads with **fibers**, semaphores/event flags/message boxes, virtual clock + vblank |
-| `modules.cpp` | LoadModule/StartModule, variants, variable import |
-| `hle_io.cpp`, `iso.cpp`, `isofolder.cpp`, `install.cpp` | disc and memory-stick file access (disc → ISO or installed folder; `ms0:` → `./ms0`) |
-| `hle_ge.cpp`, `raster_pool.cpp` | GE (graphics chip): software rasterizer and the command stream feeding the GPU backends |
-| `gpu.cpp`, `gpu_d3d11.cpp`, `gpu_vulkan.cpp`, `shaders/` | Direct3D 11 and Vulkan renderers (resolution scaling, MSAA, real stencil) |
-| `hle_audio.cpp`, `audio_out.cpp` | sceAudio/SAS/ATRAC, device output with a drift controller |
-| `hle_mpeg.cpp`, `ffmpeg_dec.cpp` | PSMF movies and ATRAC via FFmpeg (loaded dynamically) |
-| `hle_font.cpp`, `hdfont.cpp` | text from the game's font data, with a 4x high-resolution atlas |
-| `hle_utility.cpp`, `text_input.cpp` | savedata dialogs, native text entry |
-| `display.cpp`, `pacing.cpp`, `interp.cpp` | window, input, frame pacing, **60 FPS interpolation** |
-| `menu.cpp`, `dark_ui.cpp`, `slider_dialog.cpp` | menu bar and dark-themed native dialogs |
-| `mods.cpp`, `plugins.cpp`, `texrepl.cpp`, `modbox.cpp` | file/texture/movie mods, behavior plugins, in-game message box for mods |
-| `diag.cpp`, `capturas.inc` | session log, input recording, watchdog, graphics diagnostic capture |
-| `launcher.cpp`, `main_run.cpp`, `gameid.cpp` | launcher window, entry point, game-version detection (each version has its own executable) |
-| `jit.cpp`, `prepare.cpp`, `generic_index.cpp` | release build: no game code inside; the translator runs on the player's machine on first start and TinyCC compiles the C in memory at each start |
-| `gfx.cpp`, `mouse_ui.cpp`, `hle_misc.cpp`, `vfpu.cpp`, `pc_text.cpp`, `imgio.cpp`, `util.cpp`, `ctl.cpp` | graphics options, mouse in menus, small HLE modules, VFPU, PC texts, PNG I/O, helpers, remote control for automated tests (`tools/test/tf.py`) |
+One subfolder per area (the build puts each of them on the include path, so headers are included by bare name). The full repository
+map is in [`STRUCTURE.md`](STRUCTURE.md).
+
+| Folder | File(s) | Role |
+|---|---|---|
+| `core/` | `host.cpp` | 1 GiB virtual PSP memory, `psp_call` by address, crash handler, hook dispatch |
+| `core/` | `kernel.cpp` | allocator, cooperative threads with **fibers**, semaphores/event flags/message boxes, virtual clock + vblank |
+| `core/` | `modules.cpp` | LoadModule/StartModule, variants, variable import |
+| `core/` | `iso.cpp`, `isofolder.cpp`, `install.cpp` | disc access (ISO or installed folder) and the installer |
+| `core/` | `jit.cpp`, `prepare.cpp`, `generic_index.cpp` | release build: no game code inside; the translator runs on the player's machine on first start and TinyCC compiles the C in memory at each start |
+| `core/` | `main_run.cpp`, `gameid.cpp`, `diag.cpp`, `ctl.cpp`, `util.cpp`, `psp_rt.h` | entry point, game-version detection, session log and watchdog, remote control for automated tests (`tools/test/tf.py`), helpers, the one header the generated code includes |
+| `hle/` | `hle_io.cpp` | file system calls (disc → ISO or installed folder; `ms0:` → `./ms0`) |
+| `hle/` | `hle_ge.cpp` | GE (graphics chip): software rasterizer and the command stream feeding the GPU backends |
+| `hle/` | `hle_audio.cpp`, `hle_mpeg.cpp`, `hle_font.cpp`, `hle_utility.cpp`, `hle_misc.cpp`, `vfpu.cpp` | sceAudio/SAS/ATRAC, PSMF movies, fonts, savedata dialogs and text entry, small modules, VFPU math |
+| `gpu/` | `gpu.cpp`, `gpu_d3d11.cpp`, `gpu_vulkan.cpp`, `shaders/` | Direct3D 11 and Vulkan renderers (resolution scaling, MSAA, real stencil) |
+| `gpu/` | `interp.cpp`, `pacing.cpp` | **60/120 FPS interpolation** and frame pacing |
+| `gpu/` | `texrepl.cpp`, `imgio.cpp`, `bc7.cpp`, `hdfont.cpp`, `pc_text.cpp`, `gfx.cpp`, `raster_pool.cpp`, `capturas.inc` | texture replacement (PNG, BC7), 4x high-resolution font atlas, PC texts, graphics options, rasterizer threads, graphics diagnostic capture |
+| `ui/` | `display.cpp`, `launcher.cpp`, `menu.cpp`, `mouse_ui.cpp`, `text_input.cpp` | window and input, launcher, menu bar, mouse in menus, native text entry |
+| `ui/` | `dark_ui.cpp`, `slider_dialog.cpp`, `modbox.cpp` | dark-themed dialogs and the in-game panels for mods |
+| `audio/` | `audio_out.cpp`, `ffmpeg_dec.cpp` | device output with a drift controller; ATRAC and H.264 through FFmpeg (loaded dynamically) |
+| `mods/` | `mods.cpp`, `plugins.cpp`, `hooks.h` | file/texture/movie mods, behavior plugins (`plugins/src/`, API in `plugins/sdk/`) |
 
 **System calls** are implemented as `HLE(name) { ... }` registered by name (NID → name tables generated by `tools/translator/gerar_nids.py`); `ARG(0..7)`
 and `RET(v)`. An unimplemented one prints `[HLE] not implemented: lib::name` and the process exits — that is how missing pieces are found.
@@ -60,6 +62,6 @@ Duel state is at fixed PSP addresses; see the end of [`AI.md`](AI.md). Decks and
 
 ## Note on the research tools
 
-Some tools (`decks_*.py`, `ia_*`, `capturas_*`) read a local module dump and card database that the maintainers generate with a
+Some tools (`tools/game/decks_*.py`, `tools/ai/ia_*`, `tools/analysis/capturas_*`) read a local module dump and card database that the maintainers generate with a
 decompiler workflow (`gen/ferramentas_decomp/`: `modulos/BOOT.BIN`, `dados/iso/cardinfo_eng.ehp`, Ghidra exports). The recompiler and
 runtime themselves **do not need any of that**; making the research tools work from the ISO alone is an open improvement.

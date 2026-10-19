@@ -103,7 +103,7 @@ translates is the code **of your copy**, on your machine; none of it is distribu
 
 ## How it works
 
-1. `tools/` reads the game's modules and translates each Allegrex function to C (`recomp.py`, `allegrex.py`, `pspmod.py`).
+1. `tools/translator/` reads the game's modules and translates each Allegrex function to C (`recomp.py`, `allegrex.py`, `pspmod.py`).
 2. The generated code, the runtime (`runtime/`) and FFmpeg are built into `TagForceRecomp.exe`.
 3. The runtime implements in HLE what the PSP firmware would do (threads, files, audio, graphics, fonts) and presents the frames.
 4. Plugins and mods connect through hooks on the recompiled functions and through file and texture replacement.
