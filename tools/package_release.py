@@ -131,7 +131,7 @@ def main():
 
     # 6. documents
     for f in ('LICENSE', 'THIRD_PARTY.md', 'README.md'): shutil.copy(f, pkg)
-    shutil.copytree('docs', os.path.join(pkg, 'docs'), ignore=shutil.ignore_patterns('adr', 'agents', 'historico'))
+    shutil.copytree('docs', os.path.join(pkg, 'docs'), ignore=shutil.ignore_patterns('adr', 'agents', 'internal'))
     open(os.path.join(pkg, 'START HERE.txt'), 'w').write(
         'Tag Force Recomp - %s\r\n\r\n'
         '1. Run TagForceRecomp.exe.\r\n'

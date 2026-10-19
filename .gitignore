@@ -24,12 +24,7 @@ texturas_despejo/
 /CONTEXT.md
 /docs/adr/
 /docs/agents/
-/docs/historico/
-/docs/diario/
-/docs/registro/
-/docs/ARMADILHAS.md
-/docs/ENV.md
-/docs/FERRAMENTAS.md
+/docs/internal/
 /tools/check_docs.sh
 /tools/build/exportar_publico.py
 /tools/githooks/
