@@ -1,6 +1,6 @@
 #!/bin/sh
-# Compila UM arquivo C++ do runtime/decomp para um .o (chamado em paralelo pelo build_run.sh). Uso: sh tools/cc_one.sh <fonte.cpp> <saida.o>
-# Variaveis (exportadas pelo build_run.sh): CXXOPT (otimizacao), GAMEID (id do jogo embutido).
+# Compila UM arquivo C++ do runtime/decomp para um .o (chamado em paralelo pelo build.sh). Uso: sh tools/cc_one.sh <fonte.cpp> <saida.o>
+# Variaveis (exportadas pelo build.sh): CXXOPT (otimizacao), GAMEID (id do jogo embutido).
 set -e
 export PATH=/c/msys64/ucrt64/bin:$PATH
 echo "g++ $1"

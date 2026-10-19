@@ -5,6 +5,6 @@
 cd "$(dirname "$0")/.."
 S="$1"; M="$2"; END="${3:-1000}"
 export TF_HOOK_TRACE=$(tail -n +2 gen/ferramentas_decomp/export/$M/_funcoes.tsv | cut -f1 | paste -sd,)
-RUN_EXE=${RUN_EXE:-gen/run_bg.exe} TAG=_cov$M ENDF=$END sh tools/replay.sh "$S" > /dev/null 2>&1
+RUN_EXE=${RUN_EXE:-gen/pkg/TagForceRecomp/TagForceRecomp_bg.exe} TAG=_cov$M ENDF=$END sh tools/replay.sh "$S" > /dev/null 2>&1
 grep '^\[hook\] quadro' "gen/replay/${S}_cov$M/log.txt" | sed -E 's/\[hook\] quadro ([0-9]+): ([0-9a-f]{8})\(.*/\2 \1/' \
  | awk '{c[$1]++; if(!($1 in f)) f[$1]=$2; l[$1]=$2} END{for(a in c) print a, c[a], f[a], l[a]}' | sort

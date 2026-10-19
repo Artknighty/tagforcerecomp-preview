@@ -9,7 +9,7 @@ MIN="${1:-6}"
 D="gen/gravacoes/$(date +%Y%m%d_%H%M%S)"; mkdir -p "$D"
 ./gen/tela_continua.exe "$D" --manter "$MIN" 2> "$D/gravador.log" &
 REC=$!
-(cd gen && ./run.exe)
+(cd gen/pkg/TagForceRecomp && ./TagForceRecomp.exe)
 sleep 2; kill $REC 2>/dev/null; taskkill //F //IM tela_continua.exe >/dev/null 2>&1; wait $REC 2>/dev/null
 tail -3 "$D/gravador.log"
 python tools/marca_ver.py "$D" --passo 2

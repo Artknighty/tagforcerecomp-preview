@@ -1,0 +1,43 @@
+#!/bin/sh
+# The ONE build of the project: incremental build of the generic runtime into the dev package folder
+#   gen/pkg/TagForceRecomp/TagForceRecomp.exe   (same layout as the release zip: tcc/, tools/, include/, mods/, DLLs next to the exe)
+# plus gen/pkg/TagForceRecomp/TagForceRecomp_bg.exe, a copy that replays and tests use, so the exe you play with can stay open.
+# The first run (or a missing folder) also assembles the rest of the package with tools/package_release.py --no-build.
+# Usage: sh tools/build.sh      Variables: OPT=-O1 (optimization, default -O2), OUT=other.exe, JOBS=n
+set -e
+export PATH=/c/msys64/ucrt64/bin:$PATH
+PKG=gen/pkg/TagForceRecomp
+mkdir -p $PKG
+python tools/spv2h.py   # Vulkan shaders (GLSL -> SPIR-V, gen/gpu_spv.h)
+echo '1 24 "runtime/app.manifest"' > gen/pkg/app.rc
+[ -f runtime/app.ico ] && echo '1 ICON "runtime/app.ico"' >> gen/pkg/app.rc
+windres gen/pkg/app.rc -O coff -o gen/pkg/app_res.o
+CPPSRCS=""
+for n in ctl main_run gameid host kernel iso isofolder install hle_misc hle_io hle_ge hle_audio modules vfpu hle_utility display hle_mpeg hle_font launcher text_input diag audio_out raster_pool ffmpeg_dec menu mouse_ui gfx imgio texrepl bc7 plugins modbox gpu interp pacing hdfont jit gpu_d3d11 gpu_vulkan pc_text mods util prepare dark_ui slider_dialog generic_index; do CPPSRCS="$CPPSRCS runtime/$n.cpp"; done
+CPPSRCS="$CPPSRCS decomp/decomp.cpp"
+for d in libduelrecord libtitle libcharalist libstory libfield libduel_eng libduel_mgr libduel_draw boot; do for f in decomp/$d/*.cpp; do CPPSRCS="$CPPSRCS $f"; done; done
+# incremental: each .cpp becomes a .o in gen/pkg/obj (tools/cc_one.sh, in parallel); only what changed (source or a header listed in the .d) is rebuilt
+OD=gen/pkg/obj; mkdir -p $OD
+GAMEID=ULES-00600
+STAMP="${OPT:--O2} $GAMEID"
+[ "$(cat $OD/flags.txt 2>/dev/null)" = "$STAMP" ] || { rm -f $OD/*.o $OD/*.d; echo "$STAMP" > $OD/flags.txt; }
+export CXXOPT="${OPT:--O2}" GAMEID
+TODO=""; CPPOBJS=""
+for s in $CPPSRCS; do
+  o=$OD/$(echo "${s%.cpp}" | tr '/' '_').o; CPPOBJS="$CPPOBJS $o"
+  need=0
+  if [ ! -f "$o" ] || [ ! -f "${o%.o}.d" ] || [ "$s" -nt "$o" ]; then need=1
+  else for h in $(sed -e 's/^[^:]*://' -e 's/\\$//' "${o%.o}.d" | tr ' ' '\n' | grep .); do
+    if [ ! -e "$h" ] || [ "$h" -nt "$o" ]; then need=1; break; fi
+  done; fi
+  [ $need = 1 ] && TODO="$TODO $s:$o"
+done
+if [ -n "$TODO" ]; then printf '%s\n' $TODO | tr ':' ' ' | xargs -P ${JOBS:-$(nproc)} -L1 sh tools/cc_one.sh; fi
+EXE="${OUT:-$PKG/TagForceRecomp.exe}"
+g++ -o "$EXE" $CPPOBJS gen/pkg/app_res.o -static -mwindows -ldwmapi -lgdi32 -luser32 -lcomdlg32 -lshell32 -lwinmm -lsynchronization -ld3d11 -ldxgi -ld3dcompiler -lole32 -loleaut32 -luuid -lwindowscodecs -lgdiplus
+if [ -z "$OUT" ]; then
+  [ -d $PKG/tcc ] || python tools/package_release.py --no-build --version dev --out gen/pkg   # first time: tcc, tools/python, DLLs, mods, docs
+  cp $PKG/TagForceRecomp.exe $PKG/TagForceRecomp_bg.exe 2>/dev/null || echo "note: TagForceRecomp_bg.exe is in use (a replay is running?): replays keep the previous build"
+  # the game data (jogo/) and the translated code (gen/) are made once from your ISO: sh tools/install_dev.sh
+fi
+echo "built: $EXE"

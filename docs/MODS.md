@@ -1,6 +1,6 @@
 # Mods — Tag Force Recomp
 
-A mod is a folder inside `mods/`, next to `run.exe` (menu **Mods → Open mods folder** creates it if missing). There are four
+A mod is a folder inside `mods/`, next to `TagForceRecomp.exe` (menu **Mods → Open mods folder** creates it if missing). There are four
 kinds of content, and one mod can mix them:
 
 1. **File replacement** — files that the game reads instead of the ones on the ISO.
@@ -158,7 +158,7 @@ passes up to 8 arguments in a0–a3 and t0–t3, and `r2` holds the original's r
 ### Creating a mod
 
 Copy `mods_src/CaixaDeBoosters` (a small, well-commented example) to `mods_src/MyMod`, edit the `.cpp` and `mod.txt` and run
-`sh tools/build_plugins.sh MyMod` (MSYS2 UCRT64; `build_run.sh` builds all of them). The result goes to `gen/mods/MyMod/`
+`sh tools/build_plugins.sh MyMod` (MSYS2 UCRT64; `package_release.py` and the first `build.sh` build all of them). The result goes to `gen/mods/MyMod/`
 (`plugin.dll` plus the other files of the folder). The DLL is statically linked: it only depends on Windows. To find what to hook,
 `TF_HOOK_TRACE=addr,addr` logs (frame, arguments) of each call. Careful: overlapping modules (libfield and libshop share the same
 base 0x091C4600) — check `module_loaded("libshop")` inside the hook.

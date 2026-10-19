@@ -45,7 +45,7 @@ The `CPUvsCPU` mod makes the CPU play both sides and logs every move (`[mon]` li
 
 ## Batch scripts
 
-All of them run several duels in parallel (default 6; each one is a separate hidden `run.exe`) and write one result file per duel to
+All of them run several duels in parallel (default 6; each one is a separate hidden `TagForceRecomp_bg.exe`) and write one result file per duel to
 `gen/arena/res_<label>_*.txt`:
 
 | Script | Purpose |

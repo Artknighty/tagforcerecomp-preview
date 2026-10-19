@@ -87,24 +87,24 @@ Requirements: Windows 10/11, [MSYS2](https://www.msys2.org/) UCRT64 (`gcc`, `g++
 Python 3 with Pillow and numpy, Git Bash. **No Ghidra or any decompiler is needed.**
 
 ```sh
-sh tools/recomp_tudo.sh "D:/path/to/Tag Force.iso"   # first time: installs the data, translates the modules (Allegrex -> C) and builds (~2 min)
-sh tools/build_run.sh                                 # afterwards: incremental rebuild
+sh tools/build.sh                                     # the one build: incremental, into gen/pkg/TagForceRecomp/ (same layout as the release zip)
+sh tools/install_dev.sh "D:/path/to/Tag Force.iso"    # first time only: installs the game data from your ISO (the code is translated on first run)
 python tools/package_release.py                       # builds the release zip described above (gen/release/)
 ```
 
 ```powershell
-.\gen\run.exe       # launcher: "Install and play" the first time (ISO); afterwards just "Play" (the ISO is no longer needed)
+.\gen\pkg\TagForceRecomp\TagForceRecomp.exe       # launcher: "Install and play" the first time (ISO); afterwards just "Play" (the ISO is no longer needed)
 ```
 
 To check that the documented build works on a **clean Windows**, there is a one-click test in [Windows Sandbox](tools/teste_ambiente_limpo/README.md).
 
-`run.exe` can also install by itself (`run.exe --install <iso>`) and verify the copy (`--verify <iso>`). What the project
+`TagForceRecomp.exe` can also install by itself (`TagForceRecomp.exe --install <iso>`) and verify the copy (`--verify <iso>`). What the project
 translates is the code **of your copy**, on your machine; none of it is distributed.
 
 ## How it works
 
 1. `tools/` reads the game's modules and translates each Allegrex function to C (`recomp.py`, `allegrex.py`, `pspmod.py`).
-2. The generated code, the runtime (`runtime/`) and FFmpeg are built into a `run.exe`.
+2. The generated code, the runtime (`runtime/`) and FFmpeg are built into `TagForceRecomp.exe`.
 3. The runtime implements in HLE what the PSP firmware would do (threads, files, audio, graphics, fonts) and presents the frames.
 4. Plugins and mods connect through hooks on the recompiled functions and through file and texture replacement.
 

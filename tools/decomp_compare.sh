@@ -6,7 +6,7 @@ STEP="${SNAPSTEP:-}"; SN=$(python -c "e=$END;st=int('${STEP:-0}') or max(50,e//1
 for S in "$@"; do
   for M in on off; do
     if [ $M = off ]; then export TF_DECOMP=off; else unset TF_DECOMP; fi
-    RUN_EXE=${RUN_EXE:-gen/run_bg.exe} SNAPS=$SN ENDF=$END TAG=_c$M sh tools/replay.sh $S > /dev/null 2>&1
+    RUN_EXE=${RUN_EXE:-gen/pkg/TagForceRecomp/TagForceRecomp_bg.exe} SNAPS=$SN ENDF=$END TAG=_c$M sh tools/replay.sh $S > /dev/null 2>&1
   done; unset TF_DECOMP
   r=gen/replay; n=0; d=0
   for f in $r/${S}_con/gen/snap_*.bmp; do b=$(basename $f); n=$((n+1)); cmp -s $f $r/${S}_coff/gen/$b || { d=$((d+1)); echo "DIFF $b"; }; done

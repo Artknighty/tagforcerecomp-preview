@@ -1,10 +1,10 @@
 """Resolve o arquivo do profiler (PROFILE=arquivo, ver display.cpp) em funcoes/linhas.
-Uso: python tools/prof.py <arquivo> [exe=gen/run.exe] [topo=25]
+Uso: python tools/prof.py <arquivo> [exe=gen/pkg/TagForceRecomp/TagForceRecomp.exe] [topo=25]
 Mostra (1) a funcao externa (onde o codigo inlined foi parar) e (2) a linha-fonte mais interna, com % das amostras."""
 import subprocess, sys, collections, os
 
 prof = sys.argv[1]
-exe = sys.argv[2] if len(sys.argv) > 2 else 'gen/run.exe'
+exe = sys.argv[2] if len(sys.argv) > 2 else 'gen/pkg/TagForceRecomp/TagForceRecomp.exe'
 top = int(sys.argv[3]) if len(sys.argv) > 3 else 25
 os.environ['PATH'] = r'C:\msys64\ucrt64\bin;' + os.environ['PATH']
 rows = [l.split() for l in open(prof) if l.strip()]

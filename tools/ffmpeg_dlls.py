@@ -1,6 +1,6 @@
 """Copia para gen/ as DLLs do FFmpeg (MSYS2 UCRT64) que o run.exe carrega em tempo de execucao para o ATRAC
 (avcodec + avutil) e todas as suas dependencias que estao em C:/msys64/ucrt64/bin (as do Windows ficam de fora).
-Uso: python tools/ffmpeg_dlls.py  (chamado pelo build_run.sh; so copia o que falta ou mudou)."""
+Uso: python tools/ffmpeg_dlls.py  (chamado pelo build.sh; so copia o que falta ou mudou)."""
 import os, re, shutil, subprocess, sys
 
 BIN = r'C:/msys64/ucrt64/bin'

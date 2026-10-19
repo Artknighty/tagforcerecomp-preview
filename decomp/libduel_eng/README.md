@@ -42,6 +42,6 @@ All 25 registered swaps were exercised by this duel. The field/effect queries an
 
 ## Builds
 
-The swaps compile into every build (`decomp/libduel_eng/*.cpp`, glob in `tools/build_run.sh`), including the single player build `gen/run.exe`; `sh tools/build_run.sh` (with the game closed) also refreshes `gen/run_bg.exe`, the executable replays use.
+The swaps compile into every build (`decomp/libduel_eng/*.cpp`, glob in `tools/build.sh`), including the single player build `gen/run.exe`; `sh tools/build_run.sh` (with the game closed) also refreshes `gen/run_bg.exe`, the executable replays use.
 
 The module is not complete: all functions without a C++ swap still run as generated code.

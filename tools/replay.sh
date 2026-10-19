@@ -16,7 +16,7 @@ cd "$(dirname "$0")/.."
 ROOT=$(pwd); S="$1"; STEP="${2:-1000}"
 ISO="${TF_ISO:-$(grep -i "^iso=" gen/tagforce_recomp.ini 2>/dev/null | head -1 | cut -d= -f2- | tr -d "[:cntrl:]")}"; [ -f "$ISO" ] || ISO=$(cygpath -u "$ISO" 2>/dev/null); [ -f "$ISO" ] || { echo "set TF_ISO=<path to your ISO> (or iso= in gen/tagforce_recomp.ini)"; exit 1; }
 IN="${INPUTS:-$ROOT/gen/logs/$S.inputs}"; [ -f "$IN" ] || { echo "sem $IN"; exit 1; }
-EXE="$ROOT/${RUN_EXE:-gen/run_bg.exe}"; case "$RUN_EXE" in /*) EXE="$RUN_EXE";; esac
+EXE="$ROOT/${RUN_EXE:-gen/pkg/TagForceRecomp/TagForceRecomp_bg.exe}"; case "$RUN_EXE" in /*) EXE="$RUN_EXE";; esac
 W="$ROOT/gen/replay/$S$TAG"; rm -rf "$W"; mkdir -p "$W/gen"
 [ -d "$ROOT/gen/logs/${S}_ms0" ] && cp -r "$ROOT/gen/logs/${S}_ms0" "$W/ms0"
 [ -n "$MODDIR" ] && export TF_MODS_DIR="$(cygpath -m "$(cd "$MODDIR" && pwd)")"   # usada no lugar (so leitura), sem copiar
@@ -25,7 +25,7 @@ W="$ROOT/gen/replay/$S$TAG"; rm -rf "$W"; mkdir -p "$W/gen"
 # o modelo de IA do IAAprimorada (llm/, ~500 MB) so e copiado se for usado (TF_IA_LLM=1 ou llm=1 no config.ini do mod; o padrao e desligado)
 copiar_mod() { src="${1%/}"; dst="$2/$(basename "$src")"; mkdir -p "$dst"
   for f in "$src"/*; do if [ "$(basename "$f")" = llm ] && [ "${TF_IA_LLM:-0}" = 0 ] && ! grep -qs '^llm=1' "$src/config.ini"; then continue; fi; cp -r "$f" "$dst/"; done; }
-if [ -z "$MODDIR" ]; then mkdir -p "$W/mods"; for d in "$ROOT"/gen/mods/*/; do [ -f "$d/plugin.dll" ] && [ ! -f "$d/disabled" ] && copiar_mod "$d" "$W/mods"; done; fi
+if [ -z "$MODDIR" ]; then mkdir -p "$W/mods"; for d in "$ROOT"/gen/pkg/TagForceRecomp/mods/*/; do [ -f "$d/plugin.dll" ] && [ ! -f "$d/disabled" ] && copiar_mod "$d" "$W/mods"; done; fi
 [ -n "$RECENT" ] && cp "$RECENT" "$W/texturas_recentes.txt"
 [ -n "$TEXCACHE" ] && cp -r "$TEXCACHE" "$W/texcache"   # cache em disco das texturas decodificadas de uma execucao anterior (teste "a quente")
 LAST=$(tr ',' '\n' < "$IN" | grep : | tail -1 | cut -d: -f1); END=${ENDF:-$((LAST + 600))}

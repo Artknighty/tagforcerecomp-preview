@@ -1,5 +1,5 @@
 """Gera gen/app.ico (icone do .exe, janela e barra de tarefas) a partir do ICON0.PNG da PROPRIA ISO do usuario (o Ojama Yellow do
-icone do jogo). O resultado fica em gen/ (fora do git: e arte do jogo) e o build_run.sh o embute se existir; sem ele o .exe fica sem icone.
+icone do jogo). O resultado fica em gen/ (fora do git: e arte do jogo) e o build.sh o embute se existir; sem ele o .exe fica sem icone.
 Uso: python tools/make_icon.py [caminho da ISO]   (padrao: a ISO gravada em gen/tagforce_recomp.ini, chave iso=)"""
 import io, os, re, sys
 sys.path.insert(0, os.path.dirname(__file__))

@@ -42,7 +42,7 @@ A swap is a hook on the function entry. A `SwapReg` maps the PSP registers to a 
 
 - `TF_DECOMP=off` disables all swaps; `TF_DECOMP=a,b` enables only the named ones; default is all registered.
 - `TF_DECOMP_VERIFY=1` runs eligible swaps (`pure` or with declared writable regions) and logs `[decomp] MISMATCH` if the original and replacement differ.
-- The single player build is `gen/run.exe`, with registered swaps enabled by default. Build an isolated test executable without touching it: `OUT=gen/run_decomp.exe sh tools/build_run.sh`, then `RUN_EXE=gen/run_decomp.exe sh tools/replay.sh <session>`.
+- The single build is `gen/pkg/TagForceRecomp/TagForceRecomp.exe`, with registered swaps enabled by default. Build an isolated test executable without touching it: `OUT=gen/pkg/TagForceRecomp/test.exe sh tools/build.sh`, then `RUN_EXE=gen/pkg/TagForceRecomp/test.exe sh tools/replay.sh <session>`.
 
 ## Swaps done
 
@@ -68,7 +68,7 @@ A swap is a hook on the function entry. A `SwapReg` maps the PSP registers to a 
 
 ## Decomp build and play-order workflow
 
-- There is a single build, `gen/run.exe`: the decomp swaps are compiled into it and are on by default (`TF_DECOMP=off` runs only the generated code; the parts not decompiled yet stay as generated C). Rebuild: `sh tools/build_run.sh`. Replays use `gen/run_bg.exe`, the copy of `run.exe` the build makes.
+- There is a single build, `TagForceRecomp.exe`: the decomp swaps are compiled into it and are on by default (`TF_DECOMP=off` runs only the generated code; the parts not decompiled yet stay as generated C). Rebuild: `sh tools/build.sh`. Replays use `TagForceRecomp_bg.exe`, the copy of the exe the build makes.
 - Modules are tackled in the order the player meets them: Konami start screen, opening cutscene, title, then menus, story and duels. The owner records one session per stage; each new session becomes the baseline of the next Module.
 
 ## Coverage of a recorded session

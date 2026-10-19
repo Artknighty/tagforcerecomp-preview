@@ -76,7 +76,7 @@ arguments `arg0..arg2`, each with a pending value. Screens are state machines on
 ## Checking a change
 
 ```
-sh tools/build_run.sh
+sh tools/build.sh
 sh tools/decomp_verify.sh <last frame> <session>      # TF_DECOMP_VERIFY: original and swap compared on every call
 SNAPSTEP=60 sh tools/decomp_compare.sh <last frame> <session>   # captures and log with swaps on vs off must be identical
 SNAPLIST=1900,2100 sh tools/decomp_compare.sh 2600 <session>    # exact frames (to look at one screen)

@@ -3,7 +3,7 @@
 # registers) and every entry of the Module's own functions (four argument registers). The generated code and the swaps must produce the same sequence;
 # the first difference shows where they stop agreeing (the Ghidra pseudo-C hides arguments, so this is the real check).
 # Usage: sh tools/decomp_calls.sh <session> <last_frame> <Module> <skip prefix> <stub range lo-hi (hex)> [first_frame=0] [tag_suffix]
-#   RUN_EXE=gen/run_bg.exe by default. tag_suffix makes unique output folders (e.g. _r2 -> _cn_r2 / _cf_r2).
+#   RUN_EXE=gen/pkg/TagForceRecomp/TagForceRecomp_bg.exe by default. tag_suffix makes unique output folders (e.g. _r2 -> _cn_r2 / _cf_r2).
 #   libfield: sh tools/decomp_calls.sh sessao_20261012_190727 3520 libfield libfield. 091ed540-091efc30 0 _r1
 # decomp/<Module>/trace_arity.txt ("address ints floats" per line) corrects the argument counts the tool derives from Ghidra.
 # Functions listed (one hex address per line) in decomp/<Module>/trace_skip.txt are not traced: the ones the swaps inline instead of calling.
@@ -26,7 +26,7 @@ export TF_CALL_TRACE="$RANGE"; export TF_HOOK_TRACE="$ADDRS"
 [ -z "$NORUN" ] && for M in n f; do
   if [ $M = f ]; then export TF_DECOMP_SKIP="$PREFIX"; else unset TF_DECOMP_SKIP; fi
   TAG="${CN_TAG}"; [ $M = f ] && TAG="${CF_TAG}"
-  RUN_EXE=${RUN_EXE:-gen/run_bg.exe} ENDF=$END TAG="$TAG" SNAPS=$END sh tools/replay.sh $S > /dev/null 2>&1 &
+  RUN_EXE=${RUN_EXE:-gen/pkg/TagForceRecomp/TagForceRecomp_bg.exe} ENDF=$END TAG="$TAG" SNAPS=$END sh tools/replay.sh $S > /dev/null 2>&1 &
 done
 wait
 unset TF_DECOMP_SKIP
