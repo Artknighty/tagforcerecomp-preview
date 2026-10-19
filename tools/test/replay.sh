@@ -14,7 +14,10 @@
 #   INI=arq      parte de uma copia desse .ini (INI=gen/tagforce_recomp.ini = config exata of the player, inclusive filtro/proporcao, que nao tem variavel)
 cd "$(dirname "$0")/../.."
 ROOT=$(pwd); S="$1"; STEP="${2:-1000}"
-ISO="${TF_ISO:-$(grep -i "^iso=" gen/tagforce_recomp.ini 2>/dev/null | head -1 | cut -d= -f2- | tr -d "[:cntrl:]")}"; [ -f "$ISO" ] || ISO=$(cygpath -u "$ISO" 2>/dev/null); [ -f "$ISO" ] || { echo "set TF_ISO=<path to your ISO> (or iso= in gen/tagforce_recomp.ini)"; exit 1; }
+ISO="${TF_ISO:-$(grep -i "^iso=" gen/tagforce_recomp.ini 2>/dev/null | head -1 | cut -d= -f2- | tr -d "[:cntrl:]")}"; [ -f "$ISO" ] || ISO=$(cygpath -u "$ISO" 2>/dev/null); GA1=--iso; GA2="$ISO"   # no ISO on disk: fall back to the game data installed in the dev package (tools/install_dev.sh)
+if [ ! -f "$ISO" ]; then
+  if [ -d "$(pwd)/gen/pkg/TagForceRecomp/jogo" ]; then GA1=--dados; GA2="$(pwd)/gen/pkg/TagForceRecomp/jogo"; else echo "set TF_ISO=<path to your ISO> (or iso= in gen/tagforce_recomp.ini), or run tools/install_dev.sh"; exit 1; fi
+fi
 IN="${INPUTS:-$ROOT/gen/logs/$S.inputs}"; [ -f "$IN" ] || { echo "sem $IN"; exit 1; }
 EXE="$ROOT/${RUN_EXE:-gen/pkg/TagForceRecomp/TagForceRecomp_bg.exe}"; case "$RUN_EXE" in /*) EXE="$RUN_EXE";; esac
 W="$ROOT/gen/replay/$S$TAG"; rm -rf "$W"; mkdir -p "$W/gen"
@@ -45,7 +48,7 @@ export TF_INI="$TF_LOG_DIR/teste.ini"   # .ini proprio: as configuracoes of the 
 # MODO LEVE (padrao): sem cache da ISO na RAM (800 MB por processo) e renderizador por software: ~140 MB por duelo em vez de ~1 GB, mesmo resultado (testado: duelo identico) e mesma velocidade.
 # PESADO=1 desliga (testes de textura/cenario/capturas usam a GPU); PACE=1 (performance real) e TF_CAPTURAS tambem mantem a config completa.
 [ -z "$PESADO" ] && [ -z "$PACE" ] && [ -z "$TF_CAPTURAS" ] && export TF_NO_ISO_CACHE=1 TF_GPU=0
-cd "$W" && env $NP TF_KEEP_CWD=1 EXIT_FRAME="$((END + 1))" AUTO_PRESS_FILE="$IN" AUTO_TEXT="${4:-}" SNAP_FRAME="$F" timeout "${3:-900}" "$EXE" --iso "$ISO" > /dev/null 2>&1
+cd "$W" && env $NP TF_KEEP_CWD=1 EXIT_FRAME="$((END + 1))" AUTO_PRESS_FILE="$IN" AUTO_TEXT="${4:-}" SNAP_FRAME="$F" timeout "${3:-900}" "$EXE" $GA1 "$GA2" > /dev/null 2>&1
 echo "exit=$?"
 cat logs/*.log > log.txt 2>/dev/null; grep -v '^\[snap\]' log.txt | tail -15 | cut -c1-220
 python - "$F" <<'PY'

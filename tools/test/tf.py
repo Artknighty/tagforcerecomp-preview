@@ -1,7 +1,7 @@
 #!/usr/bin/env python3
 """Joga o jogo em ciclo fechado (agente): inicia uma instancia em modo TF_CTL e a comanda quadro a quadro.
 
-  python tools/test/tf.py start [--fresh] [--exe gen/run_ctl.exe] [--gpu] [--text o usuario]
+  python tools/test/tf.py start [--fresh] [--exe gen/pkg/TagForceRecomp/TagForceRecomp_bg.exe] [--gpu] [--text o usuario]
   python tools/test/tf.py run "w300 X w60 START w100" [--shot nome]    # roteiro; imprime o quadro final
   python tools/test/tf.py shot [nome]                                  # grava gen/ctl/<nome>.png (padrao: shot) e imprime o caminho
   python tools/test/tf.py duelo [--oponente N] [--auto [--j0 N --j1 N --seed N --fim]]   # ate o inicio do Free Duel (ou ate o fim, com CPUvsCPU)
@@ -157,10 +157,13 @@ def start(args):
     shutil.rmtree(CTL, ignore_errors=True); os.makedirs(CTL)
     ini = open(os.path.join(ROOT, 'gen', 'tagforce_recomp.ini'), errors='ignore').read() if os.path.exists(os.path.join(ROOT, 'gen', 'tagforce_recomp.ini')) else ''
     iso = os.environ.get('TF_ISO') or (re.search(r'(?im)^iso=(.*)$', ini).group(1).strip() if re.search(r'(?im)^iso=(.*)$', ini) else '')
-    if not os.path.isfile(iso): raise SystemExit('defina TF_ISO ou iso= em gen/tagforce_recomp.ini')
+    exe = args[args.index('--exe') + 1] if '--exe' in args else os.path.join('gen', 'pkg', 'TagForceRecomp', 'TagForceRecomp_bg.exe')
+    pkg = os.path.dirname(os.path.join(ROOT, exe))   # the test runs inside the package folder (its own gen/ translated code and ms0/ test save)
+    dados = os.path.join(pkg, 'jogo')
+    if not os.path.isdir(dados) and not os.path.isfile(iso): raise SystemExit('sem dados instalados em %s: rode tools/install_dev.sh ou defina TF_ISO' % dados)
     # save de teste = copia do save do usuario (ou vazio com --fresh); nunca escreve em gen/ms0
-    shutil.rmtree(os.path.join(ROOT, 'ms0'), ignore_errors=True)
-    if '--fresh' not in args and os.path.isdir(os.path.join(ROOT, 'gen', 'ms0')): shutil.copytree(os.path.join(ROOT, 'gen', 'ms0'), os.path.join(ROOT, 'ms0'))
+    shutil.rmtree(os.path.join(pkg, 'ms0'), ignore_errors=True)
+    if '--fresh' not in args and os.path.isdir(os.path.join(ROOT, 'gen', 'ms0')): shutil.copytree(os.path.join(ROOT, 'gen', 'ms0'), os.path.join(pkg, 'ms0'))
     mods = os.path.join(ROOT, 'gen', 'plugins_teste'); shutil.rmtree(mods, ignore_errors=True); os.makedirs(mods)
     for d in glob.glob(os.path.join(ROOT, 'gen', 'mods', '*')):
         if os.path.isfile(os.path.join(d, 'plugin.dll')) and not os.path.exists(os.path.join(d, 'disabled')):
@@ -178,9 +181,8 @@ def start(args):
     if '--pesado' in args:   # config do usuario (gen/tagforce_recomp.ini): Vulkan 8x, MSAA, HD, limitador e interpolacao ligados (tempo real)
         env.update(TF_GPU='2', TF_RES='8', TF_MSAA='1'); env.pop('NO_PACE', None); env.pop('TF_INTERP', None)
         env.setdefault('TF_TEX_WAIT_MS', '4000')   # a rota do duelo espera os PNGs de textura; TF_TEX_WAIT_MS no ambiente (ex.: 80, o padrao do jogo) mede o jogo real
-    exe = args[args.index('--exe') + 1] if '--exe' in args else os.path.join('gen', 'run_ctl.exe')
     log = open(os.path.join(CTL, 'log.txt'), 'wb')
-    p = subprocess.Popen([os.path.join(ROOT, exe), '--iso', iso], cwd=ROOT, env=env, stdout=log, stderr=log,
+    p = subprocess.Popen([os.path.join(ROOT, exe)] + (['--dados', dados] if os.path.isdir(dados) else ['--iso', iso]), cwd=pkg, env=env, stdout=log, stderr=log,
                          creationflags=0x00000008 | 0x00000200)   # DETACHED_PROCESS | NEW_PROCESS_GROUP
     open(os.path.join(CTL, 'pid'), 'w').write(str(p.pid))
     global RAPIDO
