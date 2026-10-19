@@ -1,7 +1,7 @@
 /* Duel Ranking: drawing. Everything here records GE display lists through ehsys; coordinates are in screen pixels (480x272) and
  * most boxes are built from a corner/edge/centre sprite set cut out of the screen's texture sheets (keys 0x1002 and 0x1003). */
 #include "duelrecord.h"
-#include "../ehsys.h"
+#include "../common/ehsys.h"
 #include "records.h"
 #include <math.h>
 #include <string.h>

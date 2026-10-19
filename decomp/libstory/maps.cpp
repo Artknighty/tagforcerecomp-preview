@@ -1,5 +1,5 @@
 /* libstory: small lookup functions that turn one code into another. */
-#include "../swap.h"
+#include "../common/swap.h"
 #include "story_data.h"
 
 #define MODULE "libstory"

@@ -1,5 +1,5 @@
 /* Glue between the PSP calling convention and the native functions of libduel_mgr's Duel Result screen. */
-#include "../swap.h"
+#include "../common/swap.h"
 #include "result_screen.h"
 
 #define MODULE "libduel_mgr"

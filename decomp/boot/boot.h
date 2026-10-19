@@ -1,7 +1,7 @@
 /* Shared by the decompiled parts of BOOT (the engine library): where its functions and data are, and the numbers its drawing code uses. */
 #pragma once
-#include "../swap.h"
-#include "../ehsys.h"
+#include "../common/swap.h"
+#include "../common/ehsys.h"
 
 namespace boot {
 

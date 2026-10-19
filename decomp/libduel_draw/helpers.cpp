@@ -1,6 +1,6 @@
 /* libduel_draw: small helpers the drawing code calls all the time (flag word, sorted-table lookup, scene-record addresses, thin wrappers over
  * libduel_eng getters). */
-#include "../swap.h"
+#include "../common/swap.h"
 #include "draw_data.h"
 
 #define MODULE "libduel_draw"

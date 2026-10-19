@@ -1,6 +1,6 @@
 /* libfield: the map scene: the terrain with its models, the people standing on it, the player's area and the height of the ground. */
-#include "../swap.h"
-#include "../ehsys.h"
+#include "../common/swap.h"
+#include "../common/ehsys.h"
 #include "field_data.h"
 #include "field_engine.h"
 #include "field_functions.h"

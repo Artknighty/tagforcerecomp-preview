@@ -1,6 +1,6 @@
 /* libduel_eng: the duel rules and state. This is a typed view of the PSP's field-card slots, not host-owned memory. */
 #pragma once
-#include "../swap.h"
+#include "../common/swap.h"
 #include <stdint.h>
 
 namespace duel_eng {

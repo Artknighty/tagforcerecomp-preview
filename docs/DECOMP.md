@@ -9,7 +9,7 @@ Goal: replace the generated Recomp code with readable hand-written C++, function
 - EU version (ULES-00600) first. Code names functions and structures once; today the addresses are the EU ones (`fn::`, `off()`), and `decomp_init` switches every swap off on other versions. A per-version address table is the plan before any other version gets swaps.
 - New code goes in `decomp/<module>/`. Native typed objects are the target; typed views over PSP memory are the transitional stage.
 - **Readable by anyone (the point of the work).** A reader must not need a debugger or this document to understand a line. In `decomp/`:
-  - no bare engine ids: `x.callNid(nid::PlaySound, ...)`, never `x.callNid(0x2AE3C0AD, ...)`. Every NID has a name in `decomp/ehsys.h` (`namespace nid`); a name that is a guess says `(guess)`.
+  - no bare engine ids: `x.callNid(nid::PlaySound, ...)`, never `x.callNid(0x2AE3C0AD, ...)`. Every NID has a name in `decomp/common/ehsys.h` (`namespace nid`); a name that is a guess says `(guess)`.
   - no bare function addresses: `x.callLocal(fn::SetFlowArgs, ...)`, never `x.callLocal(off(0x08f01550), ...)`. A function the code calls gets a Swap (and so a name in `namespace fn`).
   - no `x.at<T>(base + 76)`: guest memory is read through a struct with named fields (`MenuList`, `Window`, `State`, `Panel`, `OptionsScreen`...); a field that is not understood yet is called `unknownNN` (its offset), never given a made-up name.
   - a list of choices is an enum or a named constant (`MainMenuItem`, `kItemDisabled`), not a number.
@@ -36,7 +36,7 @@ The status table distinguishes a fully completed Module from coverage of recorde
 
 `libduelrecord` (Main Menu > Duel Ranking) was the pilot: 27 own functions, swapped leaf-first, each compared on/off with `TF_DECOMP_VERIFY` and with captures. Baseline session `gen/logs/sessao_20261011_014117`. Call graph of any module: `python tools/decomp/decomp_grafo.py <module>`.
 
-## Swap mechanism (`decomp/swap.h`, `decomp/decomp.cpp`)
+## Swap mechanism (`decomp/common/swap.h`, `decomp/decomp.cpp`)
 
 A swap is a hook on the function entry. A `SwapReg` maps the PSP registers to a hand-written C++ function in `decomp/<module>/`. It only fires while its Module is loaded, because several Modules share the same base address at different times.
 

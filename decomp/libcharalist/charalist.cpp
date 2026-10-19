@@ -1,7 +1,7 @@
 /* libcharalist: the character list library (see charalist.h). Every function the story runs is replaced here; the rest of the module (the picture
  * drawing, FUN_00000140...) is still generated code. */
-#include "../swap.h"
-#include "../ehsys.h"
+#include "../common/swap.h"
+#include "../common/ehsys.h"
 #include "../libduelrecord/records.h"
 #include "charalist.h"
 #include <stddef.h>

@@ -1,6 +1,6 @@
 # BOOT (ehsys, the engine library)
 
-`BOOT` is the game's resident module: the engine every other Module calls (`libehsys_*`, the `NID`s in [ehsys.h](../ehsys.h)). It has 2291 functions;
+`BOOT` is the game's resident module: the engine every other Module calls (`libehsys_*`, the `NID`s in [ehsys.h](../common/ehsys.h)). It has 2291 functions;
 only the ones below are decompiled so far. Method and rules: [docs/DECOMP.md](../../docs/DECOMP.md).
 
 ## Window drawing ([window.cpp](window.cpp), [window_content.cpp](window_content.cpp), [window.h](window.h), [boot.h](boot.h))
@@ -28,9 +28,9 @@ set's own style. `DrawWindowContent` (`EF9B5D06`) is what a screen calls each fr
 Natives call each other directly, so only the entry points above show as "first call" in the log; `tools/decomp/decomp_compare_skip.sh BOOT ...` compares captures
 with all of them on and off.
 
-PC style: `DrawWindowItem` asks `pcStyleWindow` ([pc_style.h](../pc_style.h), implemented in `libtitle/panels.cpp`) to draw a glass panel over the
+PC style: `DrawWindowItem` asks `pcStyleWindow` ([pc_style.h](../common/pc_style.h), implemented in `libtitle/panels.cpp`) to draw a glass panel over the
 frame's rectangle instead of the frame's sprites; it declines (and the game's frame is drawn) unless the PC style is on and libtitle is on a screen
 whose sheet has the pieces (the options / card list screens, which include Free Duel).
 
-The window drawing, layout and input paths of BOOT are all decompiled. The text and GU wrappers in [ehsys.h](../ehsys.h) are named but still generated code.
+The window drawing, layout and input paths of BOOT are all decompiled. The text and GU wrappers in [ehsys.h](../common/ehsys.h) are named but still generated code.
 Debt: `boot::WindowBlock` and `libtitle::Window` describe the same memory; the title code should move to the former.

@@ -2,8 +2,8 @@
  * The game keeps the screen's state in one block allocated when the screen starts; a global holds its address. This header is a typed
  * view over that block plus the screen's behaviour; each method names the original function it replaces. */
 #pragma once
-#include "../swap.h"
-#include "../ehsys.h"
+#include "../common/swap.h"
+#include "../common/ehsys.h"
 #include "../libtitle/title_state.h"
 #include "duel_records.h"
 

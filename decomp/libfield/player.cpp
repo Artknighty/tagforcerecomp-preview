@@ -1,6 +1,6 @@
 /* libfield: the player's character on the map: moving, the cells it occupies, footsteps. */
-#include "../swap.h"
-#include "../ehsys.h"
+#include "../common/swap.h"
+#include "../common/ehsys.h"
 #include "field_data.h"
 #include "field_engine.h"
 #include "field_functions.h"

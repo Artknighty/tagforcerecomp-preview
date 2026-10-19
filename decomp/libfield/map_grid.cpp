@@ -1,5 +1,5 @@
 /* libfield: coordinate conversion, map-grid lookups, reserved place cells and pathfinding exceptions. */
-#include "../swap.h"
+#include "../common/swap.h"
 #include "field_data.h"
 #include "field_functions.h"
 

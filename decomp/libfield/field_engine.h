@@ -1,7 +1,7 @@
-/* libfield: the calls into the engine (ehsys) that the field module makes besides the ones in ../ehsys.h. Names are by what the call does (from how it is
+/* libfield: the calls into the engine (ehsys) that the field module makes besides the ones in ../common/ehsys.h. Names are by what the call does (from how it is
  * used); "(guess)" marks the ones that are inferred. Floats are passed in the PSP's float registers: the first in f12, the next in f13 ...; results come in f0. */
 #pragma once
-#include "../ehsys.h"
+#include "../common/ehsys.h"
 #include "field_data.h"
 
 namespace field {

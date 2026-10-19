@@ -2,7 +2,7 @@
  * image loads at 0x091C4600 (one fixed base); its data (globals, tables, the .bss) has fixed addresses, listed here as absolute guest addresses. The
  * story (libstory) drives it by "handler" number (`Invoke`, `HandlerDone`) and calls `Start`, `FrameUpdate` and `FrameDraw` every frame. */
 #pragma once
-#include "../swap.h"
+#include "../common/swap.h"
 #include <stdint.h>
 
 namespace field {

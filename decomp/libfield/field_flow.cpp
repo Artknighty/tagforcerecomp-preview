@@ -1,8 +1,8 @@
 /* libfield: the flow of the map: a state machine (`UpdateFlow`) that follows what the player does: walking, talking to the character they stand next to,
  * the card shop sign, the place menu... Each step starts a screen or waits for one to finish, and a finished screen leaves its answer in `flow.answer`
  * before step 0x17 hands it to the story. */
-#include "../swap.h"
-#include "../ehsys.h"
+#include "../common/swap.h"
+#include "../common/ehsys.h"
 #include "field_data.h"
 #include "field_engine.h"
 #include "field_functions.h"

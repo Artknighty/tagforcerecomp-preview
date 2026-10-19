@@ -2,7 +2,7 @@
  * which event they are in), the field (the map) and the places' scripts, and it loads the modules of each place (field, shop, deck...). The module image
  * loads at 0x08EFCA00 (the same base as libtitle, at other times); its data has fixed addresses, listed here as absolute guest addresses. */
 #pragma once
-#include "../swap.h"
+#include "../common/swap.h"
 #include <stdint.h>
 
 namespace story {

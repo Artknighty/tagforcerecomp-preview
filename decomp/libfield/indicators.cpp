@@ -1,6 +1,6 @@
 /* libfield: the three indicators (markers that fade in next to a place, blink at random times, and fade out). */
-#include "../swap.h"
-#include "../ehsys.h"
+#include "../common/swap.h"
+#include "../common/ehsys.h"
 #include "field_data.h"
 #include "field_functions.h"
 #include <stddef.h>

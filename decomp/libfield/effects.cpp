@@ -1,6 +1,6 @@
 /* libfield: the effects layer (the list of effects over the map, each drawn by its own callback) and the matrix an object is drawn with. */
-#include "../swap.h"
-#include "../ehsys.h"
+#include "../common/swap.h"
+#include "../common/ehsys.h"
 #include "field_data.h"
 #include "field_engine.h"
 #include "field_functions.h"

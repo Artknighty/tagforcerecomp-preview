@@ -1,8 +1,8 @@
 /* libstory: the 150 characters of the story. Each one has a state in the save data (CharacterState) and a set of script tables (CharacterScript). Every
  * step of the story reloads the state of each character from the schedule record of the current tick (`LoadCharacterState`), works out which event
  * values apply (`FindEventValues`) and which picture to show (`FindImageEvent`), and prepares the names the screens print. */
-#include "../swap.h"
-#include "../ehsys.h"
+#include "../common/swap.h"
+#include "../common/ehsys.h"
 #include "story_data.h"
 
 #define MODULE "libstory"

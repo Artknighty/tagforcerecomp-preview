@@ -1,8 +1,8 @@
 /* libstory: the flow of the story's map. The story is a state machine (`Step`, run every frame); the steps that matter here put the map up: the clock
  * and the calendar fields for the field module (`FieldSetup`), the list of places the player can walk to (`PlaceMenu`), and the choice of a place
  * (`StartPlaceChoice`, `PlaceChosen`). The field module draws all of these; they are "handlers" it runs when the story invokes them by number. */
-#include "../swap.h"
-#include "../ehsys.h"
+#include "../common/swap.h"
+#include "../common/ehsys.h"
 #include "story_data.h"
 #include "story_functions.h"
 #include <string.h>

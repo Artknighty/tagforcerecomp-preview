@@ -1,6 +1,6 @@
 /* libstory: the story calendar. The date record (Date, in the save data) is stored as a count of 15-minute steps; these functions turn it into the month,
  * day, hour, weekday and the days left until the tournament, and answer "is today between these dates". */
-#include "../swap.h"
+#include "../common/swap.h"
 #include "story_data.h"
 
 #define MODULE "libstory"

@@ -1,7 +1,7 @@
 /* ehsys window drawing (BOOT): how a window's frame, body text and title reach the display list. */
-#include "../swap.h"
-#include "../ehsys.h"
-#include "../pc_style.h"
+#include "../common/swap.h"
+#include "../common/ehsys.h"
+#include "../common/pc_style.h"
 #include "boot.h"
 #include "gfx_options.h"   /* runtime/: gfx_modern_menus() */
 #include "window.h"

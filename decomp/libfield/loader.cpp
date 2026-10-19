@@ -1,7 +1,7 @@
 /* libfield: the file loader of the field: a queue of jobs (read a file of the resource table into the module's heap, then call back), the table of the nine
  * resource files and small lookups the map uses (the player's progress stage, the kind of ground under the player). */
-#include "../swap.h"
-#include "../ehsys.h"
+#include "../common/swap.h"
+#include "../common/ehsys.h"
 #include "field_data.h"
 #include "field_engine.h"
 #include "field_functions.h"

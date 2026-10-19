@@ -1,8 +1,8 @@
 /* libfield: the place menu (the "world map"): fourteen places on a map of the island; the cursor moves from place to place with the pad (or the stick,
  * picking the nearest place in that direction), the confirm button chooses, a popup lists the shops of the main street. The story asks for it with
  * a handler (`StartWorldMap`) and gets the answer from `WorldMapPoll`. */
-#include "../swap.h"
-#include "../ehsys.h"
+#include "../common/swap.h"
+#include "../common/ehsys.h"
 #include "../boot/window.h"
 #include "field_data.h"
 #include "field_engine.h"

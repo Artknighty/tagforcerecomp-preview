@@ -7,8 +7,8 @@ Fontes (tudo lido do jogo instalado em gen/jogo, nada disso vai para o git):
   - gen/decks_db/decks.json (tools/game/decks_extrair.py): nomes e conteudo dos decks.
 Saidas:
   gen/decks_db/MAPA_DECKS.md, mapa_decks.json   leitura humana / consulta (dados do jogo: fora do git)
-  decomp/duelist_ids.inc                         so ids e mascaras (sem nomes de decks): incluido por decomp/duelists.h
-Confere tambem as regras de decomp/duelists.h (bloco de 6 por personagem, 1 deck por personagem a partir do 41, ...) contra os scripts e
+  decomp/common/duelist_ids.inc                         so ids e mascaras (sem nomes de decks): incluido por decomp/common/duelists.h
+Confere tambem as regras de decomp/common/duelists.h (bloco de 6 por personagem, 1 deck por personagem a partir do 41, ...) contra os scripts e
 imprime as excecoes."""
 import sys, os, struct, json, re, collections
 RAIZ = os.path.dirname(os.path.dirname(os.path.dirname(os.path.abspath(__file__))))
@@ -94,7 +94,7 @@ def scripts():
 
 
 def regra_dono(deck):
-    """a regra de decomp/duelists.h: (personagem, nivel) ou (0, 0)"""
+    """a regra de decomp/common/duelists.h: (personagem, nivel) ou (0, 0)"""
     if 1 <= deck <= 228:
         return 2 + (deck - 1) // 6, (deck - 1) % 6 + 1
     if 240 <= deck <= 341:
@@ -162,11 +162,11 @@ def main():
     for a, b in faixas:
         inc.append('    X(%d, %d) \\' % (a, b))
     inc[-1] = inc[-1].rstrip(' \\')
-    open(os.path.join(RAIZ, 'decomp', 'duelist_ids.inc'), 'w', encoding='utf-8', newline='\n').write('\n'.join(inc) + '\n')
+    open(os.path.join(RAIZ, 'decomp', 'common', 'duelist_ids.inc'), 'w', encoding='utf-8', newline='\n').write('\n'.join(inc) + '\n')
 
     # ---- mapa humano ----
     md = ['# Mapa dos 351 decks (RCP000..RCP350)', '',
-          'Gerado por tools/game/decks_mapa.py. Dados do jogo: fora do git. Regras de decomp/duelists.h.', '',
+          'Gerado por tools/game/decks_mapa.py. Dados do jogo: fora do git. Regras de decomp/common/duelists.h.', '',
           'Legenda do papel: **escada** = bloco de 6 decks do personagem (nivel 1..6); **unico** = 1 deck do personagem; **enchimento** = mesmo conteudo do RCP051 '
           '(deck-reserva de Magos que o jogo repete onde nao ha deck de verdade); **especial** = fora das regras.', '']
     mapa = {}
@@ -208,7 +208,7 @@ def main():
     open(os.path.join(RAIZ, 'gen', 'decks_db', 'MAPA_DECKS.md'), 'w', encoding='utf-8').write('\n'.join(md) + '\n')
     cont = collections.Counter(m['papel'] for m in mapa.values())
     print('papeis:', dict(cont))
-    print('escrito: decomp/duelist_ids.inc, gen/decks_db/MAPA_DECKS.md, gen/decks_db/mapa_decks.json')
+    print('escrito: decomp/common/duelist_ids.inc, gen/decks_db/MAPA_DECKS.md, gen/decks_db/mapa_decks.json')
 
 
 main()

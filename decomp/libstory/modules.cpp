@@ -1,7 +1,7 @@
 /* libstory: loading and unloading the modules of the places (the field, the shop, the deck editor...) and the sound scenes that go with them. The story runs
  * one place module at a time; `SwitchModule` unloads the one that is loaded and starts the one asked for. */
-#include "../swap.h"
-#include "../ehsys.h"
+#include "../common/swap.h"
+#include "../common/ehsys.h"
 #include "story_data.h"
 #include "story_functions.h"
 

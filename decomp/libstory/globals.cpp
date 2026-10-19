@@ -1,6 +1,6 @@
 /* libstory: small functions over the module's globals: the player block, the registers, the story flags, the three heaps. */
-#include "../swap.h"
-#include "../ehsys.h"
+#include "../common/swap.h"
+#include "../common/ehsys.h"
 #include "story_data.h"
 
 #define MODULE "libstory"

@@ -1,10 +1,10 @@
 /* Shared declarations of the libtitle swaps (the title flow, its menus and screens): the module base, the table of game functions, the game state and
  * the helpers more than one file uses. Each swaps file in this folder replaces generated game functions with readable C++ (docs/DECOMP.md). */
 #pragma once
-#include "../swap.h"
-#include "../pc_style.h"
-#include "../ehsys.h"
-#include "../duelists.h"   /* character ids and deck ids (who a duelist is vs which deck file he uses) */
+#include "../common/swap.h"
+#include "../common/pc_style.h"
+#include "../common/ehsys.h"
+#include "../common/duelists.h"   /* character ids and deck ids (who a duelist is vs which deck file he uses) */
 #include "title_state.h"
 #include <string.h>
 #include <algorithm>

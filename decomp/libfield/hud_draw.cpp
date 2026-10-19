@@ -1,7 +1,7 @@
 /* libfield: drawing of the HUD: sprites from the tables of the module's data, numbers made of digit sprites, the analogue clock. Every function takes the
  * display list cursor and returns the cursor after what it drew. */
-#include "../swap.h"
-#include "../ehsys.h"
+#include "../common/swap.h"
+#include "../common/ehsys.h"
 #include "field_data.h"
 #include "field_engine.h"
 #include "field_functions.h"

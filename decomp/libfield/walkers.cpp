@@ -1,6 +1,6 @@
 /* libfield: the walkers: people who wander on the map around their home cell, one step at a time, and the fixed characters (spots). */
-#include "../swap.h"
-#include "../ehsys.h"
+#include "../common/swap.h"
+#include "../common/ehsys.h"
 #include "field_data.h"
 #include "field_engine.h"
 #include "field_functions.h"

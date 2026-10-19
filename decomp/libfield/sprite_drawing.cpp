@@ -1,6 +1,6 @@
 /* libfield: the field module's two small textured-quad helpers. */
-#include "../swap.h"
-#include "../ehsys.h"
+#include "../common/swap.h"
+#include "../common/ehsys.h"
 #include "field_data.h"
 #include "field_functions.h"
 

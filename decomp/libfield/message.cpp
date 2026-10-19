@@ -1,7 +1,7 @@
 /* libfield: the message box: a window at the bottom of the screen that types a text out line by line and waits for the confirm button to go on. It
  * slides in from below, shows up to two lines (three on the other layouts) and, when asked to, the "more" arrow. */
-#include "../swap.h"
-#include "../ehsys.h"
+#include "../common/swap.h"
+#include "../common/ehsys.h"
 #include "../boot/window.h"
 #include "field_data.h"
 #include "field_engine.h"

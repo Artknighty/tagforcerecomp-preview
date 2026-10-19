@@ -2,8 +2,8 @@
  * tables of every part of the story (the characters, the mail, the lessons, the morning routine, the items, the cards, the field...), and then one small
  * function per part that stores the guest addresses of its save-data block and of its script tables in the module's data. The parts only differ by
  * their addresses, so the functions here are written once, over addresses. */
-#include "../swap.h"
-#include "../ehsys.h"
+#include "../common/swap.h"
+#include "../common/ehsys.h"
 #include "story_data.h"
 #include <utility>
 

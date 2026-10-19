@@ -1,6 +1,6 @@
 /* libfield: the field's state record, the player's progress stage, the ground under the player and the beacons. */
-#include "../swap.h"
-#include "../ehsys.h"
+#include "../common/swap.h"
+#include "../common/ehsys.h"
 #include "field_data.h"
 #include "field_engine.h"
 #include "field_functions.h"

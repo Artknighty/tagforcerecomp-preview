@@ -1,6 +1,6 @@
 /* libfield: drawing of the place menu: the island map, the marks of each place, the arrows, the cursor and the picture of the chosen place. */
-#include "../swap.h"
-#include "../ehsys.h"
+#include "../common/swap.h"
+#include "../common/ehsys.h"
 #include "../boot/window.h"
 #include "field_data.h"
 #include "field_engine.h"

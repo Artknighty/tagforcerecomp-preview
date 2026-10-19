@@ -1,8 +1,8 @@
 /* libfield: the HUD of the map: the calendar with the date and weekday, the analogue clock, the "days left" and the three counters. Its parts slide in
  * from the edge of the screen (a `Slide`: state, position, and a fraction t that grows by t * 0.1 + 0.1 each frame) and are drawn from sprite tables
  * in the module's data. */
-#include "../swap.h"
-#include "../ehsys.h"
+#include "../common/swap.h"
+#include "../common/ehsys.h"
 #include "field_data.h"
 #include "field_engine.h"
 #include "field_functions.h"

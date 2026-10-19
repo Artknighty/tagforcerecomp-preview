@@ -1,6 +1,6 @@
 /* libduel_eng: queries over cards occupying the duel field. */
-#include "../swap.h"
-#include "../ehsys.h"
+#include "../common/swap.h"
+#include "../common/ehsys.h"
 #include "duel_data.h"
 
 #define MODULE "libduel_eng"

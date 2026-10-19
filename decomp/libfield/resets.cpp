@@ -1,5 +1,5 @@
 /* libfield: the functions that only clear a block of the module's data when the field starts. Each block belongs to one part of the field screen. */
-#include "../swap.h"
+#include "../common/swap.h"
 #include "field_data.h"
 #include "field_functions.h"
 #include <string.h>

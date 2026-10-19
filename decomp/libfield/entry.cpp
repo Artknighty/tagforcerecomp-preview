@@ -1,7 +1,7 @@
 /* libfield: the module's entry points. The story starts the field (`Start`), then every frame runs `FrameUpdate` and `FrameDraw`, and drives the field
  * through numbered handlers: `Invoke` starts one with an argument block, `HandlerDone` asks whether it has finished. */
-#include "../swap.h"
-#include "../ehsys.h"
+#include "../common/swap.h"
+#include "../common/ehsys.h"
 #include "field_data.h"
 #include "field_engine.h"
 #include "field_functions.h"

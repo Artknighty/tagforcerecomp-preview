@@ -1,7 +1,7 @@
 /* libduel_draw: the duel's presentation (the field, cards, effects, HUD). This module reads the rules engine's state (libduel_eng) and the
  * duel's scene data; it owns almost no rules. Typed names for what the swaps in this directory touch. */
 #pragma once
-#include "../swap.h"
+#include "../common/swap.h"
 #include <stdint.h>
 
 namespace duel_draw {

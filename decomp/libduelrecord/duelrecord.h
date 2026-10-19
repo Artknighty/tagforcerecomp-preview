@@ -1,7 +1,7 @@
 /* libduelrecord: the Duel Ranking screen. The game keeps its state in the module's data (guest memory), so this class is a typed view
  * over it plus the screen's behaviour; each method names the original function it replaces. */
 #pragma once
-#include "../swap.h"
+#include "../common/swap.h"
 #include "ranking_state.h"
 
 class DuelRecord {

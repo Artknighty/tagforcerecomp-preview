@@ -27,7 +27,7 @@
  *        +0x8FF4 + pack*0x2A:      pack (byte0 shop value, byte1 bits 0-1 state: 0 locked, 1 seen, 2 available), packs 0..47
  *   BOOT 08833fc4 ehsys_end_of_frame (every logical frame): panel, L + R + UP/DOWN and the pending unlock. */
 #include "tfmod.h"
-#include "../../decomp/duelists.h"
+#include "../../decomp/common/duelists.h"
 #include <windows.h>
 #include <algorithm>
 #include <map>

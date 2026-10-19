@@ -1,7 +1,7 @@
 /* libfield: the DP counter: the player's Duel Points shown on the map. When the DP change, the counter slides in, a number flies up from it (the change,
  * red when negative) and the shown value counts up or down to the new one, its last digits flickering. */
-#include "../swap.h"
-#include "../ehsys.h"
+#include "../common/swap.h"
+#include "../common/ehsys.h"
 #include "field_data.h"
 #include "field_engine.h"
 #include "field_functions.h"

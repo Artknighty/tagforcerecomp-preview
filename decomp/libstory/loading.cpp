@@ -1,7 +1,7 @@
 /* libstory: reading the story's data files. The places' tables live in two archives, the "brain" archive of the story and one with the language's texts;
  * both are read into the first story heap, and their entries (named like "<prefix><number><suffix>.bin") are looked up by name. */
-#include "../swap.h"
-#include "../ehsys.h"
+#include "../common/swap.h"
+#include "../common/ehsys.h"
 #include "story_data.h"
 #include "story_functions.h"
 #include <stdio.h>

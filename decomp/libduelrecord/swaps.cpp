@@ -1,7 +1,7 @@
 /* Glue between the PSP calling convention and the native functions of libduelrecord. */
-#include "../swap.h"
+#include "../common/swap.h"
 #include "records.h"
-#include "../ehsys.h"
+#include "../common/ehsys.h"
 #include <stddef.h>
 
 #define MODULE "libduelrecord_08eeb400"

@@ -4,7 +4,7 @@
 #pragma once
 #include <stdint.h>
 #include <stddef.h>
-#include "../swap.h"
+#include "../common/swap.h"
 
 namespace boot {
 

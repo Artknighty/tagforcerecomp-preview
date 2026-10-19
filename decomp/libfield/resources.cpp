@@ -1,6 +1,6 @@
 /* libfield: its heap, the field UI's cached sprites, and sounds that wait for resources to load. */
-#include "../swap.h"
-#include "../ehsys.h"
+#include "../common/swap.h"
+#include "../common/ehsys.h"
 #include "field_data.h"
 
 #define MODULE "libfield"

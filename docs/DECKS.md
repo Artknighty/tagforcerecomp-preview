@@ -31,7 +31,7 @@ the in-game progression, **not** a strength order.
 
 ### Deck map (who owns each of the 351 decks)
 
-Solved from the story's own data and written as code in `decomp/duelists.h` (`CharacterId`, `OwnerOfDeck`, `LadderDeck`, `SingleDeck`, `IsPlaceholder`).
+Solved from the story's own data and written as code in `decomp/common/duelists.h` (`CharacterId`, `OwnerOfDeck`, `LadderDeck`, `SingleDeck`, `IsPlaceholder`).
 The story gives a character his decks in `ScrNNNDeck.bin` (NNN = character id − 1) inside `script/st01_t01_brain.ehp` (first year) and
 `st02_t01_brain.ehp` (second year); the last `u16` of each 16-byte record is the deck id (the first four are a month/day range, 0 = none).
 The first year uses levels 1 and 2 plus the June duel (level 6); the second year uses levels 3, 4 and 5. Character names are in `BOOT.BIN`
@@ -49,7 +49,7 @@ Exceptions the scripts do on purpose: Nightshroud (40) duels with Atticus's leve
 rule), and the characters who do not really duel (Doctor, Researchers, many fillers) get RCP235, a placeholder. Many ladders use only some levels
 (`LadderUsedMask`); the main cast and Crowler use all six.
 
-`python tools/game/decks_mapa.py` rebuilds `decomp/duelist_ids.inc` (ids and masks only, no game text) and writes `gen/decks_db/MAPA_DECKS.md` /
+`python tools/game/decks_mapa.py` rebuilds `decomp/common/duelist_ids.inc` (ids and masks only, no game text) and writes `gen/decks_db/MAPA_DECKS.md` /
 `mapa_decks.json` (the readable map with deck names, archetype and the story phase of each deck; game data, outside Git). It also prints every
 deck whose script owner differs from the rule, so a different game version shows up at once.
 

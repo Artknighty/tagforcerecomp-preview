@@ -1,6 +1,6 @@
 #include "duelrecord.h"
 #include "records.h"
-#include "../ehsys.h"
+#include "../common/ehsys.h"
 #include <string.h>
 #include <stdio.h>
 

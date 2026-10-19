@@ -112,14 +112,17 @@ More detail in [`docs/ARCHITECTURE.md`](docs/ARCHITECTURE.md).
 
 ## Repository layout
 
+Full map with every subfolder: [`docs/STRUCTURE.md`](docs/STRUCTURE.md).
+
 | Folder | Contents |
 |---|---|
-| `tools/` | generator (Allegrex → C), build, test, AI-training and deck tools |
+| `tools/` | build, test and analysis scripts, plus the translator (Allegrex → C) in `tools/translator/` |
 | `runtime/` | C++ runtime: HLE kernel, GE, GPU backends, audio, video, window, mods |
 | `decomp/` | hand-written readable C++ replacing translated game functions one by one: title, story mode, map, duel result screen and more (see [`docs/DECOMP.md`](docs/DECOMP.md)) |
 | `mods_sdk/` | plugin API (`tfmod.h`) |
 | `mods_src/` | sources of behavior mods |
-| `docs/` | documentation ([preview status](docs/PREVIEW.md), [mods](docs/MODS.md), [AI](docs/AI.md), [decks](docs/DECKS.md), [testing](docs/TESTING.md), [architecture](docs/ARCHITECTURE.md), [game versions](docs/VERSIONS.md)) |
+| `assets/` | branding images and the icon generator |
+| `docs/` | documentation ([preview status](docs/PREVIEW.md), [mods](docs/MODS.md), [AI](docs/AI.md), [decks](docs/DECKS.md), [testing](docs/TESTING.md), [architecture](docs/ARCHITECTURE.md), [repository layout](docs/STRUCTURE.md), [game versions](docs/VERSIONS.md)) |
 | `gen/` | everything that comes from your ISO (**not in Git**) |
 
 ## Contributing
