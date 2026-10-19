@@ -30,3 +30,4 @@ libduelrecord	08EEB400	USRDIR/gmodule/libduelrecord.prx	libduelrecord
 liblimitlist	08EEB400	USRDIR/gmodule/liblimitlist.prx	liblimitlist
 librecipe_viewer	08EEB400	USRDIR/gmodule/librecipe_viewer.prx	librecipe_viewer
 libtutoriallist	08EEB400	USRDIR/gmodule/libtutoriallist.prx	libtutoriallist
+libtutorial	09F7E200	USRDIR/gmodule/libtutorial.prx	libtutorial

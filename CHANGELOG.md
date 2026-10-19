@@ -2,6 +2,12 @@
 
 Format: [Keep a Changelog](https://keepachangelog.com/en/1.1.0/). Versioning: [SemVer](https://semver.org/).
 
+## [0.3.2] - 2026-10-18
+
+### Fixed
+- Fixed the public build crashing when starting Story mode from Part 1.
+- Fixed the public build crashing when entering the tutorial.
+
 ## [0.3.1] - 2026-10-18
 
 ### Added
