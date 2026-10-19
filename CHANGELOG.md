@@ -4,16 +4,16 @@ Format: [Keep a Changelog](https://keepachangelog.com/en/1.1.0/). Versioning: [S
 
 ## [0.3.1] - 2026-10-18
 
-### Adicionado
-- Logotipo de Yu-Gi-Oh! GX Tag Force como ícone do executável.
+### Added
+- Yu-Gi-Oh! GX Tag Force logo as the application icon.
 
-### Melhorado
-- Mais estabilidade no ritmo de 120 FPS durante a exploração do mapa.
-- Transições de áudio mais suaves em cenas pesadas.
+### Improved
+- More stable 120 FPS pacing while exploring the map.
+- Smoother audio transitions in demanding scenes.
 
-### Corrigido
-- Corrigido o fechamento logo ao iniciar a versão pública.
-- Corrigida a inicialização quando o pacote é extraído em um caminho com caracteres acentuados.
+### Fixed
+- Fixed the public build closing immediately on startup.
+- Fixed startup when the package is extracted to a path containing accented characters.
 
 ## [0.3.0] - 2026-10-18
 
