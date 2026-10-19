@@ -38,6 +38,11 @@ g++ -o "$EXE" $CPPOBJS gen/pkg/app_res.o -static -mwindows -ldwmapi -lgdi32 -lus
 if [ -z "$OUT" ]; then
   [ -d $PKG/tcc ] || python tools/package_release.py --no-build --version dev --out gen/pkg   # first time: tcc, tools/python, DLLs, mods, docs
   cp $PKG/TagForceRecomp.exe $PKG/TagForceRecomp_bg.exe 2>/dev/null || echo "note: TagForceRecomp_bg.exe is in use (a replay is running?): replays keep the previous build"
+  # the repo root is also a ready-to-run install (plug and play): exe plus the runtime pieces the release zip carries (all git-ignored)
+  for d in tcc include tools/python; do [ -d $PKG/$d ] && mkdir -p ./$d && cp -ru $PKG/$d/. ./$d/; done
+  cp -u $PKG/*.dll ./ 2>/dev/null
+  cp -u $PKG/tools/translator_version.txt ./tools/ 2>/dev/null
+  cp $PKG/TagForceRecomp.exe ./TagForceRecomp.exe 2>/dev/null || echo "note: ./TagForceRecomp.exe is in use; root copy not updated"
   # the game data (jogo/) and the translated code (gen/) are made once from your ISO: sh tools/install_dev.sh
 fi
 echo "built: $EXE"
