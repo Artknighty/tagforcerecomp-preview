@@ -41,6 +41,7 @@ if [ -z "$OUT" ]; then
   # the repo root is also a ready-to-run install (plug and play): exe plus the runtime pieces the release zip carries (all git-ignored)
   for d in tcc include tools/python; do [ -d $PKG/$d ] && mkdir -p ./$d && cp -ru $PKG/$d/. ./$d/; done
   cp -u $PKG/*.dll ./ 2>/dev/null
+  cp -u assets/branding/yugioh.png ./ 2>/dev/null   # title-screen thumbnail the launcher loads next to the exe
   cp -u $PKG/tools/translator_version.txt ./tools/ 2>/dev/null
   cp $PKG/TagForceRecomp.exe ./TagForceRecomp.exe 2>/dev/null || echo "note: ./TagForceRecomp.exe is in use; root copy not updated"
   # the game data (jogo/) and the translated code (gen/) are made once from your ISO: sh tools/install_dev.sh

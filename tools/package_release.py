@@ -76,8 +76,8 @@ def main():
              '-lole32', '-loleaut32', '-luuid', '-lwindowscodecs', '-lgdiplus'], env=env)
     elif not os.path.exists(exe):
         sys.exit('--no-build needs an exe; build once without it')
-    if os.path.isfile('yugioh.png'):
-        shutil.copy('yugioh.png', pkg)
+    if os.path.isfile('assets/branding/yugioh.png'):
+        shutil.copy('assets/branding/yugioh.png', pkg)
 
     # 2. slim LGPL-only FFmpeg (tools/build_ffmpeg_lite.sh builds it once into gen/ffmpeg_lite)
     if not glob.glob('gen/ffmpeg_lite/avcodec-*.dll'):

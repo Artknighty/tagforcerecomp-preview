@@ -34,11 +34,12 @@ texturas_despejo/
 /tools/exportar_publico.py
 /tools/githooks/
 /public_clone/
-/art/
+/assets/icon/
 /logs/
 /tagforce_recomp.ini
 /tagforce_vk_cache.bin
-/Char tagforce.png
+/assets/reference/
+/yugioh.png
 
 # Leftovers of a local package/run in the project root
 /START HERE.txt

@@ -28,7 +28,7 @@ Format: [Keep a Changelog](https://keepachangelog.com/en/1.1.0/). Versioning: [S
 - **Cheats** page in the launcher; "Unlock everything" also on the F2 key.
 - Window mode (windowed / fullscreen) in the launcher and in the Graphics menu.
 - Quick marks on the controller, no note box: L3 = graphics glitch, R3 = performance, Start+Select = audio (saves the last 8 s as a WAV).
-- Continuous monitor recording to hunt flicker (`jogar_gravando.bat`).
+- Continuous monitor recording to hunt flicker (`tools/jogar_gravando.bat`).
 
 ### Changed
 - Cheats, CPU vs CPU and Monsters on the Field no longer appear in the mod list (they have their own menu).
