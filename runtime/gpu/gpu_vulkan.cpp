@@ -13,7 +13,7 @@
 #include "gpu.h"
 #include "gfx.h"
 #include "util.h"
-#include "../gen/gpu_spv.h"
+#include "../../gen/gpu_spv.h"
 #include <stdio.h>
 #include <stdlib.h>
 #include <string.h>

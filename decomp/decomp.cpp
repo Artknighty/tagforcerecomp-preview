@@ -1,6 +1,6 @@
 #include "swap.h"
-#include "../runtime/hooks.h"
-#include "../runtime/gameid.h"
+#include "../runtime/mods/hooks.h"
+#include "../runtime/core/gameid.h"
 #include <map>
 #include <set>
 #include <string>

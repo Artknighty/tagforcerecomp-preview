@@ -1,4 +1,4 @@
-"""Prepara as capturas do modo de diagnostico grafico (runtime/capturas.inc) para analise.
+"""Prepara as capturas do modo de diagnostico grafico (runtime/gpu/capturas.inc) para analise.
 Uso: python tools/analysis/capturas_analisar.py [pasta_das_capturas | ultima] [--por-folha 12]
   - 'ultima' (padrao) = a pasta *_capturas mais recente em gen/logs (player sessions) ou gen/replay/**/logs (testes)
   - monta FOLHAS DE CONTATO (grade 4x3 de miniaturas legendadas com numero, etiqueta e tempo) em <pasta>/folhas/folha_NN.png: uma imagem mostra 12 quadros
@@ -113,7 +113,7 @@ def marcas_graf(pasta):
             q = int(quadro)
             caps = sorted(set(c for d in (0, 1, 10, 20) for c in glob.glob(os.path.join(base, '*_q%d_marca.png' % (q + d)))))
             out += ['Capturas (inteiras; a 2a e a 3a sao 10 e 20 quadros depois, para piscadas):'] + ['    ' + c for c in caps] + ['']
-            # caixa-preta: os ~1,5 s de quadros apresentados ANTES do F8 (runtime/capturas.inc), analisada por tools/analysis/seq_analisar.py
+            # caixa-preta: os ~1,5 s de quadros apresentados ANTES do F8 (runtime/gpu/capturas.inc), analisada por tools/analysis/seq_analisar.py
             # formato atual "(F8 #n, quadro N)"; o antigo "(F8, quadro N+1)" so trazia o quadro
             seqs = [int(m.group(1)) for l in L for m in [re.search(r'\[captura\] sequencia (\d+) \(F8(?: #(\d+))?, quadro (\d+)\)', l)]
                     if m and (int(m.group(2)) == n if m.group(2) else int(m.group(3)) in (q, q + 1))]

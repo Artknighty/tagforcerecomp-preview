@@ -9,7 +9,7 @@ own executable. Nothing of this is distributed; everything is produced on your m
 | European (default) | `ULES-00600` | `gen/` | `gen/jogo/` | `TagForceRecomp.exe` | `tools/translator/modules.tsv` |
 | American, and translations built on it (e.g. the PT-BR patch) | `ULUS-10136` | `gen/ULUS10136/` | `gen/jogo_ULUS10136/` | `gen/run_ULUS10136.exe` | `tools/translator/modules_ULUS10136.tsv` |
 
-The version is read from `UMD_DATA.BIN` on the disc (`tools/game/id_jogo.py`, `runtime/gameid.cpp`).
+The version is read from `UMD_DATA.BIN` on the disc (`tools/game/id_jogo.py`, `runtime/core/gameid.cpp`).
 
 ## Using another version
 
@@ -47,5 +47,5 @@ Tests: `TF_ISO=<ISO> sh tools/test/play.sh ...` (use `TF_FRESH_SAVE=1`; the Euro
 * The C++ decomp swaps (`decomp/`) name **European** function addresses: on other versions they are switched off at start-up
   (log line `[decomp] disabled: ...`), so those versions run the translated code only and miss the PC changes made there (the in-game
   Graphics screen, the title menu changes...).
-* `runtime/pc_text.cpp` replaces the English "Memory Stick" texts by PC texts; other languages keep the original text. Hiding the
+* `runtime/gpu/pc_text.cpp` replaces the English "Memory Stick" texts by PC texts; other languages keep the original text. Hiding the
   loading icon (`hle_ge.cpp`) is European-only too.

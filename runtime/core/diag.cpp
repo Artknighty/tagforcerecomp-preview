@@ -62,7 +62,7 @@ static DWORD WINAPI watchdog_thread(void *) {
     }
 }
 
-std::wstring diag_session_prefix(void) { return g_dir + g_session; }   /* <pasta dos logs>/<sessao> (capturas de diagnostico: runtime/capturas.inc) */
+std::wstring diag_session_prefix(void) { return g_dir + g_session; }   /* <pasta dos logs>/<sessao> (capturas de diagnostico: runtime/gpu/capturas.inc) */
 void diag_init(void) {
     SYSTEMTIME t; GetLocalTime(&t);
     wchar_t name[64]; swprintf(name, 64, L"sessao_%04u%02u%02u_%02u%02u%02u", t.wYear, t.wMonth, t.wDay, t.wHour, t.wMinute, t.wSecond);

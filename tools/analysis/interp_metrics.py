@@ -1,4 +1,4 @@
-"""Metricas do 60 FPS (quadro do meio, runtime/interp.cpp) sobre capturas de uma reproducao.
+"""Metricas do 60 FPS (quadro do meio, runtime/gpu/interp.cpp) sobre capturas de uma reproducao.
 
 Gere as capturas com o replay gravando TODOS os quadros reais e intermediarios do trecho, ex. (1x basta):
   L=$(python -c "print(','.join(map(str,range(1400,2131))))")

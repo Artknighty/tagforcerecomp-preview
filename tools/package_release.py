@@ -3,14 +3,14 @@
     python tools/package_release.py [--out gen/release] [--no-build] [--version 0.1-preview]
 
 The package contains NO game data and no game code. It holds:
-  TagForceRecomp.exe   the generic runtime (build with runtime/generic_index.cpp: no game modules linked in)
+  TagForceRecomp.exe   the generic runtime (build with runtime/core/generic_index.cpp: no game modules linked in)
   avcodec/avutil.dll   slim LGPL-only FFmpeg with just the ATRAC3/3+ and H.264 decoders (tools/build/build_ffmpeg_lite.sh)
   mods/                the behavior mods of mods_src/ (plugin.dll), switched on or off in the Mods menu
   tcc/ include/        TinyCC (LGPL) and the one runtime header the generated code includes
   tools/               the Allegrex -> C translator (tools/translator/, Python scripts) and the embedded Python that runs it
   gen/nids_hle.tsv     names of the system calls the runtime implements
 On first run the program installs the game files from the player's ISO and translates the game's code on the player's machine
-(runtime/prepare.cpp); the C code is then compiled in memory by TinyCC (runtime/jit.cpp).
+(runtime/core/prepare.cpp); the C code is then compiled in memory by TinyCC (runtime/core/jit.cpp).
 Needs (on the build machine only): MSYS2 UCRT64 (g++, windres, glslc, FFmpeg), Python 3. Downloads TinyCC and the embeddable Python
 once into <out>/cache."""
 import os, re, shutil, subprocess, sys, urllib.request, zipfile, glob
@@ -70,8 +70,8 @@ def main():
         icon = os.path.join(ROOT, 'runtime', 'app.ico').replace('\\', '/')
         open(rc, 'w').write('1 24 "%s"\n1 ICON "%s"\n' % (manifest, icon))
         res = os.path.join(out, 'app_res.o'); run(['windres', rc, '-O', 'coff', '-o', res], env=env)
-        srcs = ['runtime/%s.cpp' % n for n in RUNTIME] + ['decomp/decomp.cpp'] + sorted(f.replace(os.sep, '/') for d in DECOMP_DIRS for f in glob.glob(d + '/*.cpp'))
-        run(['g++', '-std=c++17', '-O2', '-DPSP_TRACE', '-DTF_GAME_ID="ULES-00600"', '-Wall', '-Wno-misleading-indentation', '-Iruntime', '-o', exe] + srcs + [res,
+        srcs = [glob.glob('runtime/*/%s.cpp' % n)[0].replace(os.sep, '/') for n in RUNTIME] + ['decomp/decomp.cpp'] + sorted(f.replace(os.sep, '/') for d in DECOMP_DIRS for f in glob.glob(d + '/*.cpp'))
+        run(['g++', '-std=c++17', '-O2', '-DPSP_TRACE', '-DTF_GAME_ID="ULES-00600"', '-Wall', '-Wno-misleading-indentation', '-Iruntime', '-Iruntime/core', '-Iruntime/hle', '-Iruntime/gpu', '-Iruntime/ui', '-Iruntime/audio', '-Iruntime/mods', '-o', exe] + srcs + [res,
              '-static', '-mwindows', '-ldwmapi', '-lgdi32', '-luser32', '-lcomdlg32', '-lshell32', '-lwinmm', '-lsynchronization', '-ld3d11', '-ldxgi', '-ld3dcompiler',
              '-lole32', '-loleaut32', '-luuid', '-lwindowscodecs', '-lgdiplus'], env=env)
     elif not os.path.exists(exe):
@@ -114,7 +114,7 @@ def main():
         p = os.path.join(pkg, 'tcc', n)
         if os.path.exists(p): os.remove(p)
     os.makedirs(os.path.join(pkg, 'include'), exist_ok=True)
-    shutil.copy('runtime/psp_rt.h', os.path.join(pkg, 'include', 'psp_rt.h'))
+    shutil.copy('runtime/core/psp_rt.h', os.path.join(pkg, 'include', 'psp_rt.h'))
 
     # 5. translator + embedded Python
     td = os.path.join(pkg, 'tools'); os.makedirs(td)

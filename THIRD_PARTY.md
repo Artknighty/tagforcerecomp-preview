@@ -12,7 +12,7 @@ This project's own code and documentation are under the [MIT license](LICENSE). 
 | Qwen2.5-0.5B-Instruct (Alibaba Cloud) | base model that the Better AI mod fine-tunes with LoRA; the fine-tuned weights are distributed with the mod package, not in this repository | Apache-2.0 |
 | [PPSSPP](https://www.ppsspp.org/) | **read-only reference** for hardware behavior and for the texture-pack format; **no code is copied** | GPL-2.0+ |
 | Microsoft Windows APIs, Direct3D 11, [Vulkan](https://www.vulkan.org/) | rendering and platform | platform / Khronos terms |
-| XXH64 (Yann Collet's public algorithm) | hash used by PPSSPP-format texture packs; **own implementation** in `runtime/xxh.h`, no xxHash code copied | — |
+| XXH64 (Yann Collet's public algorithm) | hash used by PPSSPP-format texture packs; **own implementation** in `runtime/core/xxh.h`, no xxHash code copied | — |
 | PPSSPP-format HD texture packs (MikeyMK, Filipe Ramos) | **not distributed here**; credited in the README | their authors' terms |
 
 ## Trademarks and game content

@@ -4,7 +4,7 @@
 /* ---- the name box (not in the original game) ----
  * The PSP typed the player's name on its own keyboard; the PC types it on the keyboard, inside the game: while the name stage (screen 8, arg0 2)
  * runs, the main menu's background, the name plate (with the letters typed so far and a blinking caret) and the message bar are drawn, and the
- * message bar says what to do. The keys come from runtime/text_input.cpp. Without these swaps the runtime opens a small window instead. */
+ * message bar says what to do. The keys come from runtime/ui/text_input.cpp. Without these swaps the runtime opens a small window instead. */
 struct NameBox {
     uint32_t message = 0;   /* guest buffer of the message bar's text; 0 = the bar is not set up */
 };

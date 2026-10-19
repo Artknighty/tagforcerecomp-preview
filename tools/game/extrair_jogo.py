@@ -1,4 +1,4 @@
-"""Instala os dados do jogo (versao em Python da instalacao do run.exe: o resultado e o MESMO formato de pasta, ver runtime/isofolder.cpp).
+"""Instala os dados do jogo (versao em Python da instalacao do run.exe: o resultado e o MESMO formato de pasta, ver runtime/core/isofolder.cpp).
 Serve para a primeira compilacao (o run.exe ainda nao existe) e para scripts. Uso: python tools/game/extrair_jogo.py <iso> [pasta]   (padrao: gen/jogo)
 Cria: arquivos soltos com os nomes originais, _setores.bin (setores fora de arquivos e nao-nulos) e, por ultimo, _disco.tsv (instalacao completa).
 Nada vai para o git (a pasta fica em gen/ ou jogo/, ambos ignorados)."""

@@ -1,5 +1,5 @@
 #!/usr/bin/env python3
-"""Acha PISCADAS numa gravacao continua de quadros apresentados (TF_SEQ_AUTO=<arquivo.bin>, ver runtime/capturas.inc).
+"""Acha PISCADAS numa gravacao continua de quadros apresentados (TF_SEQ_AUTO=<arquivo.bin>, ver runtime/gpu/capturas.inc).
 
 Uma piscada e um padrao A-B-A: o quadro antes e o quadro depois do bloco B (1 a MAXB saidas) sao quase iguais entre si, mas o bloco difere
 de ambos. Funciona para qualquer duracao e em qualquer ponto da sessao, o que a caixa-preta de 1,5 s do F8 nao cobre.

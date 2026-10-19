@@ -1,11 +1,11 @@
 /* Decomp swaps: hand-written C++ replacements for generated game functions (see docs/DECOMP.md).
- * A swap is installed as a hook on the function's entry (runtime/hooks.h), so the original body stays available for comparison.
+ * A swap is installed as a hook on the function's entry (runtime/mods/hooks.h), so the original body stays available for comparison.
  *   TF_DECOMP=off          no swaps (original generated code only)
  *   TF_DECOMP=a,b          only the named swaps
  *   (unset / "all")        every registered swap
  *   TF_DECOMP_VERIFY=1     for swaps that declare what they touch: run the original too and log any difference */
 #pragma once
-#include "../runtime/hle.h"
+#include "../runtime/hle/hle.h"
 #include <stdint.h>
 #include <utility>
 #include <vector>

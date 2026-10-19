@@ -62,7 +62,7 @@ HLE(sceUtilityMsgDialogGetStatus) { RET(g_msg.status); if (g_msg.status == 1) g_
 HLE(sceUtilityMsgDialogUpdate) { step(g_msg, nullptr); RET(0); }
 HLE(sceUtilityMsgDialogShutdownStart) { g_msg.status = 0; RET(0); }
 
-/* ---- OSK: em vez do teclado virtual do PSP, uma caixa de texto nativa (runtime/text_input.cpp) ----
+/* ---- OSK: em vez do teclado virtual do PSP, uma caixa de texto nativa (runtime/ui/text_input.cpp) ----
  * SceUtilityOskParams: base (0x30 bytes, result em +0x1c), +0x30 fieldCount, +0x34 fields.
  * SceUtilityOskData (campo): +0x1c desc, +0x20 intext, +0x24 outtextlength, +0x28 outtext, +0x2c result, +0x30 outtextlimit
  * (textos em UTF-16). result do campo: 0 = inalterado, 1 = cancelado, 2 = alterado.

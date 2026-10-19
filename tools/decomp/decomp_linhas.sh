@@ -4,7 +4,7 @@
 # Builds a separate, instrumented gen/run_cov.exe (gcc --coverage, -O0; the runtime objects come from gen/obj, so run tools/build_run.sh first), replays the
 # session with it, and writes gen/cov/out/<file>.cpp.gcov (a "#####" in the first column = never ran). Prints executed / not executed lines per file.
 # The exe is only a test tool: it is deleted at the end (gen/run_cov.exe, gen/cov), because the only build is gen/run.exe.
-# Windows quirk: the game quits with ExitProcess, which skips the atexit that writes the .gcda files, so runtime/display.cpp is compiled from a patched COPY
+# Windows quirk: the game quits with ExitProcess, which skips the atexit that writes the .gcda files, so runtime/ui/display.cpp is compiled from a patched COPY
 # (a call to __gcov_dump before ExitProcess); the real file is not touched.
 cd "$(dirname "$0")/../.." || exit 1
 export PATH=/c/msys64/ucrt64/bin:$PATH
@@ -16,13 +16,13 @@ PAT=""
 for d in "$@"; do
   for f in $d/*.cpp; do
     b=$(echo "${f%.cpp}" | tr '/' '_'); PAT="$PAT|$b"
-    g++ -std=c++17 -O0 -g --coverage -DPSP_TRACE '-DTF_GAME_ID="ULES-00600"' -Iruntime -c "$f" -o $C/$b.o &
+    g++ -std=c++17 -O0 -g --coverage -DPSP_TRACE '-DTF_GAME_ID="ULES-00600"' -Iruntime -Iruntime/core -Iruntime/hle -Iruntime/gpu -Iruntime/ui -Iruntime/audio -Iruntime/mods -c "$f" -o $C/$b.o &
   done
 done
 wait
-sed 's/diag_flush(); ExitProcess(0); }/diag_flush(); __gcov_dump(); ExitProcess(0); }/' runtime/display.cpp > runtime/display_cov_tmp.cpp
+sed 's/diag_flush(); ExitProcess(0); }/diag_flush(); __gcov_dump(); ExitProcess(0); }/' runtime/ui/display.cpp > runtime/display_cov_tmp.cpp
 sed -i '1i extern "C" void __gcov_dump(void);' runtime/display_cov_tmp.cpp
-g++ -std=c++17 -O1 -DPSP_TRACE '-DTF_GAME_ID="ULES-00600"' -Iruntime -c runtime/display_cov_tmp.cpp -o $C/zz_display.o; rm -f runtime/display_cov_tmp.cpp
+g++ -std=c++17 -O1 -DPSP_TRACE '-DTF_GAME_ID="ULES-00600"' -Iruntime -Iruntime/core -Iruntime/hle -Iruntime/gpu -Iruntime/ui -Iruntime/audio -Iruntime/mods -c runtime/display_cov_tmp.cpp -o $C/zz_display.o; rm -f runtime/display_cov_tmp.cpp
 OTHERS=$(ls gen/obj/*.o | grep -v -E "runtime_display\.o${PAT}")
 g++ -o gen/run_cov.exe $OTHERS $C/*.o gen/*.o --coverage -static -mwindows -ldwmapi -lgdi32 -luser32 -lcomdlg32 -lshell32 -lwinmm -lsynchronization -ld3d11 -ldxgi -ld3dcompiler -lole32 -loleaut32 -luuid -lwindowscodecs -lgdiplus || { echo "link failed"; exit 1; }
 RUN_EXE=gen/run_cov.exe TAG=_cov ENDF=$END sh tools/test/replay.sh "$S" > /dev/null 2>&1

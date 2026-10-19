@@ -695,7 +695,7 @@ void display_present(void) {
     else if (def_show) { pace_w2_sample(); pace_grid(false); }
     else if (pace_on) pace_grid(true);
     call_timed = pace_on;
-    if (ctl_frame(g_frames)) quit_process();   /* TF_CTL: o agente comanda o jogo quadro a quadro (runtime/ctl.cpp) */
+    if (ctl_frame(g_frames)) quit_process();   /* TF_CTL: o agente comanda o jogo quadro a quadro (runtime/core/ctl.cpp) */
     latch_buttons();
     if (!g_fb_addr) return;
     /* sem raster nativo o quadro nativo da VRAM esta invalido (e protegido): a deteccao da tela de carregamento usa a reducao da GPU */

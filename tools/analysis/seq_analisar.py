@@ -1,4 +1,4 @@
-"""Analisa a caixa-preta do F8 (quadros APRESENTADOS antes da marca: runtime/capturas.inc, pasta <sessao>_capturas/seq_<n>/).
+"""Analisa a caixa-preta do F8 (quadros APRESENTADOS antes da marca: runtime/gpu/capturas.inc, pasta <sessao>_capturas/seq_<n>/).
 
 Uso: python tools/analysis/seq_analisar.py [pasta seq_<n> | ultima]      (ultima = a seq mais recente de gen/logs)
 

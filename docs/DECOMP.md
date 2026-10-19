@@ -15,7 +15,7 @@ Goal: replace the generated Recomp code with readable hand-written C++, function
   - a list of choices is an enum or a named constant (`MainMenuItem`, `kItemDisabled`), not a number.
   - names say what the thing does for the player or the engine, not how it was found (`StartColourFade`, not `StartIterator`). A wrong name found later is renamed everywhere.
   - Where the code is not yet like this, `decomp/libtitle/README.md` lists it under "Readability debt".
-- A Swap is a runtime hook (`runtime/hooks.h`) that can be switched on and off, so the original and the new function can be compared in the same binary.
+- A Swap is a runtime hook (`runtime/mods/hooks.h`) that can be switched on and off, so the original and the new function can be compared in the same binary.
 
 ## Definition of done (per Module)
 

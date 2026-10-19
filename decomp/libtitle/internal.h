@@ -13,8 +13,8 @@
 #include "gfx_options.h"   /* runtime/: the graphics options as choices (for the Graphics screen) */
 #include "text_input.h"   /* runtime/: the player's name as typed on the PC keyboard (for the name box) */
 
-bool display_confirm(const wchar_t *text);   /* runtime/display.cpp: Yes/No box, the game waits while it is open */
-void display_quit(void);                     /* runtime/display.cpp: log, pending recordings, then ExitProcess */
+bool display_confirm(const wchar_t *text);   /* runtime/ui/display.cpp: Yes/No box, the game waits while it is open */
+void display_quit(void);                     /* runtime/ui/display.cpp: log, pending recordings, then ExitProcess */
 
 #define MODULE "libtitle"
 using namespace libtitle;
@@ -328,7 +328,7 @@ static_assert(sizeof(ProgressRecord) == 18, "ProgressRecord layout");
  * game (it only refreshed the list); here it opens the Graphics screen. Its label is drawn by DrawListLabel. */
 enum MainMenuItem : uint8_t { kStoryMode, kFreeDuel, kDeckMenu, kDatabase, kNetworkMode, kOptions, kGraphics, kLanguageSettings };
 
-/* The Graphics screen is not in the original game: an in-game version of the window's Graphics menu (runtime/gfx_options.h). It runs as the
+/* The Graphics screen is not in the original game: an in-game version of the window's Graphics menu (runtime/gpu/gfx_options.h). It runs as the
  * Options screen (17) with `active` set: same flow (fade in, input, fade out, back to the title list), another body. The main menu's Graphics
  * item sets `active`, its Options item clears it. Changes apply at once; confirm and cancel both leave the screen. */
 struct GraphicsScreen {

@@ -8,7 +8,7 @@
 #include "hotkeys.h"
 #include "util.h"
 #include "gameid.h"
-#include "../mods_sdk/tfmod.h"
+#include "../../mods_sdk/tfmod.h"
 #include <windows.h>
 #include <algorithm>
 #include <stdarg.h>

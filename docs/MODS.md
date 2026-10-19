@@ -54,7 +54,7 @@ Some sub-folders are **not** treated as ISO files: `textures/`, `movie/`, `llm/`
 - **Size** may differ from the original — the runtime fixes the size the game reads from directory records (tested with a larger
   `.ehp`). Packages with internal offset tables still have to be consistent (use `tools/game/ehp.py` to repack EHP files). The log warns
   when the size differs.
-- The PC-specific texts (the "Memory Stick" wording, see `runtime/pc_text.cpp`) are not applied to files coming from mods.
+- The PC-specific texts (the "Memory Stick" wording, see `runtime/gpu/pc_text.cpp`) are not applied to files coming from mods.
 
 ## Finding which file to replace
 
@@ -137,7 +137,7 @@ result, `r31` = return address) and returns `0` = continue with the original (th
 | `message_box(...)` | show a message box over the game (a line `"=N/M"` becomes a bar of M segments with N lit) |
 | `log(fmt, ...)` | write to the session log, tagged with the mod name |
 | `guest_alloc(n)` (v2) | reserve PSP memory for data the game will read (for example UTF-16 text shown by the game's own message window) |
-| `add_slider(title, unit, min, max, def, get, set)` (v3) | register an integer setting; the runtime adds a **Mods** menu item that opens a dark modal slider dialog (`runtime/slider_dialog.cpp`) |
+| `add_slider(title, unit, min, max, def, get, set)` (v3) | register an integer setting; the runtime adds a **Mods** menu item that opens a dark modal slider dialog (`runtime/ui/slider_dialog.cpp`) |
 | `add_toggle(title, vk, get, set)` (v4) | register an on/off setting: a checkable **Mods** menu item and, optionally, an in-game key (Windows virtual-key code, e.g. `VK_F6`). Keys that belong to the game are refused (the item stays menu-only): the window's F-keys (F3, F5, F7, F8, F9, F11, listed in Help > Controls), F10, Esc, Enter and the keyboard keys of the PSP buttons in both layouts (arrows, W A S D, Z X C E F R Q, Space, Backspace, Tab, Shift, Ctrl) |
 | `panel(corner, title, lines, n)` (v4) | information panel in a corner of the screen (0 top-left, 1 top-right, 2 bottom-left, 3 bottom-right); call it every frame it should stay visible; it never blocks the game. Plain text works; an optional markup (documented in `tfmod.h`) gives section headers with counters (`"#Hand\t5"`), colored card rows (`"@ed{M4}Drillago\t*4\tATK\|1600\tDEF\|1100"`: frame color, attribute dot, badge, table-aligned columns, level star) and a title icon/right text (`"@eOpponent\tLP 8000"`) |
 | `sprite(id, rgba, w, h, x, y, dw, dh, alpha)` (v5) | RGBA image over the game (GPU renderers only), in 480x272 PSP pixels; call every frame it should stay; redrawn on a thread (1-3 frames of latency). Example: `mods_src/MonstrosNoCampo` |

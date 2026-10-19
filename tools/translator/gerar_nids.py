@@ -11,7 +11,7 @@ def nid(nome):
 def main():
     raiz = os.path.dirname(os.path.dirname(os.path.dirname(os.path.abspath(__file__))))
     nomes = set()
-    for f in glob.glob(os.path.join(raiz, 'runtime', '*.cpp')):
+    for f in glob.glob(os.path.join(raiz, 'runtime', '**', '*.cpp'), recursive=True):
         for m in re.finditer(r'^HLE\((\w+)\)', open(f, encoding='utf-8', errors='replace').read(), re.M): nomes.add(m.group(1))
     # Also the imports the decomp calls by name (SwapCtx::callImport("sprintf", ...)). The runtime has no HLE for libc functions such as
     # sprintf/strlen, so without these names the packaged translator leaves them as nid_XXXXXXXX and callImport finds nothing (crash on the public build).

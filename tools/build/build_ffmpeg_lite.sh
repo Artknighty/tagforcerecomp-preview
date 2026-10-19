@@ -1,7 +1,7 @@
 #!/bin/sh
 # Builds the slim, LGPL-only FFmpeg that the release package ships: just libavcodec + libavutil with the three decoders the game needs
 # (ATRAC3, ATRAC3+, H.264). No GPL components (no x264/x265/Xvid), no demuxers, filters or encoders, so the two DLLs are ~1.7 MB instead of
-# the ~80 DLLs of a full FFmpeg build. The runtime loads them dynamically (runtime/ffmpeg_dec.cpp).
+# the ~80 DLLs of a full FFmpeg build. The runtime loads them dynamically (runtime/audio/ffmpeg_dec.cpp).
 # Source: the official FFmpeg release below (it must match the FFmpeg headers the runtime is compiled against: MSYS2 package
 # mingw-w64-ucrt-x86_64-ffmpeg, same version). Output: gen/ffmpeg_lite/{avcodec-NN.dll,avutil-NN.dll,libwinpthread-1.dll,FFMPEG-LGPL.txt}.
 # Needs (build machine only): MSYS2 UCRT64 with make, nasm, gcc.  Run it from an MSYS2 shell:

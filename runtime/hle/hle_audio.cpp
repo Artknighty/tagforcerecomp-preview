@@ -1,4 +1,4 @@
-/* HLE: audio (sceAudio, sceSasCore, sceAtrac3plus). Saida real via runtime/audio_out.cpp; SAS decodifica VAG (ADPCM) de
+/* HLE: audio (sceAudio, sceSasCore, sceAtrac3plus). Saida real via runtime/audio/audio_out.cpp; SAS decodifica VAG (ADPCM) de
  * verdade; ATRAC via FFmpeg (ffmpeg_dec.cpp; sem as DLLs, silencio com a temporizacao certa). */
 #include "hle.h"
 #include <stdio.h>

@@ -52,7 +52,7 @@ if __name__ == '__main__':
         # o _funcoes.tsv do Ghidra esta na base da 1a linha do modulo (a de bases.tsv); variantes precisam rebasear
         tsv_arg = ('%s@%08x' % (tsv, first_base[mod])) if os.path.exists(tsv) and os.environ.get('TF_USAR_GHIDRA') else '-'   # padrao: SEM o Ghidra (recomp.discover_starts; identico nos testes). TF_USAR_GHIDRA=1 usa a exportacao de gen/ferramentas_decomp
         subprocess.check_call([sys.executable, os.path.join(ROOT, 'tools', 'translator', 'recomp.py'), src_path(mod, iso), '%08x' % base, tsv_arg, out, n] + extra)
-    open(os.path.join(GEN, 'modulos.tsv'), 'w', newline='\n').write(''.join('%s\t%s\n' % (c, i) for c, n, b, i, e in rows()))   # lista para o JIT (runtime/jit.cpp)
+    open(os.path.join(GEN, 'modulos.tsv'), 'w', newline='\n').write(''.join('%s\t%s\n' % (c, i) for c, n, b, i, e in rows()))   # lista para o JIT (runtime/core/jit.cpp)
     idx.append('}')
     idx.append('extern "C" const GenModule g_gen_modules[] = {')
     idx += tab

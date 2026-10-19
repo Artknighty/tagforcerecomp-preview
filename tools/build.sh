@@ -13,7 +13,7 @@ echo '1 24 "runtime/app.manifest"' > gen/pkg/app.rc
 [ -f runtime/app.ico ] && echo '1 ICON "runtime/app.ico"' >> gen/pkg/app.rc
 windres gen/pkg/app.rc -O coff -o gen/pkg/app_res.o
 CPPSRCS=""
-for n in ctl main_run gameid host kernel iso isofolder install hle_misc hle_io hle_ge hle_audio modules vfpu hle_utility display hle_mpeg hle_font launcher text_input diag audio_out raster_pool ffmpeg_dec menu mouse_ui gfx imgio texrepl bc7 plugins modbox gpu interp pacing hdfont jit gpu_d3d11 gpu_vulkan pc_text mods util prepare dark_ui slider_dialog generic_index; do CPPSRCS="$CPPSRCS runtime/$n.cpp"; done
+for n in ctl main_run gameid host kernel iso isofolder install hle_misc hle_io hle_ge hle_audio modules vfpu hle_utility display hle_mpeg hle_font launcher text_input diag audio_out raster_pool ffmpeg_dec menu mouse_ui gfx imgio texrepl bc7 plugins modbox gpu interp pacing hdfont jit gpu_d3d11 gpu_vulkan pc_text mods util prepare dark_ui slider_dialog generic_index; do CPPSRCS="$CPPSRCS $(ls runtime/*/$n.cpp)"; done
 CPPSRCS="$CPPSRCS decomp/decomp.cpp"
 for d in libduelrecord libtitle libcharalist libstory libfield libduel_eng libduel_mgr libduel_draw boot; do for f in decomp/$d/*.cpp; do CPPSRCS="$CPPSRCS $f"; done; done
 # incremental: each .cpp becomes a .o in gen/pkg/obj (tools/build/cc_one.sh, in parallel); only what changed (source or a header listed in the .d) is rebuilt
