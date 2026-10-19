@@ -6,10 +6,10 @@ own executable. Nothing of this is distributed; everything is produced on your m
 
 | Version | Game ID | Generated code | Data folder | Executable | Module table |
 |---|---|---|---|---|---|
-| European (default) | `ULES-00600` | `gen/` | `gen/jogo/` | `TagForceRecomp.exe` | `tools/modules.tsv` |
-| American, and translations built on it (e.g. the PT-BR patch) | `ULUS-10136` | `gen/ULUS10136/` | `gen/jogo_ULUS10136/` | `gen/run_ULUS10136.exe` | `tools/modules_ULUS10136.tsv` |
+| European (default) | `ULES-00600` | `gen/` | `gen/jogo/` | `TagForceRecomp.exe` | `tools/translator/modules.tsv` |
+| American, and translations built on it (e.g. the PT-BR patch) | `ULUS-10136` | `gen/ULUS10136/` | `gen/jogo_ULUS10136/` | `gen/run_ULUS10136.exe` | `tools/translator/modules_ULUS10136.tsv` |
 
-The version is read from `UMD_DATA.BIN` on the disc (`tools/id_jogo.py`, `runtime/gameid.cpp`).
+The version is read from `UMD_DATA.BIN` on the disc (`tools/game/id_jogo.py`, `runtime/gameid.cpp`).
 
 ## Using another version
 
@@ -27,11 +27,11 @@ the one the running executable was built for, the right `run_<ID>.exe` is starte
 (the language field inside the save is version specific, so a save from another version is not loadable).
 
 There is one build for every version: the game version is whatever was installed from the ISO (`sh tools/build.sh`, then install the ISO of that version).
-Tests: `TF_ISO=<ISO> sh tools/play.sh ...` (use `TF_FRESH_SAVE=1`; the European save is not valid).
+Tests: `TF_ISO=<ISO> sh tools/test/play.sh ...` (use `TF_FRESH_SAVE=1`; the European save is not valid).
 
 ## Adding a new version
 
-1. Copy `tools/modules.tsv` to `tools/modules_<ID>.tsv` (ID without the dash, e.g. `ULUS10136`).
+1. Copy `tools/translator/modules.tsv` to `tools/modules_<ID>.tsv` (ID without the dash, e.g. `ULUS10136`).
 2. `sh tools/install_dev.sh <ISO>`. The first load of each module tells you if its base is wrong
    (`[modulo] ... nenhuma base recompilada livre` / `regiao ocupada` in the log).
 3. Check that the modules that are loaded together do not overlap: a module's recompiled code is placed at the base in the

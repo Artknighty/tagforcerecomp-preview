@@ -88,7 +88,7 @@ static void cfg_load(void) {
 /* ------------------------------------------------------------------ 1. see the opponent's cards */
 static const uint32_t JOG = 0x09f79cec, PASSO = 0xfac, CASAS = 0x09f79d1c;
 static const uint32_t F_NOME = 0x0884b46c, F_PROP = 0x0884b4f8;
-/* F_PROP: id -> endereco dos 8 bytes da carta em CARD_Prop (layout em tools/cartas.py): w0 bits 13-21 ATK/10 e 22-30 DEF/10 (0x1ff = "?");
+/* F_PROP: id -> endereco dos 8 bytes da carta em CARD_Prop (layout em tools/game/cartas.py): w0 bits 13-21 ATK/10 e 22-30 DEF/10 (0x1ff = "?");
  * w1 bits 0-3 categoria (0 normal, 1 efeito, 2/3 fusao, 4/5 ritual, 6-8 toon/espirito/uniao, 9 ficha, 13 magia, 14 armadilha),
  * 4-7 atributo (1 luz, 2 trevas, 3 agua, 4 fogo, 5 terra, 6 vento, 8 magia, 9 armadilha), 8-11 nivel, 12-14 icone de magia/armadilha */
 struct InfoCarta { std::wstring nome; int cat = 0, atrib = 0, nivel = 0, icone = 0, atk = -1, def = -1; };   /* atk/def -1 = "?" */

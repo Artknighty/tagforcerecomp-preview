@@ -22,7 +22,7 @@ A helper used by more than one file lives in [internal.h](internal.h) (declared 
 
 ## Status
 
-Every function of the module that the recorded sessions run is a Swap (192 of them): `tools/decomp_cobertura.sh <session> libtitle <last frame>` lists
+Every function of the module that the recorded sessions run is a Swap (192 of them): `tools/decomp/decomp_cobertura.sh <session> libtitle <last frame>` lists
 nothing left for sessions `100343 102706 133113 154411 161505 161708 163734`. The module has 1704 functions in total; the rest belong to screens
 no session has opened yet (they stay generated code until a session goes through them).
 
@@ -69,7 +69,7 @@ arguments `arg0..arg2`, each with a pending value. Screens are state machines on
 
 - Names say what a function does; `FUN_` addresses are in each comment (the per-version address table will replace them later).
 - Field widths come from the generated code (`LHU` / `LW` / `LBU`), never from Ghidra's pseudo-C; hidden arguments of ehsys calls come from
-  the registers set before the call (`tools/decomp_args.py`).
+  the registers set before the call (`tools/decomp/decomp_args.py`).
 - Registered Swaps that are only called from other Swaps (for example `DrawOptionRow`) are never reached through the hook any more: the C++ calls
   each other directly. They stay registered so that no generated copy of the function can run.
 
@@ -77,9 +77,9 @@ arguments `arg0..arg2`, each with a pending value. Screens are state machines on
 
 ```
 sh tools/build.sh
-sh tools/decomp_verify.sh <last frame> <session>      # TF_DECOMP_VERIFY: original and swap compared on every call
-SNAPSTEP=60 sh tools/decomp_compare.sh <last frame> <session>   # captures and log with swaps on vs off must be identical
-SNAPLIST=1900,2100 sh tools/decomp_compare.sh 2600 <session>    # exact frames (to look at one screen)
-TF_TEST_NETWORK_ENABLED=1 sh tools/decomp_compare.sh ...         # keep Network Mode selectable: the recorded sessions move the cursor over it, so with it greyed out their replay takes another path
+sh tools/decomp/decomp_verify.sh <last frame> <session>      # TF_DECOMP_VERIFY: original and swap compared on every call
+SNAPSTEP=60 sh tools/decomp/decomp_compare.sh <last frame> <session>   # captures and log with swaps on vs off must be identical
+SNAPLIST=1900,2100 sh tools/decomp/decomp_compare.sh 2600 <session>    # exact frames (to look at one screen)
+TF_TEST_NETWORK_ENABLED=1 sh tools/decomp/decomp_compare.sh ...         # keep Network Mode selectable: the recorded sessions move the cursor over it, so with it greyed out their replay takes another path
 # note: the main menu's 7th label (Graphics here, Save Data with swaps off) is the one expected difference: a 78 x 17 pixel box at (202, 210)
 ```

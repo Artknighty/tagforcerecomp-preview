@@ -6,7 +6,7 @@
  *   cena      = ~0,75 s depois de carregar um modulo do jogo (troca de tela: titulo, duelo, loja...)
  *   lento     = quadro que demorou mais de 250 ms (engasgo)
  * Pasta: <pasta dos logs>/<sessao>_capturas/ com indice.tsv (arquivo, quadro, ms desde o inicio, etiqueta, largura x altura). O anel guarda as ultimas TF_CAPTURAS_MAX (900)
- * capturas periodicas/cena/lento. tools/capturas_analisar.py monta folhas de contato e aponta quadros suspeitos. Nada disso vai para o git (sao imagens do jogo). */
+ * capturas periodicas/cena/lento. tools/analysis/capturas_analisar.py monta folhas de contato e aponta quadros suspeitos. Nada disso vai para o git (sao imagens do jogo). */
 #include "imgio.h"
 #include <atomic>
 #include <memory>
@@ -99,7 +99,7 @@ static void cap_salvar(const char *tag, const uint32_t *src, int w, int h) {   /
  * do quadro, a nota "[marca-...-nota] #n: texto" e, conforme o tipo, o despejo dos plugins (tfmod_marca: CPUvsCPU = tabuleiro, IAAprimorada =
  * decisoes) ou a caixa-preta + configuracao grafica + texturas desenhadas. Esc ou nota vazia DESCARTAM a marca: nada vai para o log nem para a pasta
  * de capturas (2026-10-08: a marca era gravada mesmo com Esc). Com o jogo parado, o que se grava depois da caixa e o mesmo de antes
- * (o anel da caixa-preta so anda quando um quadro e apresentado). Relatorios: tools/marcas_cpu.py e tools/capturas_analisar.py.
+ * (o anel da caixa-preta so anda quando um quadro e apresentado). Relatorios: tools/analysis/marcas_cpu.py e tools/analysis/capturas_analisar.py.
  * Testes: TF_MARCA_QUADRO / TF_MARCAG_QUADRO = quadros onde marcar (como F7 / F8), TF_MARCA_SEM_NOTA=1 = grava sem abrir a caixa,
  * TF_MARCA_NOTA_AUTO="texto" = grava com esse texto sem abrir a caixa (vazio = como Esc: descarta). */
 void display_notify(const char *msg);
@@ -151,7 +151,7 @@ static bool marca_nota_modal(bool graf, std::string *nota) {
  * nada vem para a RAM. Numa marca F8 confirmada o anel e lido UMA vez: sao os quadros ANTES do F8 (o que o jogador acabou de ver; a caixa de nota
  * pausa o jogo e nada e apresentado enquanto ela esta aberta) e vao para <sessao>_capturas/seq_<n>/NN_<R|M>_<ms>.png + indice.tsv, gravados numa
  * thread (o jogo nao espera). Nos replays,
- * TF_SEQ_FRAME=n grava o anel no quadro n (os ~90 quadros apresentados antes dele). tools/seq_analisar.py mede o movimento quadro a quadro e aponta
+ * TF_SEQ_FRAME=n grava o anel no quadro n (os ~90 quadros apresentados antes dele). tools/analysis/seq_analisar.py mede o movimento quadro a quadro e aponta
  * piscadas. (A versao anterior lia cada quadro inteiro na hora, 33 MB a 8x: o jogo ficava lento, o 60 FPS era suspenso no meio e a piscada do xadrez
  * do Duel Result escapou por isso.) */
 struct SeqMeta { char tag; bool susp; double ms; uint64_t frame; };
@@ -163,7 +163,7 @@ static int seq_ring_n(void) {
 }
 /* GRAVACAO CONTINUA (TF_SEQ_AUTO=<arquivo.bin>, para replays): TODO quadro apresentado (R e M) vira uma miniatura 160x90 RGB nesse arquivo (o anel de
  * 600 e esvaziado a cada 400 quadros; um engasgo curto nesses pontos, aparece como intervalo grande no ms). Formato: "TFSEQ1\n", w, h (int32), depois por
- * quadro: tag (char), susp (char), 2 bytes 0, ms (float), quadro do jogo (uint64), w*h*3 bytes. tools/piscadas_analisar.py procura quadros que destoam e voltam
+ * quadro: tag (char), susp (char), 2 bytes 0, ms (float), quadro do jogo (uint64), w*h*3 bytes. tools/analysis/piscadas_analisar.py procura quadros que destoam e voltam
  * (A-B-A) em qualquer duracao, o que uma janela de 1,5 s nunca pega numa sessao inteira. */
 static const char *seq_auto_path(void) { static const char *e = getenv("TF_SEQ_AUTO"); return e && *e ? e : nullptr; }
 static void seq_auto_flush(int n) {

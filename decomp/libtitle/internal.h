@@ -427,7 +427,7 @@ void closeNameBox(SwapCtx &x);
 /* The button sheet of the lists: 20x24 cells, six per row (MenuList::spriteCell and its siblings pick one) */
 constexpr int32_t kSheetColumns = 6, kCellWidth = 20, kCellHeight = 24;
 
-/* The PC style (EnhancedTextures, marker menu_estilo_pc.txt; tools/menu_estilo_pc.py draws it). The cells of the button sheet stay the game's:
+/* The PC style (EnhancedTextures, marker menu_estilo_pc.txt; tools/mods/menu_estilo_pc.py draws it). The cells of the button sheet stay the game's:
  * other screens (Options, ...) cut them in the game's own way. The slanted PC button lives in a free corner of the sheet as two neutral pieces,
  * 20x12 each (the 24-line button squeezed to half height; drawn stretched back): the fill (grey, darker downwards) and the border with its glow
  * (white). Each is tinted with a colour derived from the row's cell colour. Left cap = columns 0..8, column 9 stretched across the row, right

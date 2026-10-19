@@ -116,7 +116,7 @@ static void (*find_fn(uint32_t addr))(CPU *) {
 }
 
 /* ferramenta de pesquisa da decomp: TF_CALL_TRACE=lo-hi (hex) registra toda chamada a um endereco desse intervalo (os stubs de import de um modulo),
- * com os oito argumentos inteiros e f12..f17; sp mascarado nos scripts de comparacao (tools/decomp_calls.sh) */
+ * com os oito argumentos inteiros e f12..f17; sp mascarado nos scripts de comparacao (tools/decomp/decomp_calls.sh) */
 extern uint64_t display_frames(void);
 static void call_trace(CPU *c, uint32_t addr) {
     fprintf(stderr, "[call] %llu %08x(%08x %08x %08x %08x %08x %08x %08x %08x) f=%08x %08x %08x %08x %08x %08x\n", (unsigned long long)display_frames(), addr,

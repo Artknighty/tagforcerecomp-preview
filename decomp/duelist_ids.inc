@@ -1,4 +1,4 @@
-/* GERADO por tools/decks_mapa.py a partir dos scripts do jogo - nao editar. So ids e mascaras (nenhum nome de deck do jogo). */
+/* GERADO por tools/game/decks_mapa.py a partir dos scripts do jogo - nao editar. So ids e mascaras (nenhum nome de deck do jogo). */
 #define DUELIST_CHARACTER_IDS(X) \
     X(kJaden, 2) \
     X(kSyrus, 3) \

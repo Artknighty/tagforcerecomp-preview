@@ -31,7 +31,7 @@ texturas_despejo/
 /docs/ENV.md
 /docs/FERRAMENTAS.md
 /tools/check_docs.sh
-/tools/exportar_publico.py
+/tools/build/exportar_publico.py
 /tools/githooks/
 /public_clone/
 /assets/icon/

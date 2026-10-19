@@ -1,6 +1,6 @@
 /* Controle remoto do jogo (TF_CTL=<pasta>): o agente joga em ciclo fechado.
  * O runtime para no inicio de cada quadro e espera comandos em <pasta>/cmd.txt; responde em <pasta>/resp.txt.
- * Protocolo e cliente: tools/tf.py (docs em as notas do projeto, secao 4). */
+ * Protocolo e cliente: tools/test/tf.py (docs em as notas do projeto, secao 4). */
 #pragma once
 #include <stdint.h>
 extern volatile bool g_ctl_texdump_arm;   /* comando texdump: o proximo quadro despeja texturas e PRIMs (hle_ge.cpp) */

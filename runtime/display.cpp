@@ -403,7 +403,7 @@ static void frame_stats(void) {
     if (g_pn >= 600) perf_report(false);
 }
 /* Profiler por amostragem (PROFILE=arquivo): uma thread suspende a thread do jogo a cada ~1 ms e guarda o RIP; ao sair grava
- * "<rip hex> <contagem>" em <arquivo>. Resolva com tools/prof.py (nm/addr2line; o runtime e compilado com -g). */
+ * "<rip hex> <contagem>" em <arquivo>. Resolva com tools/analysis/prof.py (nm/addr2line; o runtime e compilado com -g). */
 #include <map>
 static HANDLE g_prof_thread; static std::map<uint64_t, uint32_t> g_prof; static volatile bool g_prof_run;
 static DWORD WINAPI prof_main(LPVOID) {

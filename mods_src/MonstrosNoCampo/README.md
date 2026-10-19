@@ -9,8 +9,8 @@ During duels, shows the art of your **face-up monsters** at a larger size, stand
 **Mods** menu (applies on restart). Then use **Mods → "Monsters on the field"** to switch it on and the slider to change the size.
 
 **Sprites.** Nothing from the game is in this repository. The sprites (`sprites/<card id>.rgba`) are generated on your machine by
-`tools/mod_monstros.py` from the card art of a texture pack you own (the pack is only read, never modified).
-`python tools/mod_monstros.py [texture_pack] [mod_folder] [card ids...]` builds the sprites (with no ids, those of the starting Water deck).
+`tools/mods/mod_monstros.py` from the card art of a texture pack you own (the pack is only read, never modified).
+`python tools/mods/mod_monstros.py [texture_pack] [mod_folder] [card ids...]` builds the sprites (with no ids, those of the starting Water deck).
 
 **How it works.** It reads the duel state (zones of the player's monster row), asks the runtime whether the game really drew a card
 quad at that position this frame (`quad_near`), and draws the sprite over it with `sprite`. When a cut-in or the result screen hides the

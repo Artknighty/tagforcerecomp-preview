@@ -559,10 +559,10 @@ static int hk_sonda_plano(TfCpu *c) {
     return 1;
 }
 
-/* ------------------------------------------------------------------ funcao de VALOR aprendida (tools/ia_valor): "quem esta ganhando" no lugar da avaliacao original do jogo */
+/* ------------------------------------------------------------------ funcao de VALOR aprendida (tools/ai/ia_valor): "quem esta ganhando" no lugar da avaliacao original do jogo */
 /* O jogo escolhe o monstro a invocar em ataque (09e762e0) comparando uma NOTA do tabuleiro hipotetico (09e75cc0 = dano total que o ataque causaria, dentro de 09e7604c) com a nota do
  * tabuleiro atual: so invoca se a nota sobe. Aqui a nota passa a ser a probabilidade de vencer prevista por uma MLP treinada com ~700 duelos da arena (AUC 0,84 em duelos novos),
- * *10000. Mesmos 35 numeros de entrada de tools/ia_valor/dataset.py (mantenha as duas versoes iguais). TF_IA_VALOR=1 liga; TF_IA_VALOR_LADO=0/1 so esse jogador (A/B). */
+ * *10000. Mesmos 35 numeros de entrada de tools/ai/ia_valor/dataset.py (mantenha as duas versoes iguais). TF_IA_VALOR=1 liga; TF_IA_VALOR_LADO=0/1 so esse jogador (A/B). */
 #include "valor_pesos.h"
 static bool g_valor; static int g_valor_lado = -1;
 static float valor_prever(const float *x) {

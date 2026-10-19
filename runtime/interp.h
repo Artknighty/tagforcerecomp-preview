@@ -18,7 +18,7 @@ void interp_reset(void);                                         /* apaga tudo (
 bool interp_present(int gfb, uint64_t vblank, bool allow, int res);
 /* o mesmo em duas etapas, para o intermediario chegar ao monitor na hora certa: interp_prepare desenha o intermediario na fracao t (0,5 no 60 FPS,
  * 0,25 no 120) e ja o envia a GPU; true = pronto, e interp_show o apresenta (na hora marcada pelo chamador). Antes ele so era desenhado na hora de
- * aparecer e chegava ~4,5 ms atrasado em 8x (ritmo 12/21 ms em vez de 16,7/16,7 no monitor, medido com tools/tela_gravar.cpp). */
+ * aparecer e chegava ~4,5 ms atrasado em 8x (ritmo 12/21 ms em vez de 16,7/16,7 no monitor, medido com tools/analysis/tela_gravar.cpp). */
 bool interp_prepare(int gfb, uint64_t vblank, bool allow, int res, float t);
 void interp_show(void);
 bool interp_mid_static(void);   /* o ultimo intermediario preparado e um par parado: interp_show apresenta a imagem real (nada foi enviado a GPU) */

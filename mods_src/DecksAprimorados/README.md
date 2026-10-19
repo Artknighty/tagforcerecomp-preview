@@ -12,6 +12,6 @@ extra: <fusion monster ids, up to 30>
 side: <up to 15>
 ```
 Any deck without a file keeps the original. The deck files are tuned in an arena of CPU-vs-CPU duels against the originals (see `docs/DECKS.md`). They are generated locally from **your own game data**
-by `tools/decks_final.py`; this repository does not include deck lists.
+by `tools/game/decks_final.py`; this repository does not include deck lists.
 
 `TF_DECKS_OFF=1` disables the mod (for comparing in the arena).

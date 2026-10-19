@@ -144,7 +144,7 @@ bool decisor_ativo(void) {
 }
 bool decisor_quer(void) { return true; }   /* sempre: o anel das ultimas decisoes (despejado na marca F7) precisa do texto da situacao */
 
-/* IMPORTANTE: este texto precisa ser identico ao de tools/ia_treino/prompt.py (o modelo e treinado com ele) */
+/* IMPORTANTE: este texto precisa ser identico ao de tools/ai/ia_treino/prompt.py (o modelo e treinado com ele) */
 static std::string montar_prompt(const char *tipo, const std::string &sit, const std::vector<Opcao> &op) {
     std::string p = std::string("Yu-Gi-Oh! duel. Choose the best option.\nDECISION: ") + tipo + "\n" + sit + "OPTIONS:\n";
     for (size_t i = 0; i < op.size(); i++) p += std::to_string(i) + ") " + op[i].texto + "\n";

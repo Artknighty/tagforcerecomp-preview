@@ -28,7 +28,7 @@ Format: [Keep a Changelog](https://keepachangelog.com/en/1.1.0/). Versioning: [S
 - **Cheats** page in the launcher; "Unlock everything" also on the F2 key.
 - Window mode (windowed / fullscreen) in the launcher and in the Graphics menu.
 - Quick marks on the controller, no note box: L3 = graphics glitch, R3 = performance, Start+Select = audio (saves the last 8 s as a WAV).
-- Continuous monitor recording to hunt flicker (`tools/jogar_gravando.bat`).
+- Continuous monitor recording to hunt flicker (`tools/test/jogar_gravando.bat`).
 
 ### Changed
 - Cheats, CPU vs CPU and Monsters on the Field no longer appear in the mod list (they have their own menu).
@@ -48,7 +48,7 @@ Format: [Keep a Changelog](https://keepachangelog.com/en/1.1.0/). Versioning: [S
 - Graphics option inside the game and in the launcher, with an Original/Enhanced texture switch (F5).
 - "Unlock everything" cheat: cards, packs and Free Duel duelists.
 - Single problem mark F8 (or F7 / L3+R3): records graphics and CPU state with one note.
-- `tools/tf.py`: plays the game by itself (buttons, captures, memory reads) for automated tests.
+- `tools/test/tf.py`: plays the game by itself (buttons, captures, memory reads) for automated tests.
 - Readable C++ decomp of the title, boot, story mode, map and duel result screen.
 - Map of the 351 decks by duelist.
 

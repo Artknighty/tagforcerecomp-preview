@@ -65,7 +65,7 @@ static void relocate_hilo(std::vector<uint32_t> &his, uint32_t *lo_word, uint32_
     his.clear(); *lo_word = (*lo_word & 0xffff0000u) | ((lo + delta) & 0xffff);
 }
 
-/* Importacoes de VARIAVEIS (sceVstub), igual a tools/imports.py:apply_var_imports. O codigo recompilado ja saiu com os
+/* Importacoes de VARIAVEIS (sceVstub), igual a tools/translator/imports.py:apply_var_imports. O codigo recompilado ja saiu com os
  * enderecos certos; aqui corrigimos a imagem em memoria (palavras de dados R_MIPS_32 e a copia do .text). */
 static void apply_var_imports(std::vector<uint8_t> &img, uint32_t base, uint32_t mi) {   /* mi = offset do sceModuleInfo */
     auto at = [&](uint32_t a) -> uint32_t * { return (a >= base && (uint64_t)(a - base) + 4 <= img.size()) ? (uint32_t *)&img[a - base] : nullptr; };
@@ -101,7 +101,7 @@ uint32_t module_load(const char *path_in, bool *ok) {
     size_t colon = p.find(':'); if (colon != std::string::npos) p = p.substr(colon + 1);
     while (!p.empty() && p[0] == '/') p.erase(0, 1);
     if (p.compare(0, 9, "psp_game/") == 0) p.erase(0, 9);
-    /* um modulo pode ter varias VARIANTES recompiladas em bases diferentes (linhas repetidas em tools/modules.tsv), porque
+    /* um modulo pode ter varias VARIANTES recompiladas em bases diferentes (linhas repetidas em tools/translator/modules.tsv), porque
      * o mesmo PRX e carregado em contextos com memoria diferente (ex.: junto do libtitle ou do libstory) */
     std::vector<const GenModule *> cands;
     uint32_t want_lba, want_size; unsigned gnm; const GenModule *gmv = gen_modules(&gnm);
@@ -119,7 +119,7 @@ uint32_t module_load(const char *path_in, bool *ok) {
         uint32_t sug = k_probe_low(cands[0]->memsz);
         fprintf(stderr, "[modulo] %s: nenhuma base recompilada livre (tentadas:", cands[0]->iso_path);
         for (auto *cg : cands) fprintf(stderr, " 0x%08x", cg->base);
-        fprintf(stderr, "). O alocador poria em 0x%08x: acrescente essa base em tools/modules.tsv e regenere.\n", sug);
+        fprintf(stderr, "). O alocador poria em 0x%08x: acrescente essa base em tools/translator/modules.tsv e regenere.\n", sug);
         return 0x800200d9u;
     }
     if (!g && parse_lbn_path(p, &want_lba, &want_size)) {
@@ -137,7 +137,7 @@ uint32_t module_load(const char *path_in, bool *ok) {
             }
         }
     }
-    if (!g) { fprintf(stderr, "[modulo] '%s' nao foi recompilado (tools/modules.tsv)\n", path_in); return 0x80020139u; }
+    if (!g) { fprintf(stderr, "[modulo] '%s' nao foi recompilado (tools/translator/modules.tsv)\n", path_in); return 0x80020139u; }
     uint32_t lba, size; bool isdir;
     if (iso_find("PSP_GAME/" + std::string(g->iso_path), &lba, &size, &isdir) != 0) { fprintf(stderr, "[modulo] %s ausente no ISO\n", g->iso_path); return 0x80010002u; }
     std::vector<uint8_t> file(size); iso_read(lba, 0, file.data(), size);

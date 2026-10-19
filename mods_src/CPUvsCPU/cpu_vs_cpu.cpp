@@ -53,7 +53,7 @@ static int hk_tipo(TfCpu *c) {   /* libduel_eng_5A41E0A6(jogador, tipo) */
     return 0;
 }
 
-/* ---- monitor: registra no log da sessao todas as jogadas dos dois lados ([mon] ...). tools/ia_monitor.py le e mostra com nomes de cartas ---- */
+/* ---- monitor: registra no log da sessao todas as jogadas dos dois lados ([mon] ...). tools/ai/ia_monitor.py le e mostra com nomes de cartas ---- */
 static const uint32_t JOG = 0x09f79cec, PASSO = 0xfac, CASAS = 0x09f79d1c;
 static uint16_t u16(uint32_t a) { return *(uint16_t *)A->mem(a); }
 static unsigned carta_da_mao(uint32_t jog, int idx) { return idx >= 0 && idx < 12 ? (u16(JOG + (jog & 1) * PASSO + 0x120 + idx * 4) & 0x1fff) : 0; }
@@ -114,5 +114,5 @@ extern "C" __declspec(dllexport) int tfmod_init(const TfModApi *api) {
     return 0;
 }
 
-/* F7 / L3+R3 no jogo ("a CPU errou"): despeja o tabuleiro completo dos dois lados no log; tools/marcas_cpu.py le isto e as jogadas anteriores */
+/* F7 / L3+R3 no jogo ("a CPU errou"): despeja o tabuleiro completo dos dois lados no log; tools/analysis/marcas_cpu.py le isto e as jogadas anteriores */
 extern "C" __declspec(dllexport) void tfmod_marca(int n) { char t[48]; snprintf(t, sizeof t, "MARCA #%d", n); A->log("[marca-cpu] estado do duelo na marca #%d:", n); log_tabuleiro(t); }

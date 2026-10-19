@@ -1,5 +1,5 @@
 /* Duelists (characters) and their decks, in one place. The rest of the decomp talks about "character" and "deck" with these names and helpers.
- * The full map of the 351 decks is in docs/DECKS.md ("Deck map"); tools/decks_mapa.py builds it from the game and checks the rules below.
+ * The full map of the 351 decks is in docs/DECKS.md ("Deck map"); tools/game/decks_mapa.py builds it from the game and checks the rules below.
  *
  * Two different numbers, easy to mix up:
  *   - CHARACTER id: who the duelist is (name, portrait, progress record in the save). Ids go from kFirstCharacterId (2) to kLastCharacterId (151); the
@@ -11,7 +11,7 @@
  * Where the story gets a character's deck: the character's script table ScrNNNDeck.bin (NNN = character id - 1) in the story's "brain" archives
  * (st01 = first year: levels 1, 2 and the June duel; st02 = second year: levels 3, 4, 5); the last u16 of each 16-byte record is the deck id.
  *
- * Who owns which deck (checked against every script by tools/decks_mapa.py; the exceptions are the constants below):
+ * Who owns which deck (checked against every script by tools/game/decks_mapa.py; the exceptions are the constants below):
  *   - characters 2..39 (the 7 main duelists, Crowler, Banner, ... Sheppard) have a LADDER: 6 consecutive decks, level 1..6
  *         deck id = 1 + 6 * (character - 2) + (level - 1)       Jaden = 2 -> RCP001..006, ..., Zane = 8 -> RCP037..042, Sheppard = 39 -> RCP223..228
  *     For the main duelists the order inside the ladder is the story progression, not a strength order. Many other ladders use only some of their

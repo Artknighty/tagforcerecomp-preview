@@ -1,5 +1,5 @@
 /* Backend Vulkan 1.3 do renderizador por GPU (ver gpu.h).
- * - vulkan-1.dll carregada em execucao (sem SDK/import lib); sombreadores GLSL -> SPIR-V por tools/spv2h.py (gen/gpu_spv.h).
+ * - vulkan-1.dll carregada em execucao (sem SDK/import lib); sombreadores GLSL -> SPIR-V por tools/build/spv2h.py (gen/gpu_spv.h).
  * - dynamic rendering + synchronization2 (nucleo 1.3); estado de profundidade e scissor/viewport dinamicos; blend no pipeline.
  * - profundidade + stencil D24S8 (ou D32S8; o z do PSP tem 16 bits: k/65535 convertido segue distinto e ordenado, a comparacao sai identica);
  *   o stencil de 8 bits faz o papel do alfa do framebuffer do PSP (que E o stencil la). Sem formato com stencil: D16, stencil desligado.

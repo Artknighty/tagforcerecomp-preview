@@ -25,7 +25,7 @@ set's own style. `DrawWindowContent` (`EF9B5D06`) is what a screen calls each fr
 | `FUN_08841e9c` | `BOOT.LayoutWindowItem` ([window_layout.cpp](window_layout.cpp)) | one frame of an item's layout: the item's phase (new, opening, shown, closing, closed), the size worked out from the text when the style changed, the five-step open / close animation (texts hidden and half-faded, the window grown from or shrunk to half its height, a ghost overlay) and the frame mesh |
 | `FUN_08842c68`, `FUN_088435b4`, `FUN_08843808`, `FUN_088439cc` | `BOOT.BuildFrameMesh`, `BOOT.FrameVertexCount`, `StyleDiffers` | the frame mesh: eight border pieces, the filler column in rows of eight pixels, the tail and the title strip, as sprites (two vertices each) in the display list's data; how many vertices it needs; whether a style changed |
 
-Natives call each other directly, so only the entry points above show as "first call" in the log; `tools/decomp_compare_skip.sh BOOT ...` compares captures
+Natives call each other directly, so only the entry points above show as "first call" in the log; `tools/decomp/decomp_compare_skip.sh BOOT ...` compares captures
 with all of them on and off.
 
 PC style: `DrawWindowItem` asks `pcStyleWindow` ([pc_style.h](../pc_style.h), implemented in `libtitle/panels.cpp`) to draw a glass panel over the

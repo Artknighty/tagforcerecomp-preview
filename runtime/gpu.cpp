@@ -71,7 +71,7 @@ void gpu_present_fb_tag(int fb, int tag) { GL; g_seq_tag = tag; static const boo
 /* pace_presented DEPOIS da apresentacao, com a hora do inicio: a chamada pode esperar o driver (o 60 FPS mede a fase no fim dela, o 120 no inicio; ver pacing.cpp) */
 void gpu_present_fb(int fb) { GL;
     if (!g_b) return;
-    static const bool plog = getenv("TF_PRESENT_LOG") != nullptr;   /* depuracao do ritmo: hora (QPC em ms, a mesma do tools/tela_gravar.cpp) de cada apresentacao */
+    static const bool plog = getenv("TF_PRESENT_LOG") != nullptr;   /* depuracao do ritmo: hora (QPC em ms, a mesma do tools/analysis/tela_gravar.cpp) de cada apresentacao */
     const double t0 = plog ? pace_ms(pace_now()) : 0; const int tag = g_seq_tag;
     display_seq_present(fb, g_seq_tag); g_seq_tag = 0; const int64_t ts = pace_now(); g_b->present_fb(fb); pace_presented(ts); g_gpu_presents++;
     if (plog) { extern uint64_t display_frames(void); fprintf(stderr, "[present] %.3f %.3f %c %llu\n", t0, pace_ms(pace_now()), tag ? 'M' : 'R', (unsigned long long)display_frames()); }   /* + quadro do jogo (achar o trecho de um tranco) */

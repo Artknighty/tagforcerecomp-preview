@@ -48,7 +48,7 @@ by the engine it does not have to do arithmetic.
 The game picks which monster to summon in attack position by comparing a **score of the hypothetical board** (function `09e75cc0`,
 originally "total damage the attack phase would cause") with the score of the current board. With `TF_IA_VALOR=1` the plugin returns,
 instead, **P(win)** predicted by a small MLP (35 inputs → 64 → 32 → 1) trained on boards from hundreds of arena duels
-(`tools/ia_valor/`). On duels not used for training it predicts the winner with **75 % accuracy, AUC 0.84** (LP difference alone:
+(`tools/ai/ia_valor/`). On duels not used for training it predicts the winner with **75 % accuracy, AUC 0.84** (LP difference alone:
 AUC 0.66). `TF_IA_VALOR_LADO=0/1` enables it for one player only (A/B). Integration results are tracked in the repository's
 test reports.
 
@@ -56,18 +56,18 @@ test reports.
 
 | Tool | Purpose |
 |---|---|
-| `tools/arena.sh`, `tools/dados_lote.sh`, `tools/ab_lote.sh`, `tools/ab_valor.sh` | CPU-vs-CPU duels at high speed, hidden window, no sound; data collection and paired A/B batches (see [`TESTING.md`](TESTING.md)) |
+| `tools/test/arena.sh`, `tools/ai/dados_lote.sh`, `tools/ai/ab_lote.sh`, `tools/ai/ab_valor.sh` | CPU-vs-CPU duels at high speed, hidden window, no sound; data collection and paired A/B batches (see [`TESTING.md`](TESTING.md)) |
 | `TF_IA_DADOS=1`, `TF_IA_EXPLORAR=<%>` | log every decision (`ia_decisoes.jsonl`) and optionally pick random options to explore |
-| `tools/ia_treino/dataset.py` | build training examples from arena logs (labels: clear-cut tactical cases + duel outcome) |
-| `tools/ia_treino/synth.py` | synthetic attack/summon situations in the plugin's exact prompt format |
-| `tools/ia_treino/treinar.py`, `exportar.py` | LoRA fine-tuning on a consumer GPU, merge, convert to GGUF Q4 (needs a llama.cpp checkout) |
-| `tools/ia_treino/empacotar.sh` | assemble the `llm/` folder (CPU and Vulkan servers + model) |
-| `tools/ia_valor/dataset.py`, `treinar.py`, `exportar_cpp.py` | learned board evaluation: dataset from `[mon]` log lines, MLP training, export to C++ |
-| `tools/ia_monitor.py`, `tools/ia_analise.py` | read the `[mon]`/`[ia]` log lines with card names |
-| `tools/llm_mock.py` | fake model server for tests without a GPU |
+| `tools/ai/ia_treino/dataset.py` | build training examples from arena logs (labels: clear-cut tactical cases + duel outcome) |
+| `tools/ai/ia_treino/synth.py` | synthetic attack/summon situations in the plugin's exact prompt format |
+| `tools/ai/ia_treino/treinar.py`, `exportar.py` | LoRA fine-tuning on a consumer GPU, merge, convert to GGUF Q4 (needs a llama.cpp checkout) |
+| `tools/ai/ia_treino/empacotar.sh` | assemble the `llm/` folder (CPU and Vulkan servers + model) |
+| `tools/ai/ia_valor/dataset.py`, `treinar.py`, `exportar_cpp.py` | learned board evaluation: dataset from `[mon]` log lines, MLP training, export to C++ |
+| `tools/ai/ia_monitor.py`, `tools/ai/ia_analise.py` | read the `[mon]`/`[ia]` log lines with card names |
+| `tools/ai/llm_mock.py` | fake model server for tests without a GPU |
 
-The prompt template is defined twice and **must stay identical**: `montar_prompt()` in `decisor.cpp` and `tools/ia_treino/prompt.py`.
-The 35 input features of the value network are also defined twice: `extrair_lado()` in `ia_aprimorada.cpp` and `tools/ia_valor/dataset.py`.
+The prompt template is defined twice and **must stay identical**: `montar_prompt()` in `decisor.cpp` and `tools/ai/ia_treino/prompt.py`.
+The 35 input features of the value network are also defined twice: `extrair_lado()` in `ia_aprimorada.cpp` and `tools/ai/ia_valor/dataset.py`.
 
 ## Environment variables (research)
 

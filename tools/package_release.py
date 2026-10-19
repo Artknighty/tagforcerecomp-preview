@@ -4,10 +4,10 @@
 
 The package contains NO game data and no game code. It holds:
   TagForceRecomp.exe   the generic runtime (build with runtime/generic_index.cpp: no game modules linked in)
-  avcodec/avutil.dll   slim LGPL-only FFmpeg with just the ATRAC3/3+ and H.264 decoders (tools/build_ffmpeg_lite.sh)
+  avcodec/avutil.dll   slim LGPL-only FFmpeg with just the ATRAC3/3+ and H.264 decoders (tools/build/build_ffmpeg_lite.sh)
   mods/                the behavior mods of mods_src/ (plugin.dll), switched on or off in the Mods menu
   tcc/ include/        TinyCC (LGPL) and the one runtime header the generated code includes
-  tools/               the Allegrex -> C translator (Python scripts) and the embedded Python that runs it
+  tools/               the Allegrex -> C translator (tools/translator/, Python scripts) and the embedded Python that runs it
   gen/nids_hle.tsv     names of the system calls the runtime implements
 On first run the program installs the game files from the player's ISO and translates the game's code on the player's machine
 (runtime/prepare.cpp); the C code is then compiled in memory by TinyCC (runtime/jit.cpp).
@@ -64,7 +64,7 @@ def main():
     # 1. the generic runtime
     exe = os.path.join(pkg, 'TagForceRecomp.exe')
     if '--no-build' not in args:
-        run([sys.executable, 'tools/spv2h.py'], env=env)   # Vulkan shaders -> gen/gpu_spv.h
+        run([sys.executable, 'tools/build/spv2h.py'], env=env)   # Vulkan shaders -> gen/gpu_spv.h
         rc = os.path.join(out, 'app.rc')
         manifest = os.path.join(ROOT, 'runtime', 'app.manifest').replace('\\', '/')
         icon = os.path.join(ROOT, 'runtime', 'app.ico').replace('\\', '/')
@@ -79,9 +79,9 @@ def main():
     if os.path.isfile('assets/branding/yugioh.png'):
         shutil.copy('assets/branding/yugioh.png', pkg)
 
-    # 2. slim LGPL-only FFmpeg (tools/build_ffmpeg_lite.sh builds it once into gen/ffmpeg_lite)
+    # 2. slim LGPL-only FFmpeg (tools/build/build_ffmpeg_lite.sh builds it once into gen/ffmpeg_lite)
     if not glob.glob('gen/ffmpeg_lite/avcodec-*.dll'):
-        run([os.path.join(MSYS_USR, 'bash.exe'), '-lc', 'sh tools/build_ffmpeg_lite.sh'], env=dict(env, MSYSTEM='UCRT64', CHERE_INVOKING='1'))
+        run([os.path.join(MSYS_USR, 'bash.exe'), '-lc', 'sh tools/build/build_ffmpeg_lite.sh'], env=dict(env, MSYSTEM='UCRT64', CHERE_INVOKING='1'))
     for f in glob.glob('gen/ffmpeg_lite/*'): shutil.copy(f, pkg)
 
     # 3. behavior mods
@@ -118,14 +118,15 @@ def main():
 
     # 5. translator + embedded Python
     td = os.path.join(pkg, 'tools'); os.makedirs(td)
-    for f in TOOLS: shutil.copy(os.path.join('tools', f), td)
+    tr = os.path.join(td, 'translator'); os.makedirs(tr)
+    for f in TOOLS: shutil.copy(os.path.join('tools', 'translator', f), tr)
     open(os.path.join(td, 'translator_version.txt'), 'w').write(version + '\n')
     pz = fetch(PY_URL, os.path.join(cache, 'python-embed.zip'))
     pd = os.path.join(td, 'python'); os.makedirs(pd)
     with zipfile.ZipFile(pz) as z:
         for n in PY_KEEP: z.extract(n, pd)
-    open(os.path.join(pd, 'python311._pth'), 'w').write('python311.zip\n..\n.\n')   # '..' = tools/, where the translator scripts are
-    run([sys.executable, 'tools/gerar_nids.py'])
+    open(os.path.join(pd, 'python311._pth'), 'w').write('python311.zip\n../translator\n.\n')   # ../translator = tools/translator/, where the translator scripts are
+    run([sys.executable, 'tools/translator/gerar_nids.py'])
     os.makedirs(os.path.join(pkg, 'gen')); shutil.copy('gen/nids_hle.tsv', os.path.join(pkg, 'gen', 'nids_hle.tsv'))
 
     # 6. documents

@@ -14,7 +14,7 @@ static void divide(int32_t a, int32_t b, int32_t &quotient, int32_t &remainder) 
 
 /* ---- the PC style's panels: glass boxes in place of the game's frames (the same menu sheet as the buttons) ---- */
 
-/* Two neutral 12x12 pieces in the free strip of the menu sheet (tools/menu_estilo_pc.py): the fill and the border, each cut in nine (corners 5x5,
+/* Two neutral 12x12 pieces in the free strip of the menu sheet (tools/mods/menu_estilo_pc.py): the fill and the border, each cut in nine (corners 5x5,
  * stretched 2x2 middle). As with the buttons, all nine slices are drawn scaled (corners 5 -> 6 px) so the renderer samples them alike. */
 constexpr int32_t kPanelFillU = 0, kPanelBorderU = 12, kPanelV = 116, kPanelCorner = 5, kPanelMiddle = 2, kPanelCornerDrawn = 6;
 

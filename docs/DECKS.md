@@ -49,14 +49,14 @@ Exceptions the scripts do on purpose: Nightshroud (40) duels with Atticus's leve
 rule), and the characters who do not really duel (Doctor, Researchers, many fillers) get RCP235, a placeholder. Many ladders use only some levels
 (`LadderUsedMask`); the main cast and Crowler use all six.
 
-`python tools/decks_mapa.py` rebuilds `decomp/duelist_ids.inc` (ids and masks only, no game text) and writes `gen/decks_db/MAPA_DECKS.md` /
+`python tools/game/decks_mapa.py` rebuilds `decomp/duelist_ids.inc` (ids and masks only, no game text) and writes `gen/decks_db/MAPA_DECKS.md` /
 `mapa_decks.json` (the readable map with deck names, archetype and the story phase of each deck; game data, outside Git). It also prints every
 deck whose script owner differs from the rule, so a different game version shows up at once.
 
 ## Extracting a database
 
 ```sh
-python tools/decks_extrair.py        # needs gen/ferramentas_decomp (module dump) from your ISO
+python tools/game/decks_extrair.py        # needs gen/ferramentas_decomp (module dump) from your ISO
 ```
 
 writes `gen/decks_db/{cartas,decks,protagonistas}.json` and a readable `DECKS.md` (all outside Git: it is game data).
@@ -80,11 +80,11 @@ side:                              # up to 15
 
 | Tool | Purpose |
 |---|---|
-| `tools/decks_lib.py` | load/edit/validate/write decks by card **name**. Validation: legal copy limits are taken from the game itself — a card may appear at most as many times as in any original duelist deck, and cards no duelist uses are treated as forbidden |
-| `tools/decks_v1.py`, `tools/decks_final.py` | the tuning recipes and the generator of the final mod files |
-| `tools/decks_ab.py` | A/B two decks in the arena (both sides, same seeds) |
-| `tools/decks_analise.py` | per-deck win rates and which cards the CPU rarely plays when drawn |
-| `tools/ia_uso_cartas.py` | the same card-usage statistic over all arena logs |
+| `tools/game/decks_lib.py` | load/edit/validate/write decks by card **name**. Validation: legal copy limits are taken from the game itself — a card may appear at most as many times as in any original duelist deck, and cards no duelist uses are treated as forbidden |
+| `tools/game/decks_v1.py`, `tools/game/decks_final.py` | the tuning recipes and the generator of the final mod files |
+| `tools/game/decks_ab.py` | A/B two decks in the arena (both sides, same seeds) |
+| `tools/game/decks_analise.py` | per-deck win rates and which cards the CPU rarely plays when drawn |
+| `tools/ai/ia_uso_cartas.py` | the same card-usage statistic over all arena logs |
 
 ### Test arena with any two decks
 

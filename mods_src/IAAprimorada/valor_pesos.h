@@ -1,4 +1,4 @@
-/* GERADO por tools/ia_valor/exportar_cpp.py: pesos da funcao de valor (MLP 35 -> 64 -> 32 -> 1, tanh). Nao editar. */
+/* GERADO por tools/ai/ia_valor/exportar_cpp.py: pesos da funcao de valor (MLP 35 -> 64 -> 32 -> 1, tanh). Nao editar. */
 #pragma once
 #define VALOR_NIN 35
 #define VALOR_N1 64

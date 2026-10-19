@@ -5,7 +5,7 @@
  *     mods/MyMod/plugin.dll    uses this API; exports tfmod_init
  * At startup the game loads plugin.dll from the enabled mods (Mods menu) and calls tfmod_init(api). The plugin installs hooks on game
  * functions (by their PSP address) and, inside them, reads/writes PSP memory and registers, calls game functions and shows message
- * boxes. Example source: mods_src/CaixaDeBoosters. Build with: sh tools/build_plugins.sh (MSYS2 UCRT64, g++).
+ * boxes. Example source: mods_src/CaixaDeBoosters. Build with: sh tools/build/build_plugins.sh (MSYS2 UCRT64, g++).
  *
  * Game version: hook addresses are valid for ONE version of the game. By default a plugin is valid only for the European one
  * (ULES-00600); for another version, export `const char *tfmod_game_ids = "ULES-00600,ULUS-10136";` (the list of versions the
@@ -115,7 +115,7 @@ __declspec(dllexport)
 int tfmod_init(const TfModApi *api);
 /* Optional: void tfmod_marca(int n), exported the same way, called (on the game thread, with the game paused) when the player records the
  * "the CPU made a mistake" mark number n (F7 or L3 + R3, after typing the note): a good place to dump into the log the state that
- * explains the move (e.g. mods_src/CPUvsCPU dumps the board). tools/marcas_cpu.py gathers everything into a report. */
+ * explains the move (e.g. mods_src/CPUvsCPU dumps the board). tools/analysis/marcas_cpu.py gathers everything into a report. */
 
 #ifdef __cplusplus
 }

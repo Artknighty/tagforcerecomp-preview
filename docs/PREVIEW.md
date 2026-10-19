@@ -50,11 +50,11 @@ experimental, what is missing, and what may change. If something is not listed h
   ([VERSIONS.md](VERSIONS.md)). First-run preparation takes a few minutes; later starts take a few seconds (the translated code is
   compiled in memory).
 - **Building from source needs a developer toolchain** (MSYS2 UCRT64, Python with Pillow and numpy, Git Bash). The
-  one-click clean-machine test in [`tools/teste_ambiente_limpo`](../tools/teste_ambiente_limpo/README.md) exists but has **not
+  one-click clean-machine test in [`tools/test/teste_ambiente_limpo`](../tools/test/teste_ambiente_limpo/README.md) exists but has **not
   been run in a public CI**, so those instructions may have gaps. Please report them.
 - **No automated test suite in CI.** Regression checking is done with recorded sessions that you generate by playing
   ([TESTING.md](TESTING.md)); the scripts that refer to the maintainers' own sessions need you to substitute yours.
-- **Research tools** (`tools/decks_*.py`, `tools/ia_*`, `tools/capturas_*`, parts of `tools/ia_treino`) expect a local module dump and
+- **Research tools** (`tools/decks_*.py`, `tools/ia_*`, `tools/capturas_*`, parts of `tools/ai/ia_treino`) expect a local module dump and
   card database produced with a decompiler workflow that is not part of this repository
   ([ARCHITECTURE.md](ARCHITECTURE.md#note-on-the-research-tools)). The recompiler and the runtime do not need it.
 - **Language.** The documentation and the user interface are in English. Many source comments, log messages, some folder names

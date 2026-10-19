@@ -16,12 +16,12 @@ By contributing you agree that your contribution is licensed under the project's
 ## Reporting a bug
 
 Attach the session log from `gen/logs/` (`sessao_*.log`). A recorded session (`.inputs` + `_ms0/`) lets us replay the exact problem with
-`tools/replay.sh`. For graphics problems, the **diagnostic capture mode** (F9, and F8 on the frame that looks wrong) produces
+`tools/test/replay.sh`. For graphics problems, the **diagnostic capture mode** (F9, and F8 on the frame that looks wrong) produces
 screenshots we can analyze: see [`docs/TESTING.md`](docs/TESTING.md).
 
 ## Before sending a change
 
-- Renderer or frame-pacing changes: run `sh tools/regressao.sh` (it checks that the image does not change).
+- Renderer or frame-pacing changes: run `sh tools/test/regressao.sh` (it checks that the image does not change).
 - AI or deck changes: measure with paired arena duels, dozens per arm (see `docs/TESTING.md` and `docs/AI.md`); say what you measured.
 - New behavior mods: follow `docs/MODS.md` and keep the plugin API backward compatible (it only grows).
 - Part of the code base still has Portuguese comments and log messages (the maintainers' first language); new comments, user-visible

@@ -46,10 +46,10 @@ frame 3520) are now C++ swaps; 186 swaps were exercised. With the swaps on versu
 registers, plus every entry of a module function) is identical over 171,722 events:
 
 ```
-sh tools/decomp_calls.sh sessao_20261012_190727 3520 libfield libfield. 091ed540-091efc30 0 _tN
+sh tools/decomp/decomp_calls.sh sessao_20261012_190727 3520 libfield libfield. 091ed540-091efc30 0 _tN
 ```
 
-Lines the replay never runs (`sh tools/decomp_linhas.sh sessao_20261012_190727 3520 decomp/libfield`; about 900 lines, mostly the
+Lines the replay never runs (`sh tools/decomp/decomp_linhas.sh sessao_20261012_190727 3520 decomp/libfield`; about 900 lines, mostly the
 walking, dialog, panel, banner, DP-counter, popup and unusual-language paths) were read one by one against the generated C on 2026-10-13. That
 review found and fixed: the DP counter's flying number used the wrong slide (`UpdateDpFly` target is the "D" slide, `0x09993724`), one extra
 button-mask call in the message box, a float-association difference in the message scroll offset, and two host divisions by zero that the

@@ -33,4 +33,4 @@ Each tab has a static table in the module data: one u16 per item, bit 0 = the it
 
 ## How it was checked
 
-`tools/decomp_check.sh` replays a recorded session that goes through the screen: with every swap on and `TF_DECOMP_VERIFY=1` the swap and the original are run from the same state and their results compared (for `Draw`, the whole display-list buffer and the drawing state), then the captures are compared with the generated code's.
+`tools/decomp/decomp_check.sh` replays a recorded session that goes through the screen: with every swap on and `TF_DECOMP_VERIFY=1` the swap and the original are run from the same state and their results compared (for `Draw`, the whole display-list buffer and the drawing state), then the captures are compared with the generated code's.

@@ -20,7 +20,7 @@ Goal: replace the generated Recomp code with readable hand-written C++, function
 ## Definition of done (per Module)
 
 1. Every own function of the Module is swapped.
-2. Recorded sessions (`tools/replay.sh`) and regression captures (`tools/regressao.sh`) stay identical without the Module's generated code.
+2. Recorded sessions (`tools/test/replay.sh`) and regression captures (`tools/test/regressao.sh`) stay identical without the Module's generated code.
 3. A short summary of what the Module does and how its functions relate is committed next to the code.
 
 The status table distinguishes a fully completed Module from coverage of recorded sessions: so far, `libduelrecord` is complete as a whole; the other modules still contain generated functions outside their verified paths.
@@ -34,7 +34,7 @@ The status table distinguishes a fully completed Module from coverage of recorde
 
 ## Pilot (done)
 
-`libduelrecord` (Main Menu > Duel Ranking) was the pilot: 27 own functions, swapped leaf-first, each compared on/off with `TF_DECOMP_VERIFY` and with captures. Baseline session `gen/logs/sessao_20261011_014117`. Call graph of any module: `python tools/decomp_grafo.py <module>`.
+`libduelrecord` (Main Menu > Duel Ranking) was the pilot: 27 own functions, swapped leaf-first, each compared on/off with `TF_DECOMP_VERIFY` and with captures. Baseline session `gen/logs/sessao_20261011_014117`. Call graph of any module: `python tools/decomp/decomp_grafo.py <module>`.
 
 ## Swap mechanism (`decomp/swap.h`, `decomp/decomp.cpp`)
 
@@ -42,7 +42,7 @@ A swap is a hook on the function entry. A `SwapReg` maps the PSP registers to a 
 
 - `TF_DECOMP=off` disables all swaps; `TF_DECOMP=a,b` enables only the named ones; default is all registered.
 - `TF_DECOMP_VERIFY=1` runs eligible swaps (`pure` or with declared writable regions) and logs `[decomp] MISMATCH` if the original and replacement differ.
-- The single build is `gen/pkg/TagForceRecomp/TagForceRecomp.exe`, with registered swaps enabled by default. Build an isolated test executable without touching it: `OUT=gen/pkg/TagForceRecomp/test.exe sh tools/build.sh`, then `RUN_EXE=gen/pkg/TagForceRecomp/test.exe sh tools/replay.sh <session>`.
+- The single build is `gen/pkg/TagForceRecomp/TagForceRecomp.exe`, with registered swaps enabled by default. Build an isolated test executable without touching it: `OUT=gen/pkg/TagForceRecomp/test.exe sh tools/build.sh`, then `RUN_EXE=gen/pkg/TagForceRecomp/test.exe sh tools/test/replay.sh <session>`.
 
 ## Swaps done
 
@@ -53,16 +53,16 @@ A swap is a hook on the function entry. A `SwapReg` maps the PSP registers to a 
 | `libduelrecord` (Duel Ranking) | 27 of 27 in `decomp/libduelrecord/`. | Pilot complete: original and swaps compared on every call with `TF_DECOMP_VERIFY` (for `Draw`, the full display-list buffer); captures also matched. Summary: `decomp/libduelrecord/README.md`. |
 | `libcharalist` (story character selection) | 13 of 57 in `decomp/libcharalist/`: functions used to build character lists and choose the character/picture at story start. | Replay chose the same character and picture, with the same list sizes and capture; pure lookup functions also pass `TF_DECOMP_VERIFY`. Other functions have not been reached by recorded sessions. Summary: `decomp/libcharalist/README.md`. |
 | `libstory` (story flow up to map entry) | 117 functions exercised by `sessao_20261012_190727`: calendar, character state, archives, place menu, module loading, sound scenes and the story state machine. | Swaps-on and generated-code runs reached the map with 16 matching captures; a separate verify run found no unexpected mismatch. Unvisited story paths stay generated. Summary: `decomp/libstory/README.md`. |
-| `libfield` (story map and field scene) | All 193 functions the story-to-map replay executes (~51 KB) are C++ swaps; 186 were exercised. They cover indicators, scene/NPC updates, player, walkers, loader, HUD, camera, messages, the place menu, follower, effects, panel, banner and fade. | The boundary trace (all engine calls and module-function entries, 171,722 events) is identical with `TF_DECOMP_SKIP=libfield.`, using `tools/decomp_calls.sh`. Not exercised: the 7 `map_grid.cpp` swaps and the active paths of follower/effects/panel/banner/dialog (the replay never walks or opens them). Summary: `decomp/libfield/README.md`. |
+| `libfield` (story map and field scene) | All 193 functions the story-to-map replay executes (~51 KB) are C++ swaps; 186 were exercised. They cover indicators, scene/NPC updates, player, walkers, loader, HUD, camera, messages, the place menu, follower, effects, panel, banner and fade. | The boundary trace (all engine calls and module-function entries, 171,722 events) is identical with `TF_DECOMP_SKIP=libfield.`, using `tools/decomp/decomp_calls.sh`. Not exercised: the 7 `map_grid.cpp` swaps and the active paths of follower/effects/panel/banner/dialog (the replay never walks or opens them). Summary: `decomp/libfield/README.md`. |
 | `libduel_eng` (duel rules and state) | Twenty-five swaps in `decomp/libduel_eng/`, covering field-card flags, effect-list queries, identity resolution, attribute/category checks, restrictions, active-card counts, and target/zone/monster-availability legality. | All 25 were exercised; targeted verify runs reported no mismatch (through frames 12000, 6000 or 5000, depending on the function). Incremental full-duel compares kept all 13 captures identical. Most of the module remains generated. Summary: `decomp/libduel_eng/README.md`. |
-| `libduel_mgr` (the Duel Result screen) | Swaps in `decomp/libduel_mgr/`: the state machine, input, loading, the question window, the start (rewards and DP) and the end, and the screen's drawing: the table page, the three detail pages, footer, title capsule, background. | Captures of the result screens, the page slide and the question are pixel-identical with the swaps on and off (`tools/decomp_resultado.sh`, 14/14); per-function `TF_DECOMP_VERIFY` reports no difference. The outcome board of story duels (`08f0c764` and its helpers) is C++ too, checked with `tools/decomp_resultado_banner.sh` (identical in two- and four-duelist modes); nothing of the screen's own code is generated any more. Summary: `decomp/libduel_mgr/README.md`. |
+| `libduel_mgr` (the Duel Result screen) | Swaps in `decomp/libduel_mgr/`: the state machine, input, loading, the question window, the start (rewards and DP) and the end, and the screen's drawing: the table page, the three detail pages, footer, title capsule, background. | Captures of the result screens, the page slide and the question are pixel-identical with the swaps on and off (`tools/decomp/decomp_resultado.sh`, 14/14); per-function `TF_DECOMP_VERIFY` reports no difference. The outcome board of story duels (`08f0c764` and its helpers) is C++ too, checked with `tools/decomp/decomp_resultado_banner.sh` (identical in two- and four-duelist modes); nothing of the screen's own code is generated any more. Summary: `decomp/libduel_mgr/README.md`. |
 | `libduel_draw` (duel presentation) | Nine swaps in `decomp/libduel_draw/`: the drawing-flag word, a sorted-table search, scene-record addresses and thin wrappers over `libduel_eng` getters (hottest tiny functions of the Free Duel). | A full CPU-vs-CPU Free Duel ends identically with the swaps on and off; a clean `TF_DECOMP_VERIFY` run is still pending. Summary: `decomp/libduel_draw/README.md`. |
 
 ## Lessons
 
-- **Ghidra's pseudo-C hides arguments** of the ehsys functions (for example the heap Free call shows one parameter but takes two, which crashed the first attempt). Always check the registers set before each call in the generated C: `python tools/decomp_args.py gen/<module>.c` lists them per import.
+- **Ghidra's pseudo-C hides arguments** of the ehsys functions (for example the heap Free call shows one parameter but takes two, which crashed the first attempt). Always check the registers set before each call in the generated C: `python tools/decomp/decomp_args.py gen/<module>.c` lists them per import.
 - Field widths come from the generated code (`LHU`/`LW`/`LBU`), not from the pseudo-C: the state phase looked like a word and is a halfword.
-- `tools/decomp_check.sh` builds, replays with swaps on (verify) and off, and compares captures; `tools/decomp_try.sh "<list>"` tries one selection without rebuilding.
+- `tools/decomp/decomp_check.sh` builds, replays with swaps on (verify) and off, and compares captures; `tools/decomp/decomp_try.sh "<list>"` tries one selection without rebuilding.
 - Natives call each other directly, so `TF_DECOMP=<list>` selects entry points, not call-by-call behaviour.
 - Verifying a function with side effects: list the memory it writes (`Swap::regions`); the harness primes caches with a first run, then runs the original (with no swap firing inside it) and the swap from the same state and compares. Include every global the code touches (the frame counter and the fade progress both caused false mismatches until listed). Verify mode runs functions several times, so captures taken in verify mode are not comparable; `decomp_check.sh` compares captures in a separate run.
 
@@ -73,7 +73,7 @@ A swap is a hook on the function entry. A `SwapReg` maps the PSP registers to a 
 
 ## Coverage of a recorded session
 
-`sh tools/decomp_cobertura.sh <session> <Module> [last_frame]` lists which functions of a Module actually run in a session (hook trace on every function; a replay with the trace is slow for hot Modules such as BOOT).
+`sh tools/decomp/decomp_cobertura.sh <session> <Module> [last_frame]` lists which functions of a Module actually run in a session (hook trace on every function; a replay with the trace is slow for hot Modules such as BOOT).
 
 Session `sessao_20261011_100343` (Konami start screen to the end of the opening movie, 1000 frames): `libtitle` runs 57 of 1704 functions (3246 calls); `BOOT` runs 593 of 2291 (915 k calls, mostly engine/library helpers).
 
@@ -99,7 +99,7 @@ Session `sessao_20261011_100343` (Konami start screen to the end of the opening 
 - **Hidden arguments** also come from earlier compares: `FUN_08f01550(1, 0xfff)` in Ghidra is `(1, 0xfff, 2)` because `r6` still holds the constant of the previous `== 2` test. Always look at the registers set before each call in the generated C.
 - A function Ghidra calls `void` may return the new display-list cursor in `r2` (`FUN_08f0a928`, the frame drawer): look at what the callers do with `r2` before dropping it.
 - Some swaps intentionally change the game (for example, the in-game Graphics screen and title-menu choices). For a new swap, compare with `TF_DECOMP_SKIP=<new swap>` rather than disabling every swap; a full `decomp_compare.sh` may include expected differences from other swaps.
-- Tools: `tools/decomp_cobertura.sh` (which functions run in a session), `tools/decomp_verify.sh <last_frame> <session...>`, `tools/decomp_compare.sh <last_frame> <session...>` (captures/logs), and `tools/decomp_calls.sh <session> <last_frame> <module> <skip prefix> <stub range> [first_frame] [tag_suffix]` (normalized engine-call/function-entry trace; refuses to overwrite existing replay folders). `tools/decomp_linhas.sh <session> <last_frame> <decomp dir>...` shows which LINES of our C++ the session never runs (gcov on an instrumented, temporary build); those lines are what the trace cannot vouch for, so read them against `tools/gen_fn.py` output.
+- Tools: `tools/decomp/decomp_cobertura.sh` (which functions run in a session), `tools/decomp/decomp_verify.sh <last_frame> <session...>`, `tools/decomp/decomp_compare.sh <last_frame> <session...>` (captures/logs), and `tools/decomp/decomp_calls.sh <session> <last_frame> <module> <skip prefix> <stub range> [first_frame] [tag_suffix]` (normalized engine-call/function-entry trace; refuses to overwrite existing replay folders). `tools/decomp/decomp_linhas.sh <session> <last_frame> <decomp dir>...` shows which LINES of our C++ the session never runs (gcov on an instrumented, temporary build); those lines are what the trace cannot vouch for, so read them against `tools/decomp/gen_fn.py` output.
 
 ## Open points
 

@@ -7,7 +7,7 @@
  *     principal: 4219 4219 5066 ...        (id de cada copia; ate 80)
  *     extra: 5961 ...                      (monstros de fusao; ate 30)
  *     side: ...                            (ate 15)
- * Os ids sao os do jogo (tools/decks_extrair.py gera gen/decks_db/cartas.json com id -> nome). Variavel de ambiente TF_DECKS_OFF=1 desliga o mod (arena: comparar com o original). */
+ * Os ids sao os do jogo (tools/game/decks_extrair.py gera gen/decks_db/cartas.json com id -> nome). Variavel de ambiente TF_DECKS_OFF=1 desliga o mod (arena: comparar com o original). */
 #include "tfmod.h"
 #include <windows.h>
 #include <string>

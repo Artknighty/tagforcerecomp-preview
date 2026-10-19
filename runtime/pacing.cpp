@@ -22,7 +22,7 @@ const bool g_dbg = getenv("TF_LAT_DEBUG") != nullptr;
 /* GPU: o intermediario e desenhado e enviado logo que o quadro novo chega (interp_prepare); o display.cpp espera a GPU terminar
  * (gpu_wait_kicked, ele ficaria parado ate a fase de qualquer jeito) e pace_gpu_done anota em que fase isso aconteceu: g_off_gpu e a fase que
  * cobre quase todos os quadros recentes, e o intermediario so sai depois dela. Antes ele aparecia ~4,5 ms depois da hora (a GPU so comecava ao
- * apresentar) e o real na hora: ritmo 12/21 ms no monitor em vez de 16,7/16,7 (tools/tela_gravar.cpp, sessao 205658). */
+ * apresentar) e o real na hora: ritmo 12/21 ms no monitor em vez de 16,7/16,7 (tools/analysis/tela_gravar.cpp, sessao 205658). */
 double g_off_gpu, g_off_ms, g_off_typ;   /* g_off_typ: fase tipica (mediana) em que a GPU termina o intermediario */
 int g_sub = 1;                  /* apresentacoes por passo: 1 no 60 FPS, 2 no 120 (cada uma corrige a fase pela metade) */
 int g_quarter_off;              /* 120 FPS: quadros novos que ainda vao no ritmo de 60 (a fase nao cabe em meio passo) */
@@ -31,7 +31,7 @@ uint32_t g_quarter_falls;
 
 /* SINCRONIA COM O MONITOR. O jogo tinha um relogio proprio de 59,94 Hz; num monitor de 120 Hz (2 atualizacoes por quadro de 60 FPS) as saidas
  * escorregavam devagar em relacao as atualizacoes e, quando caiam perto da borda de uma, cada imagem ficava 1 atualizacao e a seguinte 3 (8,3 ms /
- * 25 ms) em vez de 2 e 2: tremido medido on a test monitor in ~30% do tempo (tools/tela_gravar.cpp). Agora, se a taxa do monitor (do DWM) e
+ * 25 ms) em vez de 2 e 2: tremido medido on a test monitor in ~30% do tempo (tools/analysis/tela_gravar.cpp). Agora, se a taxa do monitor (do DWM) e
  * multipla de ~60 (60, 119,88, 120, 240 Hz...), o passo vira exatamente k atualizacoes (120 Hz: 16,667 ms em vez de 16,683; 0,1% mais rapido, o
  * controle de reserva do audio absorve) e uma malha de fase desliza as cadeias de saida e da grade no maximo 0,3 ms por apresentacao ate as
  * apresentacoes cairem na fase g_fase de uma atualizacao. Nenhuma espera nova: o caminho controle -> logica -> quadro real continua do mesmo

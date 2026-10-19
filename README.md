@@ -79,7 +79,7 @@ F11 / Alt+Enter: fullscreen · F3: FPS · F5: textures Original / Enhanced · F9
 Esc: leave fullscreen / asks before closing. The **Help > Controls** menu lists all of this in the game.
 
 Saves live in `ms0/` next to the executable. Each run writes a log, the key presses and a copy of the save to `logs/`; any session can be
-replayed with `tools/replay.sh` (developers). `tools/tf.py` plays the game by itself (buttons, screenshots, memory peek) for automated tests.
+replayed with `tools/test/replay.sh` (developers). `tools/test/tf.py` plays the game by itself (buttons, screenshots, memory peek) for automated tests.
 
 ## Build from source (developers)
 
@@ -96,7 +96,7 @@ python tools/package_release.py                       # builds the release zip d
 .\gen\pkg\TagForceRecomp\TagForceRecomp.exe       # launcher: "Install and play" the first time (ISO); afterwards just "Play" (the ISO is no longer needed)
 ```
 
-To check that the documented build works on a **clean Windows**, there is a one-click test in [Windows Sandbox](tools/teste_ambiente_limpo/README.md).
+To check that the documented build works on a **clean Windows**, there is a one-click test in [Windows Sandbox](tools/test/teste_ambiente_limpo/README.md).
 
 `TagForceRecomp.exe` can also install by itself (`TagForceRecomp.exe --install <iso>`) and verify the copy (`--verify <iso>`). What the project
 translates is the code **of your copy**, on your machine; none of it is distributed.

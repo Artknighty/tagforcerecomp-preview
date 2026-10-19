@@ -1,5 +1,5 @@
 /* Records that other modules own and the Duel Result screen reads or updates. Only the fields the screen uses are named; the rest is
- * padding. Offsets were checked against the generated code (tools/decomp_acessos.py) and are asserted below. */
+ * padding. Offsets were checked against the generated code (tools/decomp/decomp_acessos.py) and are asserted below. */
 #pragma once
 #include <stddef.h>
 #include <stdint.h>

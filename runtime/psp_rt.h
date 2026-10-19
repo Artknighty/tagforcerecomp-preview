@@ -1,4 +1,4 @@
-/* Runtime minimo para o codigo C gerado pelo recompilador (tools/recomp.py). */
+/* Runtime minimo para o codigo C gerado pelo recompilador (tools/translator/recomp.py). */
 #pragma once
 #include <stdint.h>
 #include <string.h>
