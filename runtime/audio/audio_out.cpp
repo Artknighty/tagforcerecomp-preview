@@ -47,7 +47,8 @@ static void fill(int i) {
         for (uint32_t f = 0; f < BUFF; f++) {
             uint32_t k = (uint32_t)((g_rd + f) & (RING - 1)) * 2;
             if (g_skip) g_pos = std::max(0.0, g_pos - 1.0 / FADE_OUT_LEN); else g_pos = std::min(1.0, g_pos + 1.0 / FADE_IN_LEN);
-            const double gain = g_pos * g_pos * (3.0 - 2.0 * g_pos);
+            static const bool mute = getenv("TF_AUDIO_MUDO") != nullptr;   /* tests: the whole audio path runs (timing, reserve control) but the device plays silence */
+            const double gain = mute ? 0.0 : g_pos * g_pos * (3.0 - 2.0 * g_pos);
             for (int c = 0; c < 2; c++) {
                 int32_t v = g_ring[k + c]; g_ring[k + c] = 0;
                 if (gain < 1.0) v = (int32_t)std::lround(v * gain);
@@ -97,7 +98,9 @@ double audio_out_dump(const wchar_t *path) {
     fclose(f); return n / 44100.0;
 }
 /* Mistura 'frames' quadros (estereo ou mono, 16 bits) no anel a partir de *cursor (por canal) com volumes 0..0x8000. */
-void audio_out_skip(bool on) { g_skip = on; }
+static double now_ms(void) { LARGE_INTEGER q, f; QueryPerformanceCounter(&q); QueryPerformanceFrequency(&f); return q.QuadPart * 1000.0 / f.QuadPart; }
+static double g_skip_end_ms;   /* when the loading fast-forward last ended: channels resuming right after it are behind by design, not by a hitch */
+void audio_out_skip(bool on) { if (g_skip && !on) g_skip_end_ms = now_ms(); g_skip = on; }
 namespace {
 /* Controle de reserva por canal: o ritmo medio do jogo (tempo virtual -> real) nunca bate exatamente com o relogio do dispositivo (alguns decimos de %
  * por causa das esperas); sem controle a reserva encolhe ate zerar (engasgo) ou cresce ate descartar. */
@@ -107,7 +110,12 @@ ReserveCtl *ctl_for(const uint64_t *cursor) {
     for (int q = 0; q < g_nctl; q++) if (g_ctl[q].key == cursor) return &g_ctl[q];
     return g_nctl < 8 ? &(g_ctl[g_nctl++] = {cursor, 0.0, 0.0, 0.0}) : nullptr;
 }
-const uint64_t RESERVE_TARGET = 3300;   /* reserva alvo a frente do ponto de leitura (~75 ms; a producao chega em rajadas de 3 blocos por quadro e quadros de 25 ms sao comuns) */
+/* reserva alvo a frente do ponto de leitura (~75 ms; a producao chega em rajadas de 3 blocos por quadro e quadros de 25 ms sao comuns).
+ * Adaptive (2026-10-20): every underrun of an active channel (a hitch longer than the reserve: the device caught up and played silence) raises
+ * the target by ~25 ms, up to ~170 ms, so a slow machine stops clicking after its first hitches; after 60 s without one it comes back down by
+ * 25 ms (the controller shrinks the reserve with at most 2% of compression), so a fast machine ends at 75 ms of latency again. */
+const double RESERVE_MIN = 3300, RESERVE_MAX = 7500, RESERVE_STEP = 1100;
+double g_target = RESERVE_MIN, g_under_ms;
 }
 void audio_out_mix(uint64_t *cursor, const int16_t *src, uint32_t frames, bool stereo, int lvol, int rvol) {
     if (!g_on || !src || g_skip || !frames) return;
@@ -120,14 +128,17 @@ void audio_out_mix(uint64_t *cursor, const int16_t *src, uint32_t frames, bool s
             if (dbg) { LARGE_INTEGER q, f; QueryPerformanceCounter(&q); QueryPerformanceFrequency(&f); const double now = q.QuadPart * 1000.0 / f.QuadPart;
                 fprintf(stderr, "[audio] realinhou: canal %d cursor-leitura = %lld, bloco %u, %.1f ms desde a ultima mistura do canal, reserva media %.0f, t=%.0f ms%c", ctl ? (int)(ctl - g_ctl) : -1, (long long)*cursor - (long long)g_rd, frames, ctl && ctl->last ? now - ctl->last : -1.0, ctl ? ctl->ema : 0.0, now, 10); }
         }
-        *cursor = g_rd + RESERVE_TARGET;
-        if (ctl) { ctl->ema = (double)RESERVE_TARGET; ctl->low_since = 0; }
+        const double t = now_ms();
+        const bool active = ctl && ctl->last && t - ctl->last < 300.0 && t - g_skip_end_ms > 500.0;   /* a channel that was idle (voice, effect) or paused by the loading fast-forward is not a hitch */
+        if (*cursor && active) { g_under_ms = t; if (g_target < RESERVE_MAX) { g_target = std::min(RESERVE_MAX, g_target + RESERVE_STEP); fprintf(stderr, "[audio] underrun: reserve raised to %.0f ms%c", g_target * 1000.0 / 44100.0, 10); } }
+        *cursor = g_rd + (uint64_t)g_target;
+        if (ctl) { ctl->ema = g_target; ctl->low_since = 0; }
     }
     {   /* depuracao (TF_LAT_DEBUG): quantas amostras cada canal entregou por segundo real */
         static const bool dbg2 = tf_lat_debug();
         if (dbg2) { static double t0; static uint64_t v0, fr0, n[8]; static int calls[8]; LARGE_INTEGER q, f; QueryPerformanceCounter(&q); QueryPerformanceFrequency(&f); const double now = q.QuadPart * 1000.0 / f.QuadPart;
             const int ci = ctl ? (int)(ctl - g_ctl) : 7; n[ci] += frames; calls[ci]++;
-            if (now - t0 >= 1000.0) { if (t0) { fprintf(stderr, "[audio] por s real (virtual %llu us, %llu quadros):", (unsigned long long)(k_now_us() - v0), (unsigned long long)(g_diag_frames - fr0)); for (int i = 0; i < g_nctl; i++) fprintf(stderr, " canal%d=%llu amostras em %d blocos (reserva %.0f);", i, (unsigned long long)n[i], calls[i], g_ctl[i].ema); fprintf(stderr, " | device: %u wakeups, longest gap %.1f ms, %u all-empty; stretch max %.1f%%%c", g_dev_wakes, g_dev_gap_max, g_dev_empty, g_st_max * 100.0, 10); g_dev_wakes = g_dev_empty = 0; g_dev_gap_max = g_st_max = 0; } t0 = now; v0 = k_now_us(); fr0 = g_diag_frames; memset(n, 0, sizeof n); memset(calls, 0, sizeof calls); } }
+            if (now - t0 >= 1000.0) { if (t0) { fprintf(stderr, "[audio] por s real (virtual %llu us, %llu quadros, real %.1f ms):", (unsigned long long)(k_now_us() - v0), (unsigned long long)(g_diag_frames - fr0), now - t0); for (int i = 0; i < g_nctl; i++) fprintf(stderr, " canal%d=%llu amostras em %d blocos (reserva %.0f);", i, (unsigned long long)n[i], calls[i], g_ctl[i].ema); fprintf(stderr, " | device: %u wakeups, longest gap %.1f ms, %u all-empty; stretch max %.1f%%%c", g_dev_wakes, g_dev_gap_max, g_dev_empty, g_st_max * 100.0, 10); g_dev_wakes = g_dev_empty = 0; g_dev_gap_max = g_st_max = 0; } t0 = now; v0 = k_now_us(); fr0 = g_diag_frames; memset(n, 0, sizeof n); memset(calls, 0, sizeof calls); } }
     }
     uint32_t out = frames;
     if (ctl) {
@@ -135,9 +146,10 @@ void audio_out_mix(uint64_t *cursor, const int16_t *src, uint32_t frames, bool s
          * Se a reserva esta muito abaixo do alvo, o jogo esta rodando mais devagar que o tempo real (ex.: 120 FPS em cena pesada: ~52 quadros/s = ~87% do
          * audio por segundo) e a alternativa era um buraco de ~60 ms de silencio uma vez por segundo; entao o bloco e esticado ate 25% (altura cai junto com
          * a velocidade do jogo, em vez de picotar). A fracao de amostra que sobra fica no 'frac' do canal. */
-        if (ctl->ema == 0.0) ctl->ema = (double)RESERVE_TARGET;
+        if (ctl->ema == 0.0) ctl->ema = (double)g_target;
+        if (g_target > RESERVE_MIN && now_ms() - g_under_ms > 60000.0) { g_target = std::max(RESERVE_MIN, g_target - RESERVE_STEP); g_under_ms = now_ms(); }
         ctl->ema += 0.05 * ((double)((long long)*cursor - (long long)g_rd) - ctl->ema);
-        const double dev = (double)RESERVE_TARGET - ctl->ema;
+        const double dev = (double)g_target - ctl->ema;
         double st;
         /* A short hitch (texture creation, scene load: 50-100 ms) drains the reserve, and stretching up to 25% to refill it made the music drop by
          * a few semitones for about a second (logs from a laptop: stretch 5-12% right after each hitch). Stretching is capped at 4% (about a
@@ -150,7 +162,7 @@ void audio_out_mix(uint64_t *cursor, const int16_t *src, uint32_t frames, bool s
          * monitor's refresh) the old law flipped between 4% and 0.4% every second, so the pitch wobbled up and down. The integral term learns the
          * steady speed deficit and applies it continuously (a constant 1.5% is about a quarter of a semitone, hardly audible); the proportional
          * term only reacts to the reserve being off target. The reserve is allowed to sag while the integral converges (a few seconds). */
-        const double dev_n = dev / (double)RESERVE_TARGET, dt = (double)frames / 44100.0;
+        const double dev_n = dev / (double)g_target, dt = (double)frames / 44100.0;
         ctl->integ = std::max(-0.02, std::min(cap, ctl->integ + 0.03 * dev_n * dt));
         st = std::max(-0.02, std::min(cap, 0.01 * dev_n + ctl->integ));
         g_st_max = std::max(g_st_max, st);

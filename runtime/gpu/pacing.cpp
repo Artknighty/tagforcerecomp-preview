@@ -4,6 +4,7 @@
 #include <dwmapi.h>
 #include <stdio.h>
 #include <stdlib.h>
+#include <string.h>
 #include <math.h>
 #include <algorithm>
 #include <vector>
@@ -149,13 +150,32 @@ void pace_grid(bool sleep) {
     else if (now - g_grid > g_freq.QuadPart / 10) g_grid = now;   /* atrasado mais de 100 ms: nao tenta recuperar (senao a grade ficava para tras para sempre) */
 }
 
+/* Exit schedule catch-up (2026-10-20). The exit chain used to restart from "now" whenever a call came out late, so every late present (a missed
+ * monitor refresh: ~27 ms frames on a laptop with a GTX 1650) was lost game time for good. With the 60/120 FPS interpolation the game then ran
+ * 1-3% slower than real time and the audio had to be stretched (pitch drop, "slow audio"); 30 FPS was fine because pace_grid keeps an absolute
+ * schedule. Now a late exit keeps its slot in the schedule: the following exits wait less until the game is back on time, so the game clock (and
+ * the audio it produces) averages exactly one step per call. More than 100 ms behind (load, window drag) restarts the chain as before.
+ * TF_RITMO_RECUPERA=0 restores the old behaviour (A/B). TF_SIM_ATRASO="p,ms" (tests) makes a fraction p of the calls exit ms later, to mimic a
+ * slow machine on a fast one. */
+static const bool g_catchup = !(getenv("TF_RITMO_RECUPERA") && atoi(getenv("TF_RITMO_RECUPERA")) == 0);
+static uint32_t g_catch_n, g_catch_reset_n;
+static void sim_delay(void) {
+    static double p = -1, ms; static uint32_t rng = 12345;
+    if (p < 0) { p = 0; if (const char *e = getenv("TF_SIM_ATRASO")) { p = atof(e); if (const char *c = strchr(e, ',')) ms = atof(c + 1); } }
+    if (p <= 0 || ms <= 0) return;
+    rng = rng * 1664525u + 1013904223u;
+    if ((rng >> 8) * (1.0 / 16777216.0) < p) pace_wait_until(pace_now() + pace_ticks(ms));
+}
 void pace_exit(bool timed) {
     init();
+    if (timed) sim_delay();
     int64_t n = pace_now();
     if (!timed) g_lastx = 0;
     else {
         if (g_lastx && n < g_lastx + step()) { g_lastx += step(); pace_wait_until(g_lastx); n = pace_now(); }   /* espacamento de 1/60 s entre saidas */
-        else g_lastx = n;
+        else if (g_lastx && g_catchup && n - (g_lastx + step()) < g_freq.QuadPart / 10) { g_lastx += step(); g_catch_n++; }   /* late: keep the slot, no wait */
+        else { if (g_lastx) g_catch_reset_n++; g_lastx = n; }
+        if (g_dbg) { static uint32_t calls; if (++calls % 600 == 0) { fprintf(stderr, "[ritmo] saidas atrasadas recuperadas: %u, cadeia reiniciada (>100 ms): %u (ultimas 600 chamadas)%c", g_catch_n, g_catch_reset_n, 10); g_catch_n = g_catch_reset_n = 0; } }
     }
     if (g_have_exit) pace_stat(PACE_STAT_EXIT, pace_ms(n - g_exit_qpc));
     g_exit_qpc = n; g_have_exit = true;
