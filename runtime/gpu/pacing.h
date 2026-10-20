@@ -26,6 +26,7 @@ int64_t pace_last_exit(void);                      /* hora da ultima saida = o j
 
 void pace_work(double work_ms);                    /* trabalho do quadro (ms, sem o tempo dormido): atraso acumulado; suspende os intermediarios se passar de 1 vblank */
 uint32_t pace_susp_n(void);                      /* quantas vezes os intermediarios foram suspensos (display.cpp registra no log com o quadro) */
+int pace_susp_mult(void);                         /* suspension length multiplier (back-off when the 60 FPS keeps failing right after it comes back) */
 void pace_mid_result(double late_ms);            /* quanto o intermediario saiu depois da hora (ms): 4 atrasos > 4 ms seguidos suspendem os intermediarios ~1 s */
 bool pace_mid_suspended(void);                     /* suspensos agora? (nao consome nada) */
 bool pace_mid_allowed(void);                       /* chamar UMA vez por display_present: false enquanto os intermediarios estao suspensos */

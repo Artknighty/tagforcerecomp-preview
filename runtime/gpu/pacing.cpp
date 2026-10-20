@@ -16,6 +16,11 @@ int64_t g_lastx;                /* alvo da saida anterior (a cadeia usa o alvo, 
 int64_t g_exit_qpc; bool g_have_exit;
 double g_slept_ms;
 int g_skip_mid; double g_lag_ms; static uint32_t g_susp_n;   /* g_lag_ms: mesmo atraso acumulado do medidor de "atrasados" do perf (display.cpp) */
+/* Suspension back-off (2026-10-20): in a scene that stays too heavy for the 60 FPS (friend's RTX 2060 log, duel at 4x) the intermediate frames
+ * came back every 2.5 s, missed again at once and were suspended again: a 60/30 switch (one hitch each) every 2.5 s for half a minute. A
+ * suspension that starts less than ~5 s after the previous one ended now lasts twice as long (up to 12x); a calm stretch resets it. */
+int g_since_resume = 1 << 30, g_susp_mult = 1;
+int susp_len(int base) { g_susp_mult = g_since_resume < 300 ? std::min(12, g_susp_mult * 2) : 1; return base * g_susp_mult; }
 double g_phi_ms = 6.0, g_work[16]; int g_work_i;
 double g_w2_ms, g_w2[16]; int g_w2_i;   /* saida da chamada do quadro novo -> entrada da chamada seguinte (o jogo trabalha entre os dois vblanks) */
 int64_t g_real_due, g_real_start; int g_real_fb = -1; bool g_real_w2 = true;
@@ -191,7 +196,7 @@ void pace_work(double work_ms) {
     g_lag_ms = std::min(250.0, std::max(0.0, g_lag_ms + std::min(work_ms, 2000.0 / 60.0) - 1000.0 / 60.0));
     static const bool nosusp = getenv("TF_INTERP_NOSUSP") != nullptr;   /* testes: replays escondidos sem limitador (apresentar numa janela oculta bloqueia ~8 ms e disparava a suspensao) */
     if (g_lag_ms > 1000.0 / 60.0 && g_skip_mid == 0 && !nosusp) {
-        g_skip_mid = 150; g_lag_ms = 0; g_susp_n++;
+        g_skip_mid = susp_len(150); g_lag_ms = 0; g_susp_n++;
         if (g_dbg) fprintf(stderr, "[perf] 60 FPS: GPU/CPU no limite, quadros intermediarios suspensos por ~2,5 s%c", 10);
     }
 }
@@ -244,13 +249,14 @@ void pace_mid_result(double late_ms) {
     g_late_hist = ((g_late_hist << 1) | (late_ms > 4.0 ? 1u : 0u)) & 15u;
     if (!g_def_off_env && (g_late_hist & 3u) == 3u && !g_def && g_have_exit) { g_late_hist = 0; defer_enter(); return; }
     if (g_late_hist == 15u && g_skip_mid == 0 && !nosusp) {
-        g_skip_mid = 60; g_late_hist = 0; g_late_susp_n++;
+        g_skip_mid = susp_len(60); g_late_hist = 0; g_late_susp_n++;
         if (g_dbg || g_late_susp_n <= 50) fprintf(stderr, "[ritmo] intermediarios atrasados em sequencia (jogo/GPU sem folga): ~1 s a 30 quadros reais constantes (%u vez(es))%c", g_late_susp_n, 10);
     }
 }
 uint32_t pace_susp_n(void) { return g_susp_n; }
+int pace_susp_mult(void) { return g_susp_mult; }
 bool pace_mid_suspended(void) { return g_skip_mid > 0; }
-bool pace_mid_allowed(void) { if (g_skip_mid > 0) g_skip_mid--; return g_skip_mid == 0; }
+bool pace_mid_allowed(void) { if (g_skip_mid > 0) { if (--g_skip_mid == 0) g_since_resume = 0; } else if (g_since_resume < (1 << 30)) g_since_resume++; return g_skip_mid == 0; }
 
 static bool quarter_ok(double typ);
 int64_t pace_mid_target(int64_t call_entry, bool want_quarter, bool *quarter) {

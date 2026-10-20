@@ -164,7 +164,8 @@ void audio_out_mix(uint64_t *cursor, const int16_t *src, uint32_t frames, bool s
          * term only reacts to the reserve being off target. The reserve is allowed to sag while the integral converges (a few seconds). */
         const double dev_n = dev / (double)g_target, dt = (double)frames / 44100.0;
         ctl->integ = std::max(-0.02, std::min(cap, ctl->integ + 0.03 * dev_n * dt));
-        st = std::max(-0.02, std::min(cap, 0.01 * dev_n + ctl->integ));
+        /* below 60% of the target the reserve is about to run dry (a gap of silence): the proportional term gets much stronger there */
+        st = std::max(-0.02, std::min(cap, 0.01 * dev_n + 0.08 * std::max(0.0, dev_n - 0.4) + ctl->integ));
         g_st_max = std::max(g_st_max, st);
         const double want = (double)frames * (1.0 + st) + ctl->frac;
         out = (uint32_t)std::max(1.0, std::floor(want)); ctl->frac = want - (double)out;

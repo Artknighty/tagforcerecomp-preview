@@ -676,7 +676,7 @@ void display_present(void) {
     }
     static const bool no_early = getenv("TF_NO_EARLY") != nullptr;   /* A/B: sem apresentar antes da grade de vblanks */
     const bool mid_ok = pace_mid_allowed();
-    { static uint32_t sn; const uint32_t n = pace_susp_n(); if (n != sn) { sn = n; fprintf(stderr, "[perf] 60 FPS suspenso no quadro %llu (saidas atrasadas em mais da metade dos quadros; %u vez(es) na sessao): ~2,5 s a 30 quadros reais por segundo%c", (unsigned long long)g_frames, n, 10); } }
+    { static uint32_t sn; const uint32_t n = pace_susp_n(); if (n != sn) { sn = n; fprintf(stderr, "[perf] 60 FPS suspenso no quadro %llu (saidas atrasadas em mais da metade dos quadros; %u vez(es) na sessao): ~%.1f s a 30 quadros reais por segundo%c", (unsigned long long)g_frames, n, 2.5 * pace_susp_mult(), 10); } }
     const bool early = !no_early && pace_on && pace_have_exit() && gfb >= 0 && interp_mid_ready(gfb, g_frames, mid_ok);
     /* 120 FPS: tres intermediarios (t = 0,25 / 0,5 / 0,75) a cada meio passo, se o monitor e o tempo do jogo deixam (pace_mid_target decide);
      * senao o quadro vai no ritmo do 60. Sem limitador (replays) tambem, para testar as imagens. */
