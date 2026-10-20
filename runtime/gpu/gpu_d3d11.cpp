@@ -1,5 +1,6 @@
 /* Renderizador por GPU (Direct3D 11): ver gpu.h. Compila os sombreadores HLSL em tempo de execucao (d3dcompiler_47). */
 #include "gpu.h"
+#include "util.h"
 #include "gfx.h"
 #include <d3d11.h>
 #include <dxgi1_6.h>
@@ -182,14 +183,15 @@ static bool ensure_swap(void) {
     if (!g_swap) {
         if (SUCCEEDED(g_dev->QueryInterface(__uuidof(IDXGIDevice), (void **)&dd)) && SUCCEEDED(dd->GetAdapter(&ad)) && SUCCEEDED(ad->GetParent(__uuidof(IDXGIFactory2), (void **)&f2))) {
             IDXGIFactory5 *f5 = nullptr; BOOL t = FALSE;
-            if (SUCCEEDED(f2->QueryInterface(__uuidof(IDXGIFactory5), (void **)&f5))) { if (SUCCEEDED(f5->CheckFeatureSupport(DXGI_FEATURE_PRESENT_ALLOW_TEARING, &t, sizeof t))) g_tearing = t != FALSE; rel(f5); }
+            if (SUCCEEDED(f2->QueryInterface(__uuidof(IDXGIFactory5), (void **)&f5))) { if (SUCCEEDED(f5->CheckFeatureSupport(DXGI_FEATURE_PRESENT_ALLOW_TEARING, &t, sizeof t))) g_tearing = t != FALSE && tf_diag_opt("d3d_tearing", 1) != 0; rel(f5); }
             DXGI_SWAP_CHAIN_DESC1 d = {}; d.Width = cw; d.Height = ch; d.Format = DXGI_FORMAT_R8G8B8A8_UNORM; d.SampleDesc.Count = 1;
-            d.BufferUsage = DXGI_USAGE_RENDER_TARGET_OUTPUT; d.BufferCount = 2; d.SwapEffect = DXGI_SWAP_EFFECT_FLIP_DISCARD;
+            d.BufferUsage = DXGI_USAGE_RENDER_TARGET_OUTPUT; d.BufferCount = (UINT)std::max(2, std::min(4, tf_diag_opt("d3d_buffers", 3)));   /* 3 by default: with 2, the GPU work queued after a present waits for the back buffer to be released (up to one refresh) and late intermediate frames pile up on slow machines */ d.SwapEffect = DXGI_SWAP_EFFECT_FLIP_DISCARD;
             d.Flags = g_tearing ? DXGI_SWAP_CHAIN_FLAG_ALLOW_TEARING : 0;
             HRESULT hr = f2->CreateSwapChainForHwnd(g_dev, g_hwnd, &d, nullptr, nullptr, &g_swap);
             if (FAILED(hr)) fprintf(stderr, "[gpu] CreateSwapChainForHwnd falhou (0x%08lx)\n", (unsigned long)hr);
             else { f2->MakeWindowAssociation(g_hwnd, DXGI_MWA_NO_ALT_ENTER | DXGI_MWA_NO_WINDOW_CHANGES); g_bw = cw; g_bh = ch; make_back();
-                   if (IDXGIDevice1 *d1 = nullptr; SUCCEEDED(g_dev->QueryInterface(__uuidof(IDXGIDevice1), (void **)&d1))) { d1->SetMaximumFrameLatency(1); rel(d1); } }   /* no maximo 1 quadro na fila da apresentacao (padrao do DXGI: 3 = ate 2 quadros de atraso se a CPU adiantar) */
+                   if (IDXGIDevice1 *d1 = nullptr; SUCCEEDED(g_dev->QueryInterface(__uuidof(IDXGIDevice1), (void **)&d1))) { d1->SetMaximumFrameLatency((UINT)std::max(1, std::min(3, tf_diag_opt("d3d_latency", 1)))); rel(d1); }
+                   fprintf(stderr, "[d3d] swap chain: %u buffers, frame latency %d, tearing %d (diag.txt: d3d_buffers, d3d_latency, d3d_tearing)\n", d.BufferCount, std::max(1, std::min(3, tf_diag_opt("d3d_latency", 1))), (int)g_tearing); }   /* no maximo 1 quadro na fila da apresentacao (padrao do DXGI: 3 = ate 2 quadros de atraso se a CPU adiantar) */
         }
         rel(f2); rel(ad); rel(dd);
         return g_swap != nullptr && g_back != nullptr;
@@ -479,6 +481,40 @@ static ID3D11DepthStencilState *get_depth(const GpuState &s) {
     ID3D11DepthStencilState *o = nullptr; g_dev->CreateDepthStencilState(&d, &o); g_dsMap[key] = o; return o;
 }
 static void d3d_flush_impl(void);
+/* GPU timing (diag.txt / TF_LAT_DEBUG): timestamp queries around each batch of draws and around the present pass tell how long the GPU really works,
+ * as opposed to waiting (for the display, for a free back buffer, for the driver). Read back a few frames later without stalling. */
+struct D3dProf { ID3D11Query *dj, *t0, *t1; bool pend; };
+static D3dProf g_pf[64]; static unsigned g_pfw, g_pfr; static D3dProf *g_pfcur;
+static double g_pf_busy, g_pf_max, g_pf_wait, g_pf_wait_max, g_pf_pres, g_pf_pres_max; static int g_pf_n, g_pf_wn, g_pf_pn;
+static UINT g_pf_lastPresent, g_pf_lastRefresh;
+static void prof_poll(void) {
+    while (g_pfr < g_pfw) {
+        D3dProf &p = g_pf[g_pfr & 63]; D3D11_QUERY_DATA_TIMESTAMP_DISJOINT dj; UINT64 a, b;
+        if (g_ctx->GetData(p.dj, &dj, sizeof dj, D3D11_ASYNC_GETDATA_DONOTFLUSH) != S_OK) break;
+        if (!dj.Disjoint && g_ctx->GetData(p.t0, &a, sizeof a, D3D11_ASYNC_GETDATA_DONOTFLUSH) == S_OK && g_ctx->GetData(p.t1, &b, sizeof b, D3D11_ASYNC_GETDATA_DONOTFLUSH) == S_OK) {
+            const double ms = (double)(b - a) * 1000.0 / (double)dj.Frequency; g_pf_busy += ms; g_pf_max = std::max(g_pf_max, ms); g_pf_n++; }
+        p.pend = false; g_pfr++;
+    }
+}
+static void prof_begin(void) {
+    static const bool on = tf_lat_debug(); if (!on || g_pfcur || !g_ctx || !g_dev) return;
+    prof_poll(); D3dProf &p = g_pf[g_pfw & 63]; if (p.pend) return;
+    if (!p.dj) { D3D11_QUERY_DESC q = {D3D11_QUERY_TIMESTAMP_DISJOINT, 0}; g_dev->CreateQuery(&q, &p.dj); q.Query = D3D11_QUERY_TIMESTAMP; g_dev->CreateQuery(&q, &p.t0); g_dev->CreateQuery(&q, &p.t1); }
+    if (!p.dj || !p.t0 || !p.t1) return;
+    g_ctx->Begin(p.dj); g_ctx->End(p.t0); g_pfcur = &p;
+}
+static void prof_end(void) { if (!g_pfcur) return; g_ctx->End(g_pfcur->t1); g_ctx->End(g_pfcur->dj); g_pfcur->pend = true; g_pfw++; g_pfcur = nullptr; }
+static void prof_report(IDXGISwapChain1 *sw) {
+    static const bool on = tf_lat_debug(); if (!on) return;
+    static double t0; const double now = gpu_now_us() / 1000.0; if (now - t0 < 1000.0) return;
+    if (t0) {
+        DXGI_FRAME_STATISTICS fs = {}; char st[120] = "n/a";
+        if (sw && SUCCEEDED(sw->GetFrameStatistics(&fs))) { snprintf(st, sizeof st, "%u presents, %u refreshes", fs.PresentCount - g_pf_lastPresent, fs.PresentRefreshCount - g_pf_lastRefresh); g_pf_lastPresent = fs.PresentCount; g_pf_lastRefresh = fs.PresentRefreshCount; }
+        fprintf(stderr, "[d3d] per s: GPU busy %.1f ms in %d batches (longest %.1f) | wait for GPU %.1f ms in %d waits (longest %.1f) | Present() %.1f ms in %d calls (longest %.1f) | DXGI: %s%c",
+                g_pf_busy, g_pf_n, g_pf_max, g_pf_wait, g_pf_wn, g_pf_wait_max, g_pf_pres, g_pf_pn, g_pf_pres_max, st, 10);
+    }
+    t0 = now; g_pf_busy = g_pf_max = g_pf_wait = g_pf_wait_max = g_pf_pres = g_pf_pres_max = 0; g_pf_n = g_pf_wn = g_pf_pn = 0;
+}
 void d3d_flush(void) { double t = gpu_now_us(); d3d_flush_impl(); g_gpu_us[0] += gpu_now_us() - t; }
 /* envia o que ja foi gravado sem apresentar: a GPU comeca agora; d3d_wait_kicked espera esse envio terminar (consulta de evento; ms esperados) */
 static ID3D11Query *g_kickQ; static bool g_kickPend;
@@ -493,7 +529,8 @@ static double d3d_wait_kicked(void) {
     if (!g_kickPend || !g_kickQ || !g_ctx) return 0;
     g_kickPend = false; const double t = gpu_now_us(); BOOL done = FALSE;
     while (g_ctx->GetData(g_kickQ, &done, sizeof done, 0) == S_FALSE) YieldProcessor();
-    return (gpu_now_us() - t) / 1000.0;
+    const double w = (gpu_now_us() - t) / 1000.0; g_pf_wait += w; g_pf_wait_max = std::max(g_pf_wait_max, w); g_pf_wn++;
+    return w;
 }
 static double d3d_wait_kicked_for(double max_ms) {
     if (!g_kickPend || !g_kickQ || !g_ctx) return 0;
@@ -503,6 +540,7 @@ static double d3d_wait_kicked_for(double max_ms) {
 }
 static void d3d_flush_impl(void) {
     if (g_cmds.empty() || !g_dev) { g_cmds.clear(); g_verts.clear(); return; }
+    prof_begin();
     D3D11_MAPPED_SUBRESOURCE m;
     if (SUCCEEDED(g_ctx->Map(g_vb, 0, D3D11_MAP_WRITE_DISCARD, 0, &m))) {
         memcpy(m.pData, g_verts.data(), std::min(g_verts.size(), (size_t)VB_MAX) * sizeof(GpuVtx)); g_ctx->Unmap(g_vb, 0);
@@ -545,6 +583,7 @@ static void d3d_flush_impl(void) {
         ID3D11ShaderResourceView *nul = nullptr; g_ctx->PSSetShaderResources(0, 1, &nul);
         g_ctx->OMSetRenderTargets(0, nullptr, nullptr);
     }
+    prof_end();
     g_cmds.clear(); g_verts.clear();
 }
 
@@ -574,6 +613,7 @@ static void present_srv(ID3D11ShaderResourceView *srv, int sw, int sh) {
         if (g_gfx.integer) { int n = std::min(cw / 480, ch / 272); if (n >= 1) { w = 480 * n; h = 272 * n; if (g_gfx.aspect == GFX_ASPECT_4_3) { w = h * 4 / 3; if (w > cw) w = cw; } } }
     }
     int x = (cw - w) / 2, y = (ch - h) / 2;
+    prof_begin();
     float black[4] = {0, 0, 0, 1}; g_ctx->OMSetRenderTargets(1, &g_back, nullptr); g_ctx->ClearRenderTargetView(g_back, black);
     full_pass_prep(); g_ctx->OMSetDepthStencilState(g_dsOff, 0);
     set_viewport((float)x, (float)y, (float)w, (float)h);
@@ -594,7 +634,9 @@ static void present_srv(ID3D11ShaderResourceView *srv, int sw, int sh) {
         g_ctx->PSSetShaderResources(0, 1, &g_ovS); g_ctx->PSSetShader(g_psOverlay, nullptr, 0); g_ctx->Draw(3, 0);
     }
     ID3D11ShaderResourceView *nul = nullptr; g_ctx->PSSetShaderResources(0, 1, &nul);
-    double tp = gpu_now_us(); g_swap->Present(g_gfx.sync == 1 ? 1 : 0, g_gfx.sync != 1 && g_tearing ? DXGI_PRESENT_ALLOW_TEARING : 0); g_gpu_us[2] += gpu_now_us() - tp;
+    prof_end();
+    double tp = gpu_now_us(); g_swap->Present(g_gfx.sync == 1 ? 1 : 0, g_gfx.sync != 1 && g_tearing ? DXGI_PRESENT_ALLOW_TEARING : 0); const double pd = gpu_now_us() - tp; g_gpu_us[2] += pd;
+    { const double pm = pd / 1000.0; g_pf_pres += pm; g_pf_pres_max = std::max(g_pf_pres_max, pm); g_pf_pn++; prof_report(g_swap); }
     g_lastSrv = srv; g_lastW = sw; g_lastH = sh;
 }
 void d3d_present_fb(int id) {

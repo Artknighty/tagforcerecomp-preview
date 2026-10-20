@@ -12,6 +12,12 @@
 #include <fcntl.h>
 #include <string>
 #include <filesystem>
+#include <mmsystem.h>
+#include <tlhelp32.h>
+#include <psapi.h>
+#include <vector>
+#include <map>
+#include <algorithm>
 
 static FILE *g_logf, *g_inputs;
 static HANDLE g_console = INVALID_HANDLE_VALUE;
@@ -62,6 +68,7 @@ static DWORD WINAPI watchdog_thread(void *) {
     }
 }
 
+static void log_sysinfo(void);
 std::wstring diag_session_prefix(void) { return g_dir + g_session; }   /* <pasta dos logs>/<sessao> (capturas de diagnostico: runtime/gpu/capturas.inc) */
 void diag_init(void) {
     SYSTEMTIME t; GetLocalTime(&t);
@@ -86,7 +93,78 @@ void diag_init(void) {
         }
     }
     int rc0 = fprintf(stderr, "[diag] sessao %ls (log, entradas e copia do save em %ls)\n", g_session.c_str(), g_dir.c_str());
+    log_sysinfo();
     if (getenv("TF_DIAG_SELFTEST")) { FILE *tf = fopen("gen/abertura/diag_selftest.txt", "w"); if (tf) { fprintf(tf, "rc=%d logf=%p tee=%p console=%p fileno=%d\n", rc0, (void *)g_logf, (void *)g_tee, (void *)g_console, _fileno(stderr)); fclose(tf); } }
+}
+/* Machine summary at the top of every log (CPU, RAM, Windows build, power source and plan, timer resolution, audio output devices): audio/performance reports
+ * depend on all of these and the player rarely knows to mention them. */
+static void log_sysinfo(void) {
+    char cpu[128] = "?"; DWORD sz = sizeof cpu;
+    RegGetValueA(HKEY_LOCAL_MACHINE, "HARDWARE\\DESCRIPTION\\System\\CentralProcessor\\0", "ProcessorNameString", RRF_RT_REG_SZ, nullptr, cpu, &sz);
+    SYSTEM_INFO si; GetNativeSystemInfo(&si);
+    MEMORYSTATUSEX ms = {}; ms.dwLength = sizeof ms; GlobalMemoryStatusEx(&ms);
+    unsigned major = 0, minor = 0, build = 0;
+    typedef LONG (WINAPI *RtlGetVersionFn)(OSVERSIONINFOW *);
+    HMODULE nt = GetModuleHandleW(L"ntdll.dll");
+    if (RtlGetVersionFn rgv = nt ? (RtlGetVersionFn)GetProcAddress(nt, "RtlGetVersion") : nullptr) { OSVERSIONINFOW v = {}; v.dwOSVersionInfoSize = sizeof v; if (!rgv(&v)) { major = v.dwMajorVersion; minor = v.dwMinorVersion; build = v.dwBuildNumber; } }
+    fprintf(stderr, "[sys] CPU: %s, %u logical processors; RAM %.1f GB; Windows %u.%u build %u\n", cpu, (unsigned)si.dwNumberOfProcessors, ms.ullTotalPhys / 1073741824.0, major, minor, build);
+    SYSTEM_POWER_STATUS ps = {};
+    if (GetSystemPowerStatus(&ps)) fprintf(stderr, "[sys] power: %s, battery %s%u%%\n", ps.ACLineStatus == 1 ? "plugged in" : ps.ACLineStatus == 0 ? "ON BATTERY" : "unknown", ps.BatteryFlag == 128 ? "none " : "", ps.BatteryLifePercent == 255 ? 0u : (unsigned)ps.BatteryLifePercent);
+    char plan[64] = "?"; sz = sizeof plan;
+    if (RegGetValueA(HKEY_LOCAL_MACHINE, "SYSTEM\\CurrentControlSet\\Control\\Power\\User\\PowerSchemes", "ActivePowerScheme", RRF_RT_REG_SZ, nullptr, plan, &sz) == ERROR_SUCCESS) {
+        const char *nm = !_stricmp(plan, "381b4222-f694-41f0-9685-ff5bb260df2e") ? " (Balanced)" : !_stricmp(plan, "8c5e7fda-e8bf-4a96-9a85-a6e23a8c635c") ? " (High performance)" : !_stricmp(plan, "a1841308-3541-4fab-bc81-f71556f20b4a") ? " (Power saver)" : "";
+        fprintf(stderr, "[sys] power plan: %s%s\n", plan, nm);
+    }
+    typedef LONG (NTAPI *QueryTimerResFn)(ULONG *, ULONG *, ULONG *);
+    if (QueryTimerResFn qtr = nt ? (QueryTimerResFn)GetProcAddress(nt, "NtQueryTimerResolution") : nullptr) { ULONG mn = 0, mx = 0, cur = 0; if (!qtr(&mn, &mx, &cur)) fprintf(stderr, "[sys] timer resolution: current %.2f ms (best %.2f, coarsest %.2f)\n", cur / 10000.0, mx / 10000.0, mn / 10000.0); }
+    const UINT nd = waveOutGetNumDevs();
+    for (UINT i = 0; i < nd; i++) { WAVEOUTCAPSA c = {}; if (waveOutGetDevCapsA(i, &c, sizeof c) == MMSYSERR_NOERROR) fprintf(stderr, "[sys] audio out %u: %s\n", i, c.szPname); }
+    fprintf(stderr, "[sys] audio out devices: %u (the game uses the system default)\n", nd);
+}
+/* Resource monitor, once per second (only with diag.txt / TF_LAT_DEBUG): CPU use of the process and of its busiest threads, memory, page faults,
+ * free system RAM and the real CPU clock. Answers "is this CPU-, RAM- or clock-bound" from a player's log. */
+static uint64_t ft64(const FILETIME &f) { return ((uint64_t)f.dwHighDateTime << 32) | f.dwLowDateTime; }
+static DWORD WINAPI monitor_thread(void *) {
+    typedef BOOL (WINAPI *GetPmi)(HANDLE, PROCESS_MEMORY_COUNTERS_EX *, DWORD);
+    typedef LONG (WINAPI *CallNtPower)(int, void *, ULONG, void *, ULONG);
+    struct PowerInfo { ULONG number, maxMhz, curMhz, limitMhz, maxIdle, curIdle; };
+    GetPmi gpmi = (GetPmi)GetProcAddress(GetModuleHandleW(L"kernel32.dll"), "K32GetProcessMemoryInfo");
+    HMODULE pp = LoadLibraryW(L"powrprof.dll");
+    CallNtPower cnp = pp ? (CallNtPower)GetProcAddress(pp, "CallNtPowerInformation") : nullptr;
+    SYSTEM_INFO si; GetSystemInfo(&si); const int ncpu = (int)si.dwNumberOfProcessors;
+    std::vector<PowerInfo> pi(ncpu);
+    std::map<DWORD, uint64_t> prev; uint64_t prevProc = 0, prevWall = 0; DWORD prevFaults = 0;
+    const DWORD pid = GetCurrentProcessId();
+    for (;;) {
+        Sleep(1000);
+        FILETIME wall, cr, ex, kr, us; GetSystemTimeAsFileTime(&wall); GetProcessTimes(GetCurrentProcess(), &cr, &ex, &kr, &us);
+        const uint64_t w = ft64(wall), proc = ft64(kr) + ft64(us);
+        std::vector<std::pair<uint64_t, DWORD>> top; std::map<DWORD, uint64_t> cur;
+        if (HANDLE snap = CreateToolhelp32Snapshot(TH32CS_SNAPTHREAD, 0); snap != INVALID_HANDLE_VALUE) {
+            THREADENTRY32 te = {}; te.dwSize = sizeof te;
+            for (BOOL ok = Thread32First(snap, &te); ok; ok = Thread32Next(snap, &te)) {
+                if (te.th32OwnerProcessID != pid) continue;
+                if (HANDLE th = OpenThread(THREAD_QUERY_LIMITED_INFORMATION, FALSE, te.th32ThreadID)) {
+                    FILETIME a, b, k, u; if (GetThreadTimes(th, &a, &b, &k, &u)) { const uint64_t t = ft64(k) + ft64(u); cur[te.th32ThreadID] = t; if (prev.count(te.th32ThreadID)) top.push_back({t - prev[te.th32ThreadID], te.th32ThreadID}); }
+                    CloseHandle(th);
+                }
+            }
+            CloseHandle(snap);
+        }
+        std::sort(top.rbegin(), top.rend());
+        PROCESS_MEMORY_COUNTERS_EX mc = {}; mc.cb = sizeof mc; if (gpmi) gpmi(GetCurrentProcess(), &mc, sizeof mc);
+        MEMORYSTATUSEX ms = {}; ms.dwLength = sizeof ms; GlobalMemoryStatusEx(&ms);
+        ULONG curMhz = 0, limMhz = 0, maxMhz = 0;
+        if (cnp && cnp(11, nullptr, 0, pi.data(), (ULONG)(sizeof(PowerInfo) * ncpu)) == 0) for (const PowerInfo &p : pi) { curMhz = std::max(curMhz, p.curMhz); limMhz = p.limitMhz; maxMhz = p.maxMhz; }
+        if (prevWall) {
+            const double dw = (double)(w - prevWall);
+            char line[400]; int n = snprintf(line, sizeof line, "[mon] CPU %.0f%% of one core (%d logical) | busiest threads:", (proc - prevProc) * 100.0 / dw, ncpu);
+            for (size_t i = 0; i < top.size() && i < 4; i++) n += snprintf(line + n, sizeof line - n, " %lu=%.0f%%", (unsigned long)top[i].second, top[i].first * 100.0 / dw);
+            fprintf(stderr, "%s | mem %.0f MB (private %.0f), %lu page faults/s | free RAM %.0f MB | CPU clock max-core %lu MHz (limit %lu, rated %lu)\n", line, mc.WorkingSetSize / 1048576.0,
+                    mc.PrivateUsage / 1048576.0, (unsigned long)(mc.PageFaultCount - prevFaults), ms.ullAvailPhys / 1048576.0, (unsigned long)curMhz, (unsigned long)limMhz, (unsigned long)maxMhz);
+        }
+        prev = cur; prevProc = proc; prevWall = w; prevFaults = mc.PageFaultCount;
+    }
 }
 /* chamado depois que a ISO foi escolhida: comeca a gravar entradas e copia o save atual */
 void diag_start_game(void) {
@@ -98,6 +176,7 @@ void diag_start_game(void) {
     wchar_t cwd[MAX_PATH]; GetCurrentDirectoryW(MAX_PATH, cwd);
     fprintf(stderr, "[diag] pasta de trabalho (ms0/ fica aqui): %ls\n", cwd);
     CreateThread(nullptr, 0, watchdog_thread, nullptr, 0, nullptr);
+    if (tf_lat_debug()) CreateThread(nullptr, 0, monitor_thread, nullptr, 0, nullptr);
 }
 void diag_record_buttons(uint64_t frame, uint32_t mask) {
     if (!g_inputs) return;

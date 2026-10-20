@@ -11,6 +11,26 @@ std::wstring exe_dir(void) {
     std::wstring s(p, n); size_t k = s.find_last_of(L"\\/");
     return k == std::wstring::npos ? L"" : s.substr(0, k + 1);
 }
+int tf_diag_opt(const char *key, int def) {
+    static std::vector<std::pair<std::string, int>> opts; static bool loaded;
+    if (!loaded) {
+        loaded = true;
+        if (FILE *f = _wfopen((exe_dir() + L"diag.txt").c_str(), L"rb")) {
+            char line[256];
+            while (fgets(line, sizeof line, f)) {
+                char *eq = strchr(line, '=');
+                if (eq && line[0] != '#') { *eq = 0; std::string k = line; while (!k.empty() && (k.back() == ' ' || k.back() == 9)) k.pop_back(); opts.push_back({k, atoi(eq + 1)}); }
+            }
+            fclose(f);
+        }
+    }
+    for (const auto &o : opts) if (o.first == key) return o.second;
+    return def;
+}
+bool tf_lat_debug(void) {
+    static const bool on = getenv("TF_LAT_DEBUG") != nullptr || GetFileAttributesW((exe_dir() + L"diag.txt").c_str()) != INVALID_FILE_ATTRIBUTES;
+    return on;
+}
 std::wstring app_ini_path(void) {   /* TF_INI=arquivo: os testes usam um .ini proprio (nunca leem nem gravam as configuracoes do jogador) */
     if (const wchar_t *e = _wgetenv(L"TF_INI")) if (*e) return e;
     return exe_dir() + L"tagforce_recomp.ini";

@@ -5,6 +5,7 @@
  * (5650/5551/4444/8888, CLUT4-32, DXT1/3/5, swizzle, bilinear, render-to-texture), blend, alpha/depth/stencil test, mascara de
  * escrita, scissor, clear mode, pontos/linhas e transferencias de blocos. Sem fog e sem curvas/patches. */
 #include "ctl.h"
+#include "util.h"
 #include "hle.h"
 #include <windows.h>
 #include "raster_pool.h"
@@ -1674,7 +1675,7 @@ static int g_ge_depth; static std::vector<uint32_t> g_ge_finished;
 static void ge_run_list(uint32_t id);
 double g_ge_frame_us;   /* tempo gasto no GE (listas, sombra, envio para a GPU) desde o ultimo quadro: divisao do quadro pesado (display.cpp) */
 static void ge_run(uint32_t id) {
-    static const bool lat_dbg = getenv("TF_LAT_DEBUG") != nullptr; const int64_t t_list = g_ge_depth || !lat_dbg ? 0 : pace_now(); const uint64_t p0 = g_prims;
+    static const bool lat_dbg = tf_lat_debug(); const int64_t t_list = g_ge_depth || !lat_dbg ? 0 : pace_now(); const uint64_t p0 = g_prims;
     const bool top = g_ge_depth == 0; const double tge0 = top ? qpc_us() : 0;   /* so a chamada de topo (a lista chamada pelo jogo), nao as aninhadas */
     g_ge_depth++; ge_run_list(id); g_ge_depth--;
     if (t_list && g_prims - p0 > 100 && pace_have_exit()) { pace_stat(PACE_STAT_LIST0, pace_ms(t_list - pace_last_exit())); pace_stat(PACE_STAT_LIST1, pace_ms(pace_now() - pace_last_exit())); }

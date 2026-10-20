@@ -182,7 +182,7 @@ def start(args):
         env.update(TF_GPU='2', TF_RES='8', TF_MSAA='1'); env.pop('NO_PACE', None); env.pop('TF_INTERP', None)
         env.setdefault('TF_TEX_WAIT_MS', '4000')   # a rota do duelo espera os PNGs de textura; TF_TEX_WAIT_MS no ambiente (ex.: 80, o padrao do jogo) mede o jogo real
     if '--audio' in args:   # real-time audio test: keeps the pacing limiter and the audio device on (the window stays hidden)
-        env.pop('NO_PACE', None); env.pop('NO_AUDIO', None)
+        env.pop('NO_PACE', None); env.pop('NO_AUDIO', None); env.pop('TF_NO_MOVIES', None)
     log = open(os.path.join(CTL, 'log.txt'), 'wb')
     p = subprocess.Popen([os.path.join(ROOT, exe)] + (['--dados', dados] if os.path.isdir(dados) else ['--iso', iso]), cwd=pkg, env=env, stdout=log, stderr=log,
                          creationflags=0x00000008 | 0x00000200)   # DETACHED_PROCESS | NEW_PROCESS_GROUP

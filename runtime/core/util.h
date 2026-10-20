@@ -4,6 +4,8 @@
 #include <stdint.h>
 
 std::wstring exe_dir(void);            /* pasta do .exe, com a barra final */
+int tf_diag_opt(const char *key, int def);   /* "key=value" line of diag.txt next to the .exe (diagnostic builds), else def */
+bool tf_lat_debug(void);             /* latency/audio diagnostics: TF_LAT_DEBUG is set, or a file named diag.txt sits next to the .exe */
 std::wstring app_ini_path(void);       /* tagforce_recomp.ini ao lado do .exe (configuracoes do jogador) */
 std::string to_utf8(const std::wstring &w);
 std::wstring to_wide(const std::string &s);

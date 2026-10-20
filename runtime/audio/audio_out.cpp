@@ -12,6 +12,7 @@
 #include <mutex>
 #include <algorithm>
 #include <cmath>
+#include "util.h"
 
 uint64_t k_now_us(void);
 extern volatile uint64_t g_diag_frames;
@@ -37,6 +38,8 @@ static HWAVEOUT g_wo;
 static WAVEHDR g_hdr[NBUF];
 static int16_t g_buf[NBUF][BUFF * 2];
 static HANDLE g_ev;
+static uint32_t g_dev_wakes, g_dev_empty;   /* device thread: wakeups, and wakeups that found every buffer already played (device ran dry or we woke late) */
+static double g_dev_gap_max, g_st_max;      /* longest gap between wakeups (ms) and largest time-stretch applied (fraction), since the last debug line */
 
 static void fill(int i) {
     {
@@ -60,7 +63,10 @@ static DWORD WINAPI audio_thread(void *) {
     SetThreadPriority(GetCurrentThread(), THREAD_PRIORITY_TIME_CRITICAL);
     for (;;) {
         WaitForSingleObject(g_ev, INFINITE);
-        for (int i = 0; i < NBUF; i++) if (g_hdr[i].dwFlags & WHDR_DONE) { g_hdr[i].dwFlags &= ~WHDR_DONE; fill(i); }
+        LARGE_INTEGER q, fq; QueryPerformanceCounter(&q); QueryPerformanceFrequency(&fq);
+        static double last_ms; const double now_ms = q.QuadPart * 1000.0 / fq.QuadPart; int done = 0;
+        for (int i = 0; i < NBUF; i++) if (g_hdr[i].dwFlags & WHDR_DONE) { g_hdr[i].dwFlags &= ~WHDR_DONE; done++; fill(i); }
+        if (done) { std::lock_guard<std::mutex> lk(g_mx); g_dev_wakes++; if (done >= NBUF) g_dev_empty++; if (last_ms) g_dev_gap_max = std::max(g_dev_gap_max, now_ms - last_ms); last_ms = now_ms; }
     }
 }
 void audio_out_init(void) {
@@ -74,6 +80,7 @@ void audio_out_init(void) {
         waveOutPrepareHeader(g_wo, &g_hdr[i], sizeof(WAVEHDR));
     }
     g_on = true;
+    fprintf(stderr, "[audio] waveOut open: 44100 Hz stereo 16-bit, %d buffers of %u frames (%.0f ms each)%c", NBUF, BUFF, BUFF * 1000.0 / 44100, 10);
     for (int i = 0; i < NBUF; i++) fill(i);
     CreateThread(nullptr, 0, audio_thread, nullptr, 0, nullptr);
 }
@@ -94,7 +101,7 @@ void audio_out_skip(bool on) { g_skip = on; }
 namespace {
 /* Controle de reserva por canal: o ritmo medio do jogo (tempo virtual -> real) nunca bate exatamente com o relogio do dispositivo (alguns decimos de %
  * por causa das esperas); sem controle a reserva encolhe ate zerar (engasgo) ou cresce ate descartar. */
-struct ReserveCtl { const uint64_t *key; double ema; double last; double frac; };
+struct ReserveCtl { const uint64_t *key; double ema; double last; double frac; double low_since; double integ; };   /* low_since: when the reserve first fell below target (ms, 0 = not low) */
 ReserveCtl g_ctl[8]; int g_nctl;
 ReserveCtl *ctl_for(const uint64_t *cursor) {
     for (int q = 0; q < g_nctl; q++) if (g_ctl[q].key == cursor) return &g_ctl[q];
@@ -109,18 +116,18 @@ void audio_out_mix(uint64_t *cursor, const int16_t *src, uint32_t frames, bool s
     if (*cursor < g_rd + 64) {   /* o dispositivo ja alcancou o cursor (falta real de amostras); antes o limite era 512 quadros e o salto abria ~40 ms de silencio com a reserva ainda positiva */
         if (*cursor) {
             g_realign++;
-            static const bool dbg = getenv("TF_LAT_DEBUG") != nullptr;
+            static const bool dbg = tf_lat_debug();
             if (dbg) { LARGE_INTEGER q, f; QueryPerformanceCounter(&q); QueryPerformanceFrequency(&f); const double now = q.QuadPart * 1000.0 / f.QuadPart;
                 fprintf(stderr, "[audio] realinhou: canal %d cursor-leitura = %lld, bloco %u, %.1f ms desde a ultima mistura do canal, reserva media %.0f, t=%.0f ms%c", ctl ? (int)(ctl - g_ctl) : -1, (long long)*cursor - (long long)g_rd, frames, ctl && ctl->last ? now - ctl->last : -1.0, ctl ? ctl->ema : 0.0, now, 10); }
         }
         *cursor = g_rd + RESERVE_TARGET;
-        if (ctl) ctl->ema = (double)RESERVE_TARGET;
+        if (ctl) { ctl->ema = (double)RESERVE_TARGET; ctl->low_since = 0; }
     }
     {   /* depuracao (TF_LAT_DEBUG): quantas amostras cada canal entregou por segundo real */
-        static const bool dbg2 = getenv("TF_LAT_DEBUG") != nullptr;
+        static const bool dbg2 = tf_lat_debug();
         if (dbg2) { static double t0; static uint64_t v0, fr0, n[8]; static int calls[8]; LARGE_INTEGER q, f; QueryPerformanceCounter(&q); QueryPerformanceFrequency(&f); const double now = q.QuadPart * 1000.0 / f.QuadPart;
             const int ci = ctl ? (int)(ctl - g_ctl) : 7; n[ci] += frames; calls[ci]++;
-            if (now - t0 >= 1000.0) { if (t0) { fprintf(stderr, "[audio] por s real (virtual %llu us, %llu quadros):", (unsigned long long)(k_now_us() - v0), (unsigned long long)(g_diag_frames - fr0)); for (int i = 0; i < g_nctl; i++) fprintf(stderr, " canal%d=%llu amostras em %d blocos (reserva %.0f);", i, (unsigned long long)n[i], calls[i], g_ctl[i].ema); fprintf(stderr, "%c", 10); } t0 = now; v0 = k_now_us(); fr0 = g_diag_frames; memset(n, 0, sizeof n); memset(calls, 0, sizeof calls); } }
+            if (now - t0 >= 1000.0) { if (t0) { fprintf(stderr, "[audio] por s real (virtual %llu us, %llu quadros):", (unsigned long long)(k_now_us() - v0), (unsigned long long)(g_diag_frames - fr0)); for (int i = 0; i < g_nctl; i++) fprintf(stderr, " canal%d=%llu amostras em %d blocos (reserva %.0f);", i, (unsigned long long)n[i], calls[i], g_ctl[i].ema); fprintf(stderr, " | device: %u wakeups, longest gap %.1f ms, %u all-empty; stretch max %.1f%%%c", g_dev_wakes, g_dev_gap_max, g_dev_empty, g_st_max * 100.0, 10); g_dev_wakes = g_dev_empty = 0; g_dev_gap_max = g_st_max = 0; } t0 = now; v0 = k_now_us(); fr0 = g_diag_frames; memset(n, 0, sizeof n); memset(calls, 0, sizeof calls); } }
     }
     uint32_t out = frames;
     if (ctl) {
@@ -132,8 +139,21 @@ void audio_out_mix(uint64_t *cursor, const int16_t *src, uint32_t frames, bool s
         ctl->ema += 0.05 * ((double)((long long)*cursor - (long long)g_rd) - ctl->ema);
         const double dev = (double)RESERVE_TARGET - ctl->ema;
         double st;
-        if (dev > 400.0) st = 0.004 + std::min(0.246, (dev - 400.0) / 1000.0 * 0.246);
-        else st = std::max(-0.004, std::min(0.004, dev / 1200.0 / 256.0 * 4.0));
+        /* A short hitch (texture creation, scene load: 50-100 ms) drains the reserve, and stretching up to 25% to refill it made the music drop by
+         * a few semitones for about a second (logs from a laptop: stretch 5-12% right after each hitch). Stretching is capped at 4% (about a
+         * quarter tone) unless the reserve stays low for 4 s, which means the game really runs slower than real time. */
+        LARGE_INTEGER q, fq; QueryPerformanceCounter(&q); QueryPerformanceFrequency(&fq);
+        const double now_ms = q.QuadPart * 1000.0 / fq.QuadPart;
+        if (dev > 400.0) { if (!ctl->low_since) ctl->low_since = now_ms; } else ctl->low_since = 0;
+        const double cap = ctl->low_since && now_ms - ctl->low_since > 4000.0 ? 0.25 : 0.04;
+        /* PI controller instead of switching between ~0.4% and the cap: when the game runs 1-3% slower than real time (slow CPU, frames missing the
+         * monitor's refresh) the old law flipped between 4% and 0.4% every second, so the pitch wobbled up and down. The integral term learns the
+         * steady speed deficit and applies it continuously (a constant 1.5% is about a quarter of a semitone, hardly audible); the proportional
+         * term only reacts to the reserve being off target. The reserve is allowed to sag while the integral converges (a few seconds). */
+        const double dev_n = dev / (double)RESERVE_TARGET, dt = (double)frames / 44100.0;
+        ctl->integ = std::max(-0.02, std::min(cap, ctl->integ + 0.03 * dev_n * dt));
+        st = std::max(-0.02, std::min(cap, 0.01 * dev_n + ctl->integ));
+        g_st_max = std::max(g_st_max, st);
         const double want = (double)frames * (1.0 + st) + ctl->frac;
         out = (uint32_t)std::max(1.0, std::floor(want)); ctl->frac = want - (double)out;
     }

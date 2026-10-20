@@ -328,6 +328,12 @@ static double g_lag, g_wsum, g_wmax, g_wmaxlag; static int g_wlate;
 static uint64_t g_tn, g_tlate; static double g_tsum, g_tmaxlag;    /* sessao inteira */
 void raster_stats_print();
 uint32_t audio_out_realigns(void);
+/* Monitor phase lock (pacing.cpp) turned off by the game itself when it keeps causing late frames on this system. Seen on a laptop with hybrid graphics
+ * diag.txt phase_lock: 0 = always off, 1 = always on (default), 2 = automatic. Automatic is NOT the default: measured on a laptop, the lock off was worse
+ * than on (the intermediate frame's GPU work queues behind the previous present pass, which waits for a free back buffer for up to a whole refresh
+ * when presents land just after a vblank; the lock keeps them at a fixed phase). The real fix for that stall is three back buffers (gpu_d3d11.cpp). */
+static bool g_phase_auto_off;
+static int g_loading_run;   /* quadros seguidos com tela de carregamento */
 static void perf_report(bool final) {
     { const uint32_t ra = audio_out_realigns(); if (ra) fprintf(stderr, "[perf] audio: %u falta(s) de amostras (canal atrasado) neste trecho\n", ra); }
     if (g_pn >= (final ? 30 : 600)) {
@@ -383,6 +389,16 @@ static void frame_stats(void) {
             fprintf(stderr, "[perf] divisao %llu: jogo (CPU) %.1f ms | GE %.1f | janela %.1f | controle %.1f | apresentacao do quadro anterior %.1f ms (inclui a espera do vblank)%c", (unsigned long long)g_frames, cpu, g_div_ge_ms, g_pump_ms, g_pad_ms, g_div_tail_ms, 10); }
     }
     g_modal_seen = false;
+    {   /* automatic phase lock fallback: >= 4 frames over 25 ms in each of two consecutive windows of 600 frames (outside loading screens, not at 120 FPS) */
+        static int win_n, win_heavy, bad_wins; static const int mode = tf_diag_opt("phase_lock", 1);
+        if (mode == 2 && !g_phase_auto_off && g_frames > 900 && g_loading_run < 12 && g_gfx.fps != GFX_FPS_120) {
+            win_n++; if (ms > 25.0) win_heavy++;
+            if (win_n >= 600) {
+                bad_wins = win_heavy >= 4 ? bad_wins + 1 : 0; win_n = win_heavy = 0;
+                if (bad_wins >= 2) { g_phase_auto_off = true; fprintf(stderr, "[ritmo] monitor phase lock turned off automatically: it kept causing late frames on this system%c", 10); }
+            }
+        }
+    }
     { extern void ge_res_feedback(double); ge_res_feedback(ms); }
     g_pw[g_pn++] = (float)ms; g_wsum += ms; if (ms > g_wmax) g_wmax = ms;
     g_lag = std::min(250.0, std::max(0.0, g_lag + ms - 16.68));   /* como o limitador: desiste apos 250 ms de atraso */
@@ -472,7 +488,6 @@ static void sync_menu(void) { menu_sync(g_fullscreen, g_show_fps, current_scale(
 void audio_out_skip(bool on);
 double audio_out_dump(const wchar_t *path);
 std::wstring diag_session_prefix(void);
-static int g_loading_run;   /* quadros seguidos com tela de carregamento */
 const uint32_t *mpeg_hd_present(int *w, int *h, uint32_t *ver);
 /* Marcas do jogador (F7/F8; capturas.inc): primeiro a caixa de nota, que pausa o jogo; grava so se confirmada. Chamado logo depois do laco de
  * mensagens, antes de qualquer decisao do quadro: o que o menu da janela fizer enquanto a caixa esta aberta (trocar o renderizador, a resolucao...)
@@ -657,7 +672,7 @@ void display_present(void) {
             MONITORINFOEXW mi = {}; mi.cbSize = sizeof mi; DEVMODEW dm = {}; dm.dmSize = sizeof dm;
             if (GetMonitorInfoW(MonitorFromWindow(g_wnd, MONITOR_DEFAULTTOPRIMARY), &mi) && EnumDisplaySettingsW(mi.szDevice, ENUM_CURRENT_SETTINGS, &dm)) hz = (int)dm.dmDisplayFrequency;
         }
-        pace_monitor(hz, gpu_mode() && pace_on && g_gfx.sync != 2);   /* menor latencia (IMMEDIATE) fica sem: a fase so moveria o rasgo para o meio da tela */
+        pace_monitor(hz, gpu_mode() && pace_on && g_gfx.sync != 2 && tf_diag_opt("phase_lock", 1) != 0 && !g_phase_auto_off);   /* menor latencia (IMMEDIATE) fica sem: a fase so moveria o rasgo para o meio da tela */
     }
     static const bool no_early = getenv("TF_NO_EARLY") != nullptr;   /* A/B: sem apresentar antes da grade de vblanks */
     const bool mid_ok = pace_mid_allowed();
@@ -871,7 +886,7 @@ void display_present(void) {
                           const double c = v[n / 4], st = pace_ms(pace_step_ticks());   /* 3o maior de 16: 1/4 dos grupos passam disso */
                           if (c > 0.92 * st) tarde_on = true; else if (c < 0.75 * st) tarde_on = false; }
                   }
-                  if (getenv("TF_LAT_DEBUG")) { static double sb, sd, s1, s2; static int n; sb += pace_ms(tb1 - tb0); sd += pace_ms(pace_now() - tb1); s1 += pace_ms(tm1 - tb1); s2 += pace_ms(tm2 - tm1); if (++n >= 300) { fprintf(stderr, "[lat] async: espera de contrapressao %.2f ms, desenho+envio %.2f ms (1o %.2f, 2o e 3o %.2f; medios/quadro novo)%c", sb / n, sd / n, s1 / n, s2 / n, 10); sb = sd = s1 = s2 = 0; n = 0; } }
+                  if (tf_lat_debug()) { static double sb, sd, s1, s2; static int n; sb += pace_ms(tb1 - tb0); sd += pace_ms(pace_now() - tb1); s1 += pace_ms(tm1 - tb1); s2 += pace_ms(tm2 - tm1); if (++n >= 300) { fprintf(stderr, "[lat] async: espera de contrapressao %.2f ms, desenho+envio %.2f ms (1o %.2f, 2o e 3o %.2f; medios/quadro novo)%c", sb / n, sd / n, s1 / n, s2 / n, 10); sb = sd = s1 = s2 = 0; n = 0; } }
               }
               latch_buttons(); return;
           }

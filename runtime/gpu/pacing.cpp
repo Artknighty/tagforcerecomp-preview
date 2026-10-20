@@ -1,4 +1,5 @@
 #include "pacing.h"
+#include "util.h"
 #include <windows.h>
 #include <dwmapi.h>
 #include <stdio.h>
@@ -18,7 +19,7 @@ double g_phi_ms = 6.0, g_work[16]; int g_work_i;
 double g_w2_ms, g_w2[16]; int g_w2_i;   /* saida da chamada do quadro novo -> entrada da chamada seguinte (o jogo trabalha entre os dois vblanks) */
 int64_t g_real_due, g_real_start; int g_real_fb = -1; bool g_real_w2 = true;
 int64_t g_last_present;         /* hora da ultima apresentacao na GPU (pace_presented) */
-const bool g_dbg = getenv("TF_LAT_DEBUG") != nullptr;
+const bool g_dbg = tf_lat_debug();
 /* GPU: o intermediario e desenhado e enviado logo que o quadro novo chega (interp_prepare); o display.cpp espera a GPU terminar
  * (gpu_wait_kicked, ele ficaria parado ate a fase de qualquer jeito) e pace_gpu_done anota em que fase isso aconteceu: g_off_gpu e a fase que
  * cobre quase todos os quadros recentes, e o intermediario so sai depois dela. Antes ele aparecia ~4,5 ms depois da hora (a GPU so comecava ao
