@@ -167,7 +167,7 @@ static void request_texture_pack_switch(void) { g_pending_pack = true; }
 struct Hotkey { int vk; const wchar_t *key, *also, *help; void (*run)(void); };
 static void fast_forward_hold(void) {}   /* F4 is polled in display_present (held, not pressed); the table entry only reserves the key and lists it in the help */
 static const Hotkey kHotkeys[] = {
-    {VK_F4,  L"F4",  L"",              L"hold to fast-forward (no frame limiter, sound muted)", fast_forward_hold},
+    {VK_F4,  L"F4",  L"",              L"hold to fast-forward (no frame limiter, sound muted); controller: hold the right stick to the right", fast_forward_hold},
     {VK_F3,  L"F3",  L"",              L"show FPS",                                        toggle_fps_overlay},
     {VK_F5,  L"F5",  L"",              L"switch textures Original / Enhanced",             request_texture_pack_switch},   /* compara com o visual do PSP original */
     {VK_F7,  L"F7",  L"",              L"same as F8",                                      marca_cpu},                     /* atalho antigo, mesma marca geral */
@@ -188,6 +188,7 @@ void display_ask_exit(void);
 void display_ask_reset_text(const wchar_t *text);
 static int g_wheel_pend;       /* entalhes da roda do mouse ainda por entregar ao jogo (+ cima, - baixo) */
 bool display_pc_input(void);
+static bool g_pad_ff;          /* analogico direito empurrado para a direita (read_pad): avanco rapido pelo controle */
 static bool g_pad_connected;   /* ha controle XInput ligado (read_pad atualiza) */
 static bool g_cursor_hidden;   /* cursor do mouse some apos 5 s parado sobre a area do jogo; qualquer movimento traz de volta */
 static LRESULT CALLBACK wndproc(HWND h, UINT m, WPARAM w, LPARAM l) {
@@ -644,7 +645,7 @@ void display_present(void) {
     marcas_processar();   /* F7/F8: caixa de nota (pausa o jogo) e, se confirmada, a marca; a pausa sai das estatisticas do quadro seguinte (g_pausa_ms) */
     static bool ff_off = getenv("TF_NO_LOADING_FF") != nullptr;
     /* fast-forward: the loading screens (automatic) or F4 held with the game window active; both drop the frame limiter and mute the sound */
-    const bool ff_key = GetForegroundWindow() == g_wnd && (GetAsyncKeyState(VK_F4) & 0x8000) != 0 && !(GetAsyncKeyState(VK_MENU) & 0x8000);
+    const bool ff_key = GetForegroundWindow() == g_wnd && (((GetAsyncKeyState(VK_F4) & 0x8000) != 0 && !(GetAsyncKeyState(VK_MENU) & 0x8000)) || g_pad_ff);
     const bool ff_now = (g_loading_run >= 12 && !ff_off) || ff_key;
     audio_out_skip(ff_now);
     /* quadro real pendente do modo 'apresentar antes' (ver abaixo): sai 1/60 s depois do intermediario; no 120 FPS o terceiro intermediario sai
@@ -982,7 +983,7 @@ static uint32_t read_pad(void) {
     if (!get) return 0;
     /* XInputGetState numa porta sem controle e lenta (ate ~1 ms): portas vazias so sao consultadas de novo a cada ~2 s */
     static uint64_t retry[4];
-    uint32_t b = 0; bool achou = false;
+    uint32_t b = 0; bool achou = false, ff_pad = false;
     for (DWORD i = 0; i < 4; i++) {
         if (g_frames < retry[i]) { continue; }
         XState s = {}; if (get(i, &s) != 0) { retry[i] = g_frames + 120; continue; }
@@ -1005,6 +1006,7 @@ static uint32_t read_pad(void) {
         if (x & 0x4000) b |= 0x8000; /* X = quadrado */
         if (x & 0x8000) b |= 0x1000; /* Y = triangulo */
         const int dz = 16000;
+        ff_pad |= s.pad.rx > 20000;
         if (s.pad.ly > dz) b |= 0x10;
         if (s.pad.ly < -dz) b |= 0x40;
         if (s.pad.lx < -dz) b |= 0x80;
@@ -1012,7 +1014,7 @@ static uint32_t read_pad(void) {
         if (s.pad.lt > 100) b |= 0x100;
         if (s.pad.rt > 100) b |= 0x200;
     }
-    g_pad_connected = achou;
+    g_pad_connected = achou; g_pad_ff = ff_pad;
     return b;
 }
 static uint32_t read_keys(void);

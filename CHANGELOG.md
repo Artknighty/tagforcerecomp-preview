@@ -5,7 +5,7 @@ Format: [Keep a Changelog](https://keepachangelog.com/en/1.1.0/). Versioning: [S
 ## [Unreleased]
 
 ### Added
-- Fast-forward: hold F4 to run the game without the frame limiter (sound is muted while held; the loading screens already did this on their own). Off by default; `TF_NO_LOADING_FF` only affects the loading screens.
+- Fast-forward: hold F4 (or push the controller right stick to the right) to run the game without the frame limiter (sound is muted while held; the loading screens already did this on their own). Off by default; `TF_NO_LOADING_FF` only affects the loading screens.
 
 ### Fixed
 - Deck Edit no longer freezes when moving a card from the Deck to the Trunk (a rewritten window helper ignored one of its arguments).
