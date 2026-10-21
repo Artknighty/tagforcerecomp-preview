@@ -165,7 +165,9 @@ static void request_texture_pack_switch(void) { g_pending_pack = true; }
 
 /* As teclas de funcao da janela, TODAS aqui (hotkeys.h): tecla, nome extra para a ajuda, descricao e acao. Para criar uma, basta uma linha. */
 struct Hotkey { int vk; const wchar_t *key, *also, *help; void (*run)(void); };
+static void fast_forward_hold(void) {}   /* F4 is polled in display_present (held, not pressed); the table entry only reserves the key and lists it in the help */
 static const Hotkey kHotkeys[] = {
+    {VK_F4,  L"F4",  L"",              L"hold to fast-forward (no frame limiter, sound muted)", fast_forward_hold},
     {VK_F3,  L"F3",  L"",              L"show FPS",                                        toggle_fps_overlay},
     {VK_F5,  L"F5",  L"",              L"switch textures Original / Enhanced",             request_texture_pack_switch},   /* compara com o visual do PSP original */
     {VK_F7,  L"F7",  L"",              L"same as F8",                                      marca_cpu},                     /* atalho antigo, mesma marca geral */
@@ -641,7 +643,10 @@ void display_present(void) {
     { QueryPerformanceCounter(&g_tail0); g_tail_slept0 = pace_slept_peek_ms(); g_tail_on = true; }   /* inicio da apresentacao deste quadro (tail_end, no fim da chamada) */
     marcas_processar();   /* F7/F8: caixa de nota (pausa o jogo) e, se confirmada, a marca; a pausa sai das estatisticas do quadro seguinte (g_pausa_ms) */
     static bool ff_off = getenv("TF_NO_LOADING_FF") != nullptr;
-    audio_out_skip(g_loading_run >= 12 && !ff_off);
+    /* fast-forward: the loading screens (automatic) or F4 held with the game window active; both drop the frame limiter and mute the sound */
+    const bool ff_key = GetForegroundWindow() == g_wnd && (GetAsyncKeyState(VK_F4) & 0x8000) != 0 && !(GetAsyncKeyState(VK_MENU) & 0x8000);
+    const bool ff_now = (g_loading_run >= 12 && !ff_off) || ff_key;
+    audio_out_skip(ff_now);
     /* quadro real pendente do modo 'apresentar antes' (ver abaixo): sai 1/60 s depois do intermediario; no 120 FPS o terceiro intermediario sai
      * meio passo antes dele (desenhado aqui: a GPU tem a fase inteira para ele). Sem limitador (testes) o terceiro sai na hora. */
     bool real_flushed = false;
@@ -666,7 +671,7 @@ void display_present(void) {
     /* Latencia do 60 FPS: o quadro novo ja esta pronto (o jogo termina em poucos ms) mas era segurado ate o vblank (~13 ms de espera) e o real
      * ainda um vblank depois. Com quadro novo + intermediario, o intermediario sai logo que a "fase" do jogo permite (ultima saida + phi, o tempo de
      * trabalho tipico) e o real 1/60 s depois; a grade de vblanks so avanca. O teclado e lido DEPOIS da espera (antes o jogo via o controle de ~13 ms atras). */
-    const bool pace_on = !no_pace && !(g_loading_run >= 12 && !ff_off);
+    const bool pace_on = !no_pace && !ff_now;
     {   /* sincronia com o monitor (pacing.cpp): taxa do monitor onde a janela esta (a cada ~1 s; ela pode mudar de monitor) */
         static int hz; static uint64_t next;
         if (g_frames >= next) {
@@ -839,7 +844,7 @@ void display_present(void) {
            * e nada foi desenhado nele desde entao (repetir custava um passe de escala 4K e, a ~7 ms da apresentacao anterior, o driver segurava 15-18 ms) */
           const bool same_img = g_real_fb_shown == gfb && g_real_ver_shown == interp_fb_version(gfb) && !ov_new;
           const bool skip_repeat = !interp_has_new(gfb) && (real_flushed || (same_img && pace_on && interp_enabled() && !no_slot));
-          const bool allow = mid_ok && !(g_loading_run >= 12 && !ff_off);
+          const bool allow = mid_ok && !(g_loading_run >= 12 && !ff_off) && !ff_key;
           const int64_t t0 = pace_now();
           bool shown, slot_deferred = false; int64_t q1 = 0;   /* q1: hora em que o (1o) intermediario comecou a ser apresentado; os seguintes e o real contam dela (a duracao de cada
                                          * apresentacao varia 0,2-1,2 ms: contar do fim esticava o quadro e a malha de fase se perdia no 120 FPS) */
