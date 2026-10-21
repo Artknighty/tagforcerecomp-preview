@@ -28,14 +28,8 @@ std::vector<Plugin *> g_plugins;   /* ponteiros estaveis: a API de cada um fica 
 Plugin *g_init;                    /* plugin dentro do tfmod_init (os ganchos ficam em nome dele) */
 Plugin *current(void) { return g_init ? g_init : (Plugin *)g_hook_owner; }   /* para o prefixo do log */
 void api_log(const char *fmt, ...);
-struct Slider { Plugin *p; std::wstring title, unit; int vmin, vmax, def; int (*get)(void); void (*set)(int); int menu; };
-std::vector<Slider> g_sliders;     /* ajustes registrados pelos plugins (menu Mods) */
-void api_add_slider(const wchar_t *title, const wchar_t *unit, int vmin, int vmax, int def, int (*get)(void), void (*set)(int)) {
-    if (!title || !get || !set || vmax <= vmin || g_sliders.size() >= 20) return;
-    Plugin *p = current(); const int menu = p ? p->menu : 0;
-    g_sliders.push_back({p, title, unit ? unit : L"", vmin, vmax, def, get, set, menu});
-    api_log("ajuste no menu %s (%d a %d, valor atual %d)", menu ? "Cheats" : "Mods", vmin, vmax, get());
-}
+/* API v3 add_slider: kept so older plugins still load, but the game window has no menu any more (settings live in the launcher and config.ini) */
+void api_add_slider(const wchar_t *, const wchar_t *, int, int, int, int (*)(void), void (*)(int)) {}
 struct Toggle { Plugin *p; std::wstring title; int vk; int (*get)(void); void (*set)(int); int menu; };
 std::vector<Toggle> g_toggles;     /* liga/desliga registrados pelos plugins (menu Mods com marca; tecla opcional no jogo) */
 void api_add_toggle(const wchar_t *title, int vk, int (*get)(void), void (*set)(int)) {
@@ -122,7 +116,6 @@ void plugins_load(void) {
         g_init = p; const int r = init(&a); g_init = nullptr;
         if (r != 0) {   /* falhou: tira os ganchos e os ajustes que ele tenha posto (as funcoes deles somem com a DLL: o menu chamaria get() de codigo descarregado) */
             hook_remove_owner(p);
-            g_sliders.erase(std::remove_if(g_sliders.begin(), g_sliders.end(), [p](const Slider &s) { return s.p == p; }), g_sliders.end());
             g_toggles.erase(std::remove_if(g_toggles.begin(), g_toggles.end(), [p](const Toggle &t) { return t.p == p; }), g_toggles.end());
             fprintf(stderr, "[mods] %s: tfmod_init devolveu %d (ignorado)\n", m.first.c_str(), r); FreeLibrary(h); delete p; continue;
         }
@@ -131,19 +124,6 @@ void plugins_load(void) {
     }
 }
 
-/* ---- ajustes dos plugins no menu Mods (menu.cpp) ---- */
-int plugin_slider_count(void) { return (int)g_sliders.size(); }
-int plugin_slider_menu(int i) { return i >= 0 && i < (int)g_sliders.size() ? g_sliders[i].menu : 0; }   /* 0 = menu Mods, 1 = menu Cheats */
-/* item do menu: titulo + "..." (abre a janela) e o valor atual a direita */
-std::wstring plugin_slider_title(int i) {   /* o menu mostra o titulo ate o primeiro " (" (a legenda entre parenteses fica so na janela do ajuste) */
-    if (i < 0 || i >= (int)g_sliders.size()) return L"";
-    std::wstring t = g_sliders[i].title; const size_t p = t.find(L" ("); if (p != std::wstring::npos && p > 0) t.resize(p);
-    return t + L"...";
-}
-std::wstring plugin_slider_value(int i) {
-    if (i < 0 || i >= (int)g_sliders.size()) return L"";
-    const Slider &s = g_sliders[i]; wchar_t v[48]; swprintf(v, 48, L"%d%ls", s.get(), s.unit.c_str()); return v;
-}
 /* ---- liga/desliga dos plugins (menu Mods com marca; tecla no jogo) ---- */
 int plugin_toggle_count(void) { return (int)g_toggles.size(); }
 int plugin_toggle_menu(int i) { return i >= 0 && i < (int)g_toggles.size() ? g_toggles[i].menu : 0; }
@@ -163,13 +143,4 @@ void plugin_toggle_flip(int i) {
 int plugin_toggle_by_key(int vk) {   /* tecla apertada no jogo: troca o liga/desliga dela; devolve o indice ou -1 */
     for (int i = 0; i < (int)g_toggles.size(); i++) if (vk && g_toggles[i].vk == vk) { plugin_toggle_flip(i); return i; }
     return -1;
-}
-/* abre a janela do ajuste; true = o jogador confirmou e o plugin recebeu o valor */
-bool plugin_slider_edit(HWND owner, int i) {
-    if (i < 0 || i >= (int)g_sliders.size()) return false;
-    const Slider &s = g_sliders[i]; int v = s.get();
-    const std::wstring title = to_wide(s.p ? s.p->name : std::string()), text = s.title;
-    if (!tf_slider(owner, title.c_str(), text.c_str(), s.unit.c_str(), s.vmin, s.vmax, s.def, &v)) return false;
-    void *prev = g_hook_owner; g_hook_owner = s.p; s.set(v); g_hook_owner = prev;   /* durante o set, o log do plugin leva o nome dele */
-    return true;
 }

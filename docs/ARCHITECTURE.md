@@ -37,7 +37,7 @@ map is in [`STRUCTURE.md`](STRUCTURE.md).
 | `gpu/` | `gpu.cpp`, `gpu_d3d11.cpp`, `gpu_vulkan.cpp`, `shaders/` | Direct3D 11 and Vulkan renderers (resolution scaling, MSAA, real stencil) |
 | `gpu/` | `interp.cpp`, `pacing.cpp` | **60/120 FPS interpolation** and frame pacing |
 | `gpu/` | `texrepl.cpp`, `imgio.cpp`, `bc7.cpp`, `hdfont.cpp`, `pc_text.cpp`, `gfx.cpp`, `raster_pool.cpp`, `capturas.inc` | texture replacement (PNG, BC7), 4x high-resolution font atlas, PC texts, graphics options, rasterizer threads, graphics diagnostic capture |
-| `ui/` | `display.cpp`, `launcher.cpp`, `menu.cpp`, `mouse_ui.cpp`, `text_input.cpp` | window and input, launcher, menu bar, mouse in menus, native text entry |
+| `ui/` | `display.cpp`, `launcher.cpp`, `menu.cpp`, `mouse_ui.cpp`, `text_input.cpp` | window and input, launcher, dark window theme (menu.cpp), mouse in menus, native text entry |
 | `ui/` | `dark_ui.cpp`, `slider_dialog.cpp`, `modbox.cpp` | dark-themed dialogs and the in-game panels for mods |
 | `audio/` | `audio_out.cpp`, `ffmpeg_dec.cpp` | device output with a drift controller; ATRAC and H.264 through FFmpeg (loaded dynamically) |
 | `mods/` | `mods.cpp`, `plugins.cpp`, `hooks.h` | file/texture/movie mods, behavior plugins (`plugins/src/`, API in `plugins/sdk/`) |

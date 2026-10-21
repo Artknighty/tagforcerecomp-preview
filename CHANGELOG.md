@@ -5,7 +5,10 @@ Format: [Keep a Changelog](https://keepachangelog.com/en/1.1.0/). Versioning: [S
 ## [Unreleased]
 
 ### Added
-- Cheats > Fast-forward (game speed 1x to 8x), also in game with L + R + Left / Right. The music is time-stretched, so it speeds up without changing pitch. It always starts at 1x.
+- Fast-forward cheat (game speed 1x to 8x): in game with L + R + Left / Right, or a starting speed on the launcher's Cheats page. The music is time-stretched, so it speeds up without changing pitch.
+
+### Removed
+- The game window's menu bar (File / View / Mods / Cheats / Help): every setting lives in the launcher now. F3, F5, F11, Alt+Enter and the in-game cheat combos still work. Plugin sliders (API v3 `add_slider`) are accepted but no longer shown.
 
 ### Fixed
 - Deck Edit no longer freezes when moving a card from the Deck to the Trunk (a rewritten window helper ignored one of its arguments).

@@ -48,15 +48,12 @@ void display_notify(const char *msg) {
 /* Janela: redimensionavel (imagem mantem a proporcao 480x272, com faixas pretas), barra de menu (menu.cpp), tela cheia
  * sem bordas e sem menu com F11 ou Alt+Enter, Esc sai da tela cheia ou pergunta antes de fechar o jogo. */
 static bool g_fullscreen; static WINDOWPLACEMENT g_wp = {sizeof(WINDOWPLACEMENT)};
-static HMENU g_menu;
 static bool g_show_fps = getenv("FPS_OVERLAY") != nullptr;   /* overlay de fps (F3 / menu Exibir) */
-static void sync_menu(void);
 static void toggle_fullscreen(void) {
     LONG st = GetWindowLongA(g_wnd, GWL_STYLE);
     if (!g_fullscreen) {
         MONITORINFO mi = {sizeof mi};
         if (GetWindowPlacement(g_wnd, &g_wp) && GetMonitorInfoA(MonitorFromWindow(g_wnd, MONITOR_DEFAULTTOPRIMARY), &mi)) {
-            SetMenu(g_wnd, nullptr);
             SetWindowLongA(g_wnd, GWL_STYLE, (st & ~WS_OVERLAPPEDWINDOW) | WS_POPUP);
             SetWindowPos(g_wnd, HWND_TOP, mi.rcMonitor.left, mi.rcMonitor.top, mi.rcMonitor.right - mi.rcMonitor.left,
                          mi.rcMonitor.bottom - mi.rcMonitor.top, SWP_NOOWNERZORDER | SWP_FRAMECHANGED);
@@ -64,13 +61,11 @@ static void toggle_fullscreen(void) {
         }
     } else {
         SetWindowLongA(g_wnd, GWL_STYLE, (st & ~WS_POPUP) | WS_OVERLAPPEDWINDOW);
-        SetMenu(g_wnd, g_menu);
         SetWindowPlacement(g_wnd, &g_wp);
         SetWindowPos(g_wnd, nullptr, 0, 0, 0, 0, SWP_NOMOVE | SWP_NOSIZE | SWP_NOZORDER | SWP_NOOWNERZORDER | SWP_FRAMECHANGED);
         g_fullscreen = false;
     }
     InvalidateRect(g_wnd, nullptr, TRUE);
-    sync_menu();
     if (g_ready) gfx_ini_set_fullscreen(g_fullscreen);   /* lembra o modo para a proxima vez */
 }
 void display_set_fullscreen(bool fs) { if (fs != g_fullscreen) toggle_fullscreen(); }
@@ -84,13 +79,8 @@ static int current_scale(void) {   /* 1..4 se a area do jogo for exatamente 480x
 void display_set_scale(int s) {
     if (g_fullscreen) toggle_fullscreen();
     if (IsZoomed(g_wnd)) ShowWindow(g_wnd, SW_RESTORE);
-    RECT r = {0, 0, 480 * s, 272 * s}; AdjustWindowRect(&r, WS_OVERLAPPEDWINDOW, TRUE);
+    RECT r = {0, 0, 480 * s, 272 * s}; AdjustWindowRect(&r, WS_OVERLAPPEDWINDOW, FALSE);
     SetWindowPos(g_wnd, nullptr, 0, 0, r.right - r.left, r.bottom - r.top, SWP_NOMOVE | SWP_NOZORDER | SWP_NOOWNERZORDER);
-    /* se a barra de menu quebrou em duas linhas (janela estreita), a area encolheu: corrige pela diferenca real */
-    RECT cr; GetClientRect(g_wnd, &cr);
-    int dh = 272 * s - (cr.bottom - cr.top);
-    if (dh) SetWindowPos(g_wnd, nullptr, 0, 0, r.right - r.left, r.bottom - r.top + dh, SWP_NOMOVE | SWP_NOZORDER | SWP_NOOWNERZORDER);
-    sync_menu();
 }
 void display_toggle_fullscreen(void) { toggle_fullscreen(); }
 static std::wstring g_iso_w, g_data_w;   /* ISO atual ou pasta instalada, para reiniciar */
@@ -190,7 +180,6 @@ static bool g_pad_connected;   /* ha controle XInput ligado (read_pad atualiza) 
 static bool g_cursor_hidden;   /* cursor do mouse some apos 5 s parado sobre a area do jogo; qualquer movimento traz de volta */
 static LRESULT CALLBACK wndproc(HWND h, UINT m, WPARAM w, LPARAM l) {
     if (m == WM_SETCURSOR && g_cursor_hidden && LOWORD(l) == HTCLIENT) { SetCursor(nullptr); return TRUE; }
-    { LRESULT dr; if (menu_dark_message(h, m, w, l, &dr)) return dr; }
     if (m == WM_PAINT) { PAINTSTRUCT ps; HDC dc = BeginPaint(h, &ps); paint_frame(dc); EndPaint(h, &ps); return 0; }
     if (m == WM_PRINTCLIENT) { paint_frame((HDC)w); return 0; }
     if (m == WM_CLOSE || m == WM_DESTROY) { quit_process(); }
@@ -201,7 +190,6 @@ static LRESULT CALLBACK wndproc(HWND h, UINT m, WPARAM w, LPARAM l) {
         extern int plugin_toggle_by_key(int vk); extern bool plugin_toggle_on(int i); extern std::wstring plugin_toggle_label(int i);
         const int i = plugin_toggle_by_key((int)w);
         if (i >= 0) {
-            menu_sync_toggles();
             std::wstring t = plugin_toggle_label(i); const size_t tab = t.find(L'\t'); if (tab != std::wstring::npos) t.resize(tab);
             t.erase(std::remove(t.begin(), t.end(), L'&'), t.end());   /* '&' = atalho de teclado no menu, nao vai para o titulo */
             t += plugin_toggle_on(i) ? L": on" : L": off";
@@ -219,13 +207,7 @@ static LRESULT CALLBACK wndproc(HWND h, UINT m, WPARAM w, LPARAM l) {
         if (m == WM_EXITMENULOOP) g_keys_held_after_menu = true;   /* Enter/setas usados no menu nao vao para o jogo */
         return 0;
     }
-    if (m == WM_COMMAND && HIWORD(w) == 0) {   /* itens do menu (as caixas Controles/Sobre tambem pausam o jogo) */
-        g_diag_paused++; g_modal_seen = true;
-        bool done = menu_command(h, LOWORD(w));
-        g_diag_paused--;
-        if (done) return 0;
-    }
-    if (m == WM_SIZE) { sync_menu(); if (g_rwnd) MoveWindow(g_rwnd, 0, 0, LOWORD(l), HIWORD(l), FALSE); }   /* a janela de apresentacao da GPU acompanha a area do jogo */
+    if (m == WM_SIZE) { if (g_rwnd) MoveWindow(g_rwnd, 0, 0, LOWORD(l), HIWORD(l), FALSE); }   /* a janela de apresentacao da GPU acompanha a area do jogo */
     if (m == WM_KEYDOWN && w == VK_ESCAPE) {
         if (g_fullscreen) toggle_fullscreen(); else display_ask_exit();
         return 0;
@@ -281,8 +263,7 @@ void display_init(void) {
     RegisterClassA(&wc);
     gfx_load(); ge_set_res(g_gfx.res);
     menu_dark_init();
-    g_menu = menu_create();
-    RECT r = {0, 0, 960, 544}; AdjustWindowRect(&r, WS_OVERLAPPEDWINDOW, TRUE);
+    RECT r = {0, 0, 960, 544}; AdjustWindowRect(&r, WS_OVERLAPPEDWINDOW, FALSE);
     int x = CW_USEDEFAULT, y = CW_USEDEFAULT, w = r.right - r.left, h = r.bottom - r.top, fs = 0, fps = 0, mx = 0;
     if (const char *tw = getenv("TF_WINDOW")) {   /* vindo de "Reiniciar jogo": mesma janela de antes */
         int a, b, c, d; if (sscanf(tw, "%d,%d,%d,%d,%d,%d,%d", &a, &b, &c, &d, &fs, &fps, &mx) >= 4 && c > 100 && d > 100) { x = a; y = b; w = c; h = d; }
@@ -290,7 +271,7 @@ void display_init(void) {
     }
     g_wnd = CreateWindowExA(getenv("TF_SEGUNDO_PLANO") ? (WS_EX_NOACTIVATE | WS_EX_TOOLWINDOW) : 0,   /* testes automaticos: janela que nunca ganha o foco (antes ela era ativada mesmo escondida e minimizava o jogo que o usuario estivesse jogando) */
                           "TagForceRecomp", win_title(), WS_OVERLAPPEDWINDOW | WS_CLIPCHILDREN,
-                          x, y, w, h, nullptr, g_menu, wc.hInstance, nullptr);
+                          x, y, w, h, nullptr, nullptr, wc.hInstance, nullptr);
     if (!g_wnd) fprintf(stderr, "[display] CreateWindow falhou (erro %lu)\n", GetLastError());
     if (g_wnd) {
         menu_dark_window(g_wnd);
@@ -299,7 +280,6 @@ void display_init(void) {
         if (fps) g_show_fps = true;
         if (!getenv("TF_SEGUNDO_PLANO") &&gfx_ini_fullscreen()) fs = 1;   /* modo salvo (lancador / menu Graphics) */
         if (fs) toggle_fullscreen();
-        sync_menu();
         if (g_gfx.renderer != GFX_RENDER_SOFTWARE) g_gfx.renderer = start_gpu(g_gfx.renderer);   /* renderizador por GPU (padrao); sem GPU cai no software */
     }
     g_ready = g_wnd != nullptr;
@@ -484,9 +464,8 @@ static void draw_fps_overlay(void) {
     for (int y = y0 * n; y < (y0 + h) * n; y++) for (int x = x0 * n; x < (x0 + w) * n; x++) g_ov_buf[y * g_ov_w + x] = (g_ov_buf[y * g_ov_w + x] >> 2) & 0x003f3f3f;   /* fundo escurecido */
     draw_text(x0 + 3, y0 + 3, a, 2); draw_text(x0 + 3, y0 + 19, b, 2);
 }
-static void toggle_fps_overlay(void) { g_show_fps = !g_show_fps; sync_menu(); }
+static void toggle_fps_overlay(void) { g_show_fps = !g_show_fps; }
 void display_toggle_fps(void) { toggle_fps_overlay(); }
-static void sync_menu(void) { menu_sync(g_fullscreen, g_show_fps, current_scale()); }
 void audio_out_skip(bool on);
 void audio_out_speed(int n);
 static volatile int g_speed = 1;   /* fast-forward (Cheats menu): the game runs g_speed times faster; 1 = normal */

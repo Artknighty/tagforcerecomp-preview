@@ -17,7 +17,7 @@
  *      gain x (N-1) with player_dp_add (0883d938, respects the cap) and multiplies the 4 parts of the context (09a151a4: +08..+14) that the
  *      result screen draws; the detail screens draw with number_draw_decimal (08f0d7f4), multiplied only on the DP rows (by the return address).
  *   3. Fast-forward (1x to 8x; API 6 set_speed): the game runs faster, the music is time-stretched in the runtime (same pitch). Set it in the Cheats menu
- *      or, in game, by holding L + R and pressing LEFT / RIGHT. It always starts at 1x (it is not saved, so a forgotten setting never surprises).
+ *      or, in game, by holding L + R and pressing LEFT / RIGHT. It starts at 1x unless the launcher's Cheats page sets a starting speed (fast_forward= in config.ini); changes made in game are not saved.
  *   4. Unlock everything (Cheats menu, one-shot): edits the save the game keeps in RAM (BOOT save_estado 0883d698, the same 0xFCA8-byte block
  *      the game writes to DATA0 on its next save). It adds every card to the collection (3 copies, marked as seen), makes every card pack
  *      available in the shop and gives every duelist all of his real decks in the Free Duel opponent list. Nothing else (story progress, DP,
@@ -60,11 +60,12 @@ static int g_canto = 1;      /*    panel corner: 0 top left, 1 top right, 2 bott
 static int g_mult = 1;       /* 2. DP multiplier */
 static int g_unlock_auto = 0; /* 3. unlock everything by itself once per start, when the save is loaded (set in the launcher) */
 static const int MULT_MAX = 10;
-static int g_speed = 1;      /* 3. fast-forward (not saved) */
+static int g_speed = 1;      /* 3. fast-forward: current speed; the starting speed (g_speed_start) comes from the launcher (fast_forward=) and in-game changes are not saved */
+static int g_speed_start = 1;
 static const int SPEED_MAX = 8;
 static std::wstring cfg_path(void) { return std::wstring(A->mod_dir) + L"\\config.ini"; }
 static void cfg_save(void) {
-    if (FILE *f = _wfopen(cfg_path().c_str(), L"w")) { fprintf(f, "show_opponent_cards=%d\npanel_corner=%d\ndp_multiplier=%d\nunlock_on_start=%d\n", g_ver, g_canto, g_mult, g_unlock_auto); fclose(f); }
+    if (FILE *f = _wfopen(cfg_path().c_str(), L"w")) { fprintf(f, "show_opponent_cards=%d\npanel_corner=%d\ndp_multiplier=%d\nunlock_on_start=%d\nfast_forward=%d\n", g_ver, g_canto, g_mult, g_unlock_auto, g_speed_start); fclose(f); }
 }
 static void cfg_load(void) {
     bool tem_mult = false;
@@ -74,6 +75,7 @@ static void cfg_load(void) {
             /* (the old Portuguese key names are still read, so existing config files keep working) */
             if (sscanf(l, "show_opponent_cards=%d", &v) == 1 || sscanf(l, "ver_cartas_adversario=%d", &v) == 1) g_ver = v != 0;
             else if (sscanf(l, "unlock_on_start=%d", &v) == 1) g_unlock_auto = v != 0;
+            else if (sscanf(l, "fast_forward=%d", &v) == 1) g_speed_start = std::max(1, std::min(SPEED_MAX, v));
             else if (sscanf(l, "panel_corner=%d", &v) == 1 || sscanf(l, "canto_painel=%d", &v) == 1) g_canto = std::max(0, std::min(3, v));
             else if (sscanf(l, "dp_multiplier=%d", &v) == 1 || sscanf(l, "multiplicador_dp=%d", &v) == 1) { g_mult = std::max(1, std::min(MULT_MAX, v)); tem_mult = true; }
         }
@@ -314,6 +316,7 @@ extern "C" __declspec(dllexport) int tfmod_init(const TfModApi *api) {
     A->add_slider(L"&DP multiplier in duels", L"x", 1, MULT_MAX, 1, mult_get, mult_set);
     A->add_slider(L"&Fast-forward (game speed)", L"x", 1, SPEED_MAX, 1, speed_get, speed_set);
     A->add_toggle(L"&Unlock everything (cards, packs, duelists)", VK_F2, unlock_get, unlock_set);
+    g_speed = g_speed_start; if (g_speed > 1) A->set_speed(g_speed);
     A->hook(F_QUADRO, hk_quadro);
     A->hook(F_RECOMPENSA, hk_recompensa);
     A->hook(F_NUMERO, hk_numero);

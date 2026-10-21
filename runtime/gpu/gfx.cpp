@@ -149,7 +149,6 @@ void mods_set_enabled(int i, bool on);
 void texrepl_reload(void);
 bool mods_enabled(int i);
 bool mods_enabled_has_file(const char *relative);
-void menu_gfx_refresh(void);   /* menu.cpp: the checkmarks of the window's Graphics menu */
 
 namespace {
 struct OptionInfo { const char *label; const char *help; int count; const char *names[6]; const int *values; };   /* values: what each choice stores (null = the index itself) */
@@ -239,5 +238,4 @@ void gfx_option_set(int option, int choice) {
     case GFXOPT_FILTER: g_gfx.filter = value; gfx_save(); break;
     case GFXOPT_ASPECT: g_gfx.aspect = value; gfx_save(); break;
     }
-    menu_gfx_refresh();
 }

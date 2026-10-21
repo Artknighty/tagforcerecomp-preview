@@ -76,7 +76,7 @@ kept in `gen/jitcache/`) and loaded in memory each time the game starts.
 F = □; R = △; Q / Tab = L / R; Enter = START; Ctrl = SELECT; Shift = run; mouse wheel = up/down. The classic layout (arrows, Z = ✕,
 X = ○, A = □, S = △, Q/W = L/R, Shift = SELECT) is used when **View > PC keyboard and mouse** is off. XInput controllers work too.
 F11 / Alt+Enter: fullscreen · F3: FPS · F5: textures Original / Enhanced · F9: graphics diagnostic capture on/off · F8 (or F7): report a problem (asks for a note, then saves full-size screenshots, the last ~1.5 s of frames and the duel state; Esc or an empty note discards it) · controller quick marks (no note): L3 = graphics glitch, R3 = performance, Start + Select = audio (saves the last 8 s as a WAV) ·
-Esc: leave fullscreen / asks before closing. The **Help > Controls** menu lists all of this in the game.
+Esc: leave fullscreen / asks before closing. The launcher's **Game** page lists the options; the window has no menu bar.
 
 Saves live in `ms0/` next to the executable. Each run writes a log, the key presses and a copy of the save to `logs/`; any session can be
 replayed with `tools/test/replay.sh` (developers). `tools/test/tf.py` plays the game by itself (buttons, screenshots, memory peek) for automated tests.

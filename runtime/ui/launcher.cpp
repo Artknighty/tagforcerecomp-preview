@@ -74,20 +74,22 @@ static void mods_reload() { g_modlist.clear(); for (auto &e : mods_list_dir(mods
 static bool file_exists(const std::wstring &p); static bool dir_exists(const std::wstring &p);
 /* pagina Cheats: mods/Cheats/config.ini (o plugin le ao iniciar) + o interruptor do proprio mod (arquivo disabled) */
 struct CheatOpt { const wchar_t *label, *hint; int count; const wchar_t *const *names; };
+static const int N_CHEAT = 6;
 static const wchar_t *const kOnOff[2] = {L"Off", L"On"}, *const kCorner[4] = {L"Top left", L"Top right", L"Bottom left", L"Bottom right"},
     *const kMult[10] = {L"x1 (normal)", L"x2", L"x3", L"x4", L"x5", L"x6", L"x7", L"x8", L"x9", L"x10"};
-static const CheatOpt kCheat[5] = {
+static const CheatOpt kCheat[N_CHEAT] = {
     {L"Cheats", L"Master switch. Off: none of the cheats below is loaded.", 2, kOnOff},
     {L"See the opponent's cards", L"Shows the opponent's hand and field in a panel during duels (F6 in game).", 2, kOnOff},
     {L"Card panel position", L"Corner of the screen where that panel is drawn.", 4, kCorner},
     {L"DP multiplier", L"Multiplies the DP you win in duels.", 10, kMult},
     {L"Unlock everything", L"Unlocks all cards, packs and duelists each time the game loads your save. In game, F2 does it once.", 2, kOnOff},
+    {L"Fast-forward", L"Game speed when the game starts (the music keeps its pitch). In game: Cheats menu, or L + R + Left / Right.", 8, kMult},
 };
-static HWND g_csel[5]; static int g_cc[5] = {1, 0, 1, 0, 0};
+static HWND g_csel[N_CHEAT]; static int g_cc[N_CHEAT] = {1, 0, 1, 0, 0, 0};
 static std::wstring cheat_dir() { return exe_dir() + L"mods/Cheats"; }
 static std::wstring cheat_ini() { return cheat_dir() + L"/config.ini"; }
 static void cheat_load() {
-    g_cc[0] = dir_exists(cheat_dir()) && !file_exists(cheat_dir() + L"/disabled") ? 1 : 0; g_cc[1] = 0; g_cc[2] = 1; g_cc[3] = 0; g_cc[4] = 0;
+    g_cc[0] = dir_exists(cheat_dir()) && !file_exists(cheat_dir() + L"/disabled") ? 1 : 0; g_cc[1] = 0; g_cc[2] = 1; g_cc[3] = 0; g_cc[4] = 0; g_cc[5] = 0;
     if (FILE *f = _wfopen(cheat_ini().c_str(), L"r")) {
         char l[96]; int v;
         while (fgets(l, sizeof l, f)) {
@@ -95,6 +97,7 @@ static void cheat_load() {
             else if (sscanf(l, "unlock_on_start=%d", &v) == 1) g_cc[4] = v != 0;
             else if (sscanf(l, "panel_corner=%d", &v) == 1) g_cc[2] = std::max(0, std::min(3, v));
             else if (sscanf(l, "dp_multiplier=%d", &v) == 1) g_cc[3] = std::max(1, std::min(10, v)) - 1;
+            else if (sscanf(l, "fast_forward=%d", &v) == 1) g_cc[5] = std::max(1, std::min(8, v)) - 1;
         }
         fclose(f);
     }
@@ -102,9 +105,9 @@ static void cheat_load() {
 static void cheat_save() {
     const std::wstring marker = cheat_dir() + L"/disabled";
     if (g_cc[0]) DeleteFileW(marker.c_str()); else if (dir_exists(cheat_dir())) { if (HANDLE h = CreateFileW(marker.c_str(), GENERIC_WRITE, 0, nullptr, CREATE_ALWAYS, FILE_ATTRIBUTE_NORMAL, nullptr)) CloseHandle(h); }
-    if (FILE *f = _wfopen(cheat_ini().c_str(), L"w")) { fprintf(f, "show_opponent_cards=%d\npanel_corner=%d\ndp_multiplier=%d\nunlock_on_start=%d\n", g_cc[1], g_cc[2], g_cc[3] + 1, g_cc[4]); fclose(f); }
+    if (FILE *f = _wfopen(cheat_ini().c_str(), L"w")) { fprintf(f, "show_opponent_cards=%d\npanel_corner=%d\ndp_multiplier=%d\nunlock_on_start=%d\nfast_forward=%d\n", g_cc[1], g_cc[2], g_cc[3] + 1, g_cc[4], g_cc[5] + 1); fclose(f); }
 }
-static void cheat_text() { for (int i = 0; i < 5; i++) { SetWindowTextW(g_csel[i], kCheat[i].names[g_cc[i]]); InvalidateRect(g_csel[i], nullptr, FALSE); } }
+static void cheat_text() { for (int i = 0; i < N_CHEAT; i++) { SetWindowTextW(g_csel[i], kCheat[i].names[g_cc[i]]); InvalidateRect(g_csel[i], nullptr, FALSE); } }
 static void cheat_step(int i, int dir) { if (!dir_exists(cheat_dir())) return; g_cc[i] = (g_cc[i] + dir + kCheat[i].count) % kCheat[i].count; cheat_save(); cheat_text(); }
 static int S(int v) { return MulDiv(v, g_dpi, 96); }
 /* medidas em 96 dpi */
@@ -166,13 +169,13 @@ static void stop_game() {
     EnumWindows(close_game_window, (LPARAM)GetProcessId(g_proc));
     if (WaitForSingleObject(g_proc, 4000) == WAIT_TIMEOUT) TerminateProcess(g_proc, 0);
 }
-static bool is_sel(int id) { return (id >= ID_COPT0 && id < ID_COPT0 + 5) ||  (id >= ID_OPT0 && id < ID_OPT0 + N_OPT) || (id >= ID_QOPT0 && id < ID_QOPT0 + NQ); }
+static bool is_sel(int id) { return (id >= ID_COPT0 && id < ID_COPT0 + N_CHEAT) ||  (id >= ID_OPT0 && id < ID_OPT0 + N_OPT) || (id >= ID_QOPT0 && id < ID_QOPT0 + NQ); }
 static int sel_option(int id) { return id >= ID_QOPT0 ? kQuick[id - ID_QOPT0] : id - ID_OPT0; }
 
 /* which controls each page shows */
 static void apply_page() {
     for (int i = 0; i < N_OPT; i++) ShowWindow(g_sel[i], g_page == PG_GRAPHICS ? SW_SHOW : SW_HIDE);
-    for (int i = 0; i < 5; i++) ShowWindow(g_csel[i], g_page == PG_CHEATS ? SW_SHOW : SW_HIDE);
+    for (int i = 0; i < N_CHEAT; i++) ShowWindow(g_csel[i], g_page == PG_CHEATS ? SW_SHOW : SW_HIDE);
     for (int k = 0; k < NQ; k++) ShowWindow(g_qsel[k], g_page == PG_PLAY ? SW_SHOW : SW_HIDE);
     ShowWindow(g_bpick, g_page == PG_GAME ? SW_SHOW : SW_HIDE);
     ShowWindow(g_bmoddir, g_page == PG_MODS ? SW_SHOW : SW_HIDE);
@@ -181,7 +184,7 @@ static void apply_page() {
 static void refresh() {
     bool busy = g_installing, run = game_running();
     EnableWindow(g_play, !busy && !run && (g_installed || iso_ok())); EnableWindow(g_bpick, !busy && !run);
-    EnableWindow(g_bstop, run); for (int i = 0; i < 5; i++) EnableWindow(g_csel[i], !run && dir_exists(cheat_dir()));
+    EnableWindow(g_bstop, run); for (int i = 0; i < N_CHEAT; i++) EnableWindow(g_csel[i], !run && dir_exists(cheat_dir()));
     for (int i = 0; i < N_OPT; i++) EnableWindow(g_sel[i], !run); for (int k = 0; k < NQ; k++) EnableWindow(g_qsel[k], !run);
     SetWindowTextW(g_play, run ? L"PLAYING..." : g_installed ? L"PLAY" : L"INSTALL AND PLAY"); SetWindowTextW(g_bpick, g_installed ? L"Reinstall from ISO..." : L"Select ISO...");
     apply_page();
@@ -462,7 +465,7 @@ static void paint(HWND h) {
     } else if (g_page == PG_CHEATS) {
         text(dc, g_fHead, C_TXT, RECT{cx, S(22), cx + cw, S(58)}, L"Cheats");
         text(dc, g_fSub, C_DIM, RECT{cx, S(58), cx + cw, S(80)}, dir_exists(cheat_dir()) ? L"For fun and testing. Saved in mods/Cheats/config.ini; changes apply on the next start." : L"The Cheats mod is not installed (mods/Cheats folder missing).");
-        for (int i = 0; i < 5; i++) {
+        for (int i = 0; i < N_CHEAT; i++) {
             int y = S(100) + i * S(56);
             text(dc, g_fText, C_TXT, RECT{cx, y, cx + cw - S(300), y + S(24)}, kCheat[i].label);
             text(dc, g_fSmall, C_DIM, RECT{cx, y + S(24), cx + cw - S(290), y + S(44)}, kCheat[i].hint, DT_LEFT | DT_SINGLELINE | DT_VCENTER | DT_END_ELLIPSIS);
@@ -481,7 +484,6 @@ static void paint(HWND h) {
 }
 static void open_folder(const std::wstring &p) { CreateDirectoryW(p.c_str(), nullptr); ShellExecuteW(nullptr, L"open", p.c_str(), nullptr, nullptr, SW_SHOWNORMAL); }
 static LRESULT CALLBACK proc(HWND h, UINT m, WPARAM w, LPARAM l) {
-    LRESULT dr; if (menu_dark_message(h, m, w, l, &dr)) return dr;   /* (sem barra de menu aqui; a funcao so trata mensagens da barra) */
     switch (m) {
     case WM_COMMAND:
         if (g_installing && LOWORD(w) != ID_QUIT && LOWORD(w) != ID_LOGS && LOWORD(w) != ID_SAVES) return 0;
@@ -499,7 +501,7 @@ static LRESULT CALLBACK proc(HWND h, UINT m, WPARAM w, LPARAM l) {
         case ID_SAVES: open_folder(exe_dir() + L"ms0"); return 0;
         case ID_MODDIR: mods_open_folder(); return 0;
         default:
-            if (LOWORD(w) >= ID_COPT0 && LOWORD(w) < ID_COPT0 + 5) {
+            if (LOWORD(w) >= ID_COPT0 && LOWORD(w) < ID_COPT0 + N_CHEAT) {
                 if (!game_running()) { HWND b = (HWND)l; POINT pt; GetCursorPos(&pt); RECT wr; GetWindowRect(b, &wr); cheat_step(LOWORD(w) - ID_COPT0, PtInRect(&wr, pt) && pt.x < wr.left + (wr.right - wr.left) / 3 ? -1 : 1); }
                 return 0;
             }
@@ -536,7 +538,7 @@ static LRESULT CALLBACK proc(HWND h, UINT m, WPARAM w, LPARAM l) {
     case WM_TIMER:
         if (w == TIMER_UI) {
             { static bool was[24 + N_OPT]; static POINT lastp; int i = 0; POINT cp; GetCursorPos(&cp); bool moved = cp.x != lastp.x || cp.y != lastp.y; lastp = cp;   /* hover dos botoes: so redesenha quando muda */
-              std::vector<HWND> bs = {g_bpick, g_play, g_bstop, g_blogs, g_bsaves, g_bmoddir}; bs.insert(bs.end(), g_qsel, g_qsel + NQ); bs.insert(bs.end(), g_sel, g_sel + N_OPT); bs.insert(bs.end(), g_csel, g_csel + 5);
+              std::vector<HWND> bs = {g_bpick, g_play, g_bstop, g_blogs, g_bsaves, g_bmoddir}; bs.insert(bs.end(), g_qsel, g_qsel + NQ); bs.insert(bs.end(), g_sel, g_sel + N_OPT); bs.insert(bs.end(), g_csel, g_csel + N_CHEAT);
               for (HWND b : bs) { bool hot = is_hot(b); if (hot != was[i] || (hot && moved && i >= 7)) { was[i] = hot; InvalidateRect(b, nullptr, FALSE); } i++; } }
             { static bool wasrun; bool run = game_running(); if (run != wasrun) { wasrun = run; refresh(); } }
             if (g_installing) { RECT bar; GetClientRect(h, &bar); InvalidateRect(h, &bar, FALSE); }
@@ -595,7 +597,7 @@ std::string launcher_pick_iso(std::wstring *data) {
     { int colw = (cw - S(40)) * 11 / 20, rx = cx + colw + S(40), w = cx + cw - rx;   /* pagina Play: seletores rapidos na coluna direita */
       for (int k = 0; k < NQ; k++) g_qsel[k] = btn(kOpts[kQuick[k]].names[g_cur[kQuick[k]]], ID_QOPT0 + k, rx, S(220) + S(26) + S(30) + S(24) + k * S(68), w, S(36)); }
     cheat_load();
-    for (int i = 0; i < 5; i++) g_csel[i] = btn(kCheat[i].names[g_cc[i]], ID_COPT0 + i, cx + cw - S(270), S(100) + i * S(56) + S(4), S(270), S(34));
+    for (int i = 0; i < N_CHEAT; i++) g_csel[i] = btn(kCheat[i].names[g_cc[i]], ID_COPT0 + i, cx + cw - S(270), S(100) + i * S(56) + S(4), S(270), S(34));
     g_bpick = btn(L"Select ISO...", ID_PICK, cx, S(220), S(200), S(40));
     g_blogs = btn(L"Open logs folder", ID_LOGS, cx, S(326), S(200), S(40));
     g_bsaves = btn(L"Open saves folder", ID_SAVES, cx + S(212), S(326), S(200), S(40));

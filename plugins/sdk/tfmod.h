@@ -62,7 +62,8 @@ typedef struct TfModApi {
     uint32_t (*guest_alloc)(uint32_t n);
 
     /* ---- version 3 ---- */
-    /* A setting the player changes in the window's Mods menu (before or during play): an item "<title>..." that opens a dark window with an
+    /* (Since the window menu bar was removed this is accepted but not shown; keep settings in config.ini and the launcher.)
+     * A setting the player changes in the window's Mods menu (before or during play): an item "<title>..." that opens a dark window with an
      * integer slider from min to max (suffix `unit`, e.g. L"x"). Register in tfmod_init. The runtime reads the current value with get()
      * when the window opens (the plugin may change it by other means) and calls set(new) when the player confirms (OK), on the game
      * thread, with the game paused. `def` is the value of the "Default" button. Storing the value in a file is up to the plugin

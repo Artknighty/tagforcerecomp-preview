@@ -35,6 +35,3 @@ int tf_msgbox(HWND owner, const wchar_t *text, const wchar_t *title, UINT flags)
  * usam o grande (32 px x escala real do monitor), a barra de titulo o pequeno (16 px x DPI da propria janela). */
 void set_app_icon(HWND h);
 
-/* Janela escura modal com controle deslizante inteiro de vmin a vmax (slider_dialog.cpp): arrastar com o mouse, setas, Home/End, PgUp/PgDn, roda.
- * Botoes Padrao (volta a def), Cancelar e OK. unit = sufixo mostrado (x, % ...). Devolve true se OK (e grava em *value). */
-bool tf_slider(HWND owner, const wchar_t *title, const wchar_t *text, const wchar_t *unit, int vmin, int vmax, int def, int *value);
