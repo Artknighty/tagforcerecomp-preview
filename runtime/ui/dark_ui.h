@@ -31,6 +31,10 @@ void draw_button(const DRAWITEMSTRUCT *d, bool primary, HFONT font, int scale = 
  * mesmos retornos (IDOK, IDCANCEL, IDYES, IDNO). Enter/Espaco = botao com foco, Esc = Nao/Cancelar, setas/Tab trocam. */
 int tf_msgbox(HWND owner, const wchar_t *text, const wchar_t *title, UINT flags);
 
+/* Icone do programa (recurso 1, runtime/app.ico) na janela, no tamanho exato da escala da tela: a barra de tarefas e o Alt+Tab
+ * usam o grande (32 px x escala real do monitor), a barra de titulo o pequeno (16 px x DPI da propria janela). */
+void set_app_icon(HWND h);
+
 /* Janela escura modal com controle deslizante inteiro de vmin a vmax (slider_dialog.cpp): arrastar com o mouse, setas, Home/End, PgUp/PgDn, roda.
  * Botoes Padrao (volta a def), Cancelar e OK. unit = sufixo mostrado (x, % ...). Devolve true se OK (e grava em *value). */
 bool tf_slider(HWND owner, const wchar_t *title, const wchar_t *text, const wchar_t *unit, int vmin, int vmax, int def, int *value);

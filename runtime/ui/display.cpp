@@ -294,6 +294,7 @@ void display_init(void) {
     if (!g_wnd) fprintf(stderr, "[display] CreateWindow falhou (erro %lu)\n", GetLastError());
     if (g_wnd) {
         menu_dark_window(g_wnd);
+        set_app_icon(g_wnd);
         ShowWindow(g_wnd, getenv("TF_SEGUNDO_PLANO") ? SW_HIDE : mx ? SW_SHOWMAXIMIZED : SW_SHOW);   /* testes automaticos: janela escondida, sem roubar o foco (capturas vem do framebuffer) */
         if (fps) g_show_fps = true;
         if (!getenv("TF_SEGUNDO_PLANO") &&gfx_ini_fullscreen()) fs = 1;   /* modo salvo (lancador / menu Graphics) */

@@ -584,6 +584,7 @@ std::string launcher_pick_iso(std::wstring *data) {
     int ww = r.right - r.left, wh = r.bottom - r.top;
     g_wnd = CreateWindowW(L"TagForceLauncher", L"Tag Force Recomp", st, (GetSystemMetrics(SM_CXSCREEN) - ww) / 2, (GetSystemMetrics(SM_CYSCREEN) - wh) / 2, ww, wh, nullptr, nullptr, hi, nullptr);
     menu_dark_window(g_wnd);
+    set_app_icon(g_wnd);
     g_fHero = make_font(34, FW_SEMIBOLD); g_fHead = make_font(26, FW_SEMIBOLD); g_fTitle = make_font(26, FW_SEMIBOLD); g_fSub = make_font(13, FW_NORMAL); g_fText = make_font(15, FW_NORMAL);
     g_fSmall = make_font(12, FW_SEMIBOLD); g_fBtn = make_font(15, FW_SEMIBOLD); g_fPlay = make_font(19, FW_BOLD);
     RECT cr; GetClientRect(g_wnd, &cr); int cx = S(SIDE96) + S(28), cw = cr.right - S(28) - cx;

@@ -125,6 +125,25 @@ LRESULT CALLBACK box_proc(HWND h, UINT m, WPARAM w, LPARAM l) {
 }
 }  // namespace
 
+void set_app_icon(HWND h) {
+    if (!h) return;
+    typedef HANDLE (WINAPI *SetCtx)(HANDLE);
+    typedef UINT (WINAPI *GetDpi)(HWND);
+    HMODULE u32 = GetModuleHandleW(L"user32.dll");
+    static SetCtx setctx = (SetCtx)(void *)GetProcAddress(u32, "SetThreadDpiAwarenessContext");
+    static GetDpi gd = (GetDpi)(void *)GetProcAddress(u32, "GetDpiForWindow");
+    HANDLE oldctx = setctx ? setctx((HANDLE)-4) : nullptr;   /* PER_MONITOR_AWARE_V2: DPI real da tela, mesmo com o processo nao DPI-aware */
+    int real = 96; { HDC sdc = GetDC(nullptr); real = GetDeviceCaps(sdc, LOGPIXELSX); ReleaseDC(nullptr, sdc); }
+    if (setctx) setctx(oldctx);
+    int own = gd ? (int)gd(h) : 96;   /* 96 na janela do jogo (nao DPI-aware: o Windows estica a barra de titulo) */
+    if (real < 96) real = 96; if (own < 96) own = 96;
+    HINSTANCE hi = GetModuleHandleW(nullptr);
+    HICON big = (HICON)LoadImageW(hi, MAKEINTRESOURCEW(1), IMAGE_ICON, MulDiv(32, real, 96), MulDiv(32, real, 96), 0);
+    HICON sm = (HICON)LoadImageW(hi, MAKEINTRESOURCEW(1), IMAGE_ICON, MulDiv(16, own, 96), MulDiv(16, own, 96), 0);
+    if (big) SendMessageW(h, WM_SETICON, ICON_BIG, (LPARAM)big);   /* (ficam vivos ate o fim do processo: uma janela de cada) */
+    if (sm) SendMessageW(h, WM_SETICON, ICON_SMALL, (LPARAM)sm);
+}
+
 int tf_msgbox(HWND owner, const wchar_t *text, const wchar_t *title, UINT flags) {
     /* DPI proprio da caixa (o processo nao e DPI-aware: sem isso o texto sai borrado em telas com escala) */
     typedef HANDLE (WINAPI *SetCtx)(HANDLE);
