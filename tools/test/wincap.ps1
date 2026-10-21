@@ -2,7 +2,7 @@
 # Uso: powershell -ExecutionPolicy Bypass -File tools/test/wincap.ps1 [largura] [altura] [segundos] [f11]
 param([int]$W = 1300, [int]$H = 560, [int]$Wait = 12, [string]$Mode = "")
 $env:TF_KEEP_CWD = "1"; $env:NO_AUDIO = "1"
-Set-Location (Split-Path $PSScriptRoot -Parent)
+Set-Location (Split-Path (Split-Path $PSScriptRoot -Parent) -Parent)   # repository root
 $env:TF_LOG_DIR = Join-Path (Get-Location) "gen\logs_teste"   # log fora de gen/logs (so sessoes do usuario)
 $env:TF_INI = Join-Path $env:TF_LOG_DIR "teste.ini"; New-Item -ItemType Directory -Force $env:TF_LOG_DIR | Out-Null   # nunca grava no .ini of the player (a troca de renderizador pelo menu salva no .ini)
 Add-Type @"
@@ -17,8 +17,8 @@ public class WinCap {
 }
 "@
 Add-Type -AssemblyName System.Drawing
-$iso = $env:TF_ISO   # path of your Tag Force ISO
-$p = Start-Process -FilePath ".\gen\run.exe" -ArgumentList ("--iso `"" + $iso + "`"") -PassThru
+$data = Join-Path (Get-Location) "gen\pkg\TagForceRecomp\jogo"   # installed game data (sh tools/install_dev.sh)
+$p = Start-Process -FilePath ".\gen\pkg\TagForceRecomp\TagForceRecomp_bg.exe" -ArgumentList ("--dados `"" + $data + "`"") -PassThru
 Start-Sleep -Seconds $Wait
 $h = [WinCap]::FindWindow("TagForceRecomp", $null)
 if ($h -eq [IntPtr]::Zero) { $p.Refresh(); $h = $p.MainWindowHandle }

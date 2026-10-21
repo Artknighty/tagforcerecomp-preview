@@ -37,7 +37,7 @@ static LONG WINAPI crash_handler(EXCEPTION_POINTERS *ep) {
     uint8_t *fa = (uint8_t *)ep->ExceptionRecord->ExceptionInformation[1];
     fprintf(stderr, "\n[CRASH] excecao 0x%08lx, acesso em %p (end PSP 0x%08llx)\n", ep->ExceptionRecord->ExceptionCode,
             (void *)fa, (unsigned long long)(fa - g_mem));
-    fprintf(stderr, "RIP nativo = exe+0x%llx (addr2line -f -e gen/run.exe 0x%llx)\n",
+    fprintf(stderr, "RIP nativo = exe+0x%llx (addr2line -f -e TagForceRecomp.exe 0x%llx)\n",
             (unsigned long long)(ep->ContextRecord->Rip - (DWORD64)GetModuleHandleA(nullptr)), (unsigned long long)ep->ContextRecord->Rip);
     fprintf(stderr, "ultimas funcoes recompiladas:");
     for (uint32_t i = 0; i < 24; i++) fprintf(stderr, " %08x", g_trace[(g_trace_i - 24 + i) & 1023]);

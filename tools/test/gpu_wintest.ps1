@@ -1,8 +1,8 @@
 # Teste de janela do renderizador por GPU: troca software <-> GPU pelo menu (WM_COMMAND), redimensiona, tela cheia, overlay F3.
 # Grava gen/wt_<n>.png (captura da area do jogo na TELA: PrintWindow nao pega swapchain DXGI). Uso: powershell -File tools/test/gpu_wintest.ps1 [exe]
-param([string]$Exe = ".\gen\run.exe", [int]$Wait = 20)
+param([string]$Exe = ".\gen\pkg\TagForceRecomp\TagForceRecomp_bg.exe", [int]$Wait = 20)
 $env:TF_KEEP_CWD = "1"; $env:NO_AUDIO = "1"; $env:TF_NO_MOVIES = "1"; $env:TF_RES = "2"; $env:TF_GPU = "0"
-Set-Location (Split-Path $PSScriptRoot -Parent)
+Set-Location (Split-Path (Split-Path $PSScriptRoot -Parent) -Parent)   # repository root
 $env:TF_LOG_DIR = Join-Path (Get-Location) "gen\logs_teste"   # log fora de gen/logs (so sessoes do usuario)
 $env:TF_INI = Join-Path $env:TF_LOG_DIR "teste.ini"; New-Item -ItemType Directory -Force $env:TF_LOG_DIR | Out-Null   # nunca grava no .ini of the player (a troca de renderizador pelo menu salva no .ini)
 Add-Type @"
@@ -19,8 +19,8 @@ public class WT {
 }
 "@
 Add-Type -AssemblyName System.Drawing
-$iso = $env:TF_ISO   # path of your Tag Force ISO
-$p = Start-Process -FilePath $Exe -ArgumentList ("--iso `"" + $iso + "`"") -PassThru
+$data = Join-Path (Get-Location) "gen\pkg\TagForceRecomp\jogo"   # installed game data (sh tools/install_dev.sh)
+$p = Start-Process -FilePath $Exe -ArgumentList ("--dados `"" + $data + "`"") -PassThru
 Start-Sleep -Seconds $Wait
 $h = [WT]::FindWindow("TagForceRecomp", $null)
 if ($h -eq [IntPtr]::Zero) { $p.Refresh(); $h = $p.MainWindowHandle }

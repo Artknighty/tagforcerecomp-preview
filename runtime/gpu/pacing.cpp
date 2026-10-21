@@ -262,8 +262,9 @@ static bool quarter_ok(double typ);
 int64_t pace_mid_target(int64_t call_entry, bool want_quarter, bool *quarter) {
     init();
     g_work[g_work_i++ & 15] = pace_ms(call_entry - g_exit_qpc);   /* quanto o jogo levou para terminar o quadro */
-    double s[16]; std::copy(g_work, g_work + 16, s); std::nth_element(s, s + 12, s + 16);   /* percentil ~75: um pico isolado nao atrasa todos os quadros */
-    g_phi_ms = std::min(10.0, std::max(1.0, s[12] + 0.5));
+    /* percentil ~75: um pico isolado nao atrasa todos os quadros (only the samples taken so far: the empty slots used to pull it to 0 at start) */
+    double s[16]; const int n = std::min(g_work_i, 16); std::copy(g_work, g_work + n, s); std::nth_element(s, s + n * 3 / 4, s + n);
+    g_phi_ms = std::min(10.0, std::max(1.0, s[n * 3 / 4] + 0.5));
     /* o real sai 1 passo depois do intermediario, no inicio da chamada seguinte; essa chamada so chega depois do trabalho que o jogo faz entre os
      * dois vblanks (w2, ~5 ms em telas do jogo). Com o intermediario saindo antes de w2, o real atrasava: M->R ~21 ms e R->M ~12 ms (caixa-preta do
      * F8), e no monitor de 120 Hz as imagens ficavam 1 e 3 atualizacoes. Soltar o intermediario so depois de w2 deixa os dois a 1/60 s; o quadro real

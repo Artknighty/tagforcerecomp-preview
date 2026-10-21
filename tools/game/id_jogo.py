@@ -1,6 +1,6 @@
-"""Identifica a versao do jogo de uma ISO (ou de uma pasta instalada) pelo UMD_DATA.BIN. Imprime o identificador usado pelos scripts (TF_VER):
-vazio para a versao europeia ULES-00600 (o padrao do projeto: gen/, gen/jogo, gen/run.exe) ou, por ex., ULUS10136 para a americana
-(e as ISOs derivadas dela, como traducoes). Uso: python tools/game/id_jogo.py <iso ou pasta>"""
+"""Tells the game version of an ISO (or of an installed folder) from its UMD_DATA.BIN. Prints the identifier the scripts use (TF_VER):
+empty for the European version ULES-00600 (the project default: gen/, gen/jogo) or, e.g., ULUS10136 for the American one
+(and the ISOs derived from it, such as fan translations). Usage: python tools/game/id_jogo.py <iso or folder>"""
 import os, sys
 sys.path.insert(0, os.path.dirname(os.path.abspath(__file__)))
 import isofs

@@ -1,5 +1,5 @@
 """Extrai os decks de NPC do Tag Force (RCPnnn.ydc no BOOT.BIN) para um banco de dados em gen/decks_db/ (fora do git: sao dados do jogo).
-Uso: python tools/game/decks_extrair.py        (precisa dos dados instalados em gen/jogo: tools/recomp_tudo.sh ou tools/game/extrair_jogo.py)
+Uso: python tools/game/decks_extrair.py        (needs the installed data in gen/jogo: tools/game/extrair_jogo.py)
 Saidas em gen/decks_db/:
   cartas.json        id -> nome, categoria, atributo, tipo, nivel, atk, def, texto
   decks.json         indice RCP -> nomes (6 idiomas), principal/extra/side (ids), cabecalho (hex), resumo (contagens, atributos, tipos)

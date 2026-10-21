@@ -29,7 +29,7 @@ map is in [`STRUCTURE.md`](STRUCTURE.md).
 | `core/` | `kernel.cpp` | allocator, cooperative threads with **fibers**, semaphores/event flags/message boxes, virtual clock + vblank |
 | `core/` | `modules.cpp` | LoadModule/StartModule, variants, variable import |
 | `core/` | `iso.cpp`, `isofolder.cpp`, `install.cpp` | disc access (ISO or installed folder) and the installer |
-| `core/` | `jit.cpp`, `prepare.cpp`, `generic_index.cpp` | release build: no game code inside; the translator runs on the player's machine on first start and TinyCC compiles the C in memory at each start |
+| `core/` | `jit.cpp`, `prepare.cpp` | no game code inside the exe: the translator runs on the player's machine on first start and TinyCC compiles the C once into `gen/jitcache/`; later starts only link the cached objects in memory |
 | `core/` | `main_run.cpp`, `gameid.cpp`, `diag.cpp`, `ctl.cpp`, `util.cpp`, `psp_rt.h` | entry point, game-version detection, session log and watchdog, remote control for automated tests (`tools/test/tf.py`), helpers, the one header the generated code includes |
 | `hle/` | `hle_io.cpp` | file system calls (disc → ISO or installed folder; `ms0:` → `./ms0`) |
 | `hle/` | `hle_ge.cpp` | GE (graphics chip): software rasterizer and the command stream feeding the GPU backends |

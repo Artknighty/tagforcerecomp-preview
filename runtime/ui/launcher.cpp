@@ -1,12 +1,12 @@
-/* Janela inicial (layout com barra lateral, no estilo dos lancadores de port para PC): sidebar a esquerda com as paginas
- * (Play, Graphics, Game, About) e Quit; conteudo a direita; barra inferior fixa com o status e os botoes Stop/PLAY.
- *  - Play: faixa de titulo, "Ready check" e as 3 opcoes principais;
- *  - Graphics: todas as opcoes de graficos (mesmas chaves do tagforce_recomp.ini que o jogo le);
- *  - Game: ISO / instalacao. O jogo ainda nao instalado: "Instalar e jogar" extrai tudo para a pasta jogo/ (uma unica vez, com progresso);
- *    "Jogar direto da ISO" continua existindo (sem instalar); instalado: so "Play" ("Reinstalar da ISO..." refaz a pasta);
- *  - About: creditos e atalhos para as pastas de logs e saves.
- * Play abre o jogo como processo filho (run.exe --dados / --iso) e o lancador continua aberto (Stop encerra o jogo).
- * A ultima ISO escolhida fica em tagforce_recomp.ini (ao lado do .exe). Tema escuro, tudo desenhado aqui, DPI proprio desta janela. */
+/* Start window (sidebar layout, in the style of PC port launchers): the pages on the left (Play, Graphics, Game, Mods, Cheats, About) and Quit;
+ * content on the right; a fixed bottom bar with the status and the Stop/PLAY buttons.
+ *  - Play: title banner, "Ready check" and the three main options;
+ *  - Graphics: every graphics option (the same tagforce_recomp.ini keys the game reads);
+ *  - Game: ISO / installation. Not installed yet: "INSTALL AND PLAY" copies the game files to the jogo/ folder and translates the game code
+ *    (once, with progress); installed: just "PLAY" ("Reinstall from ISO..." redoes the folder);
+ *  - About: credits and shortcuts to the logs and saves folders.
+ * PLAY starts the game as a child process (TagForceRecomp.exe --dados <folder>) and the launcher stays open (Stop closes the game).
+ * The last ISO chosen is kept in tagforce_recomp.ini (next to the .exe). Dark theme, everything drawn here, per-window DPI. */
 #include <windows.h>
 #include <commdlg.h>
 #include <dwmapi.h>
@@ -28,11 +28,11 @@
 typedef void (*InstProgress)(double frac, const wchar_t *msg, void *ctx);
 bool iso_install(const wchar_t *iso, const wchar_t *dest, InstProgress cb, void *ctx, std::wstring *err);
 
-enum { ID_PICK = 101, ID_PLAY = 102, ID_QUIT = 103, ID_DIRECT = 104, ID_STOP = 105, ID_LOGS = 106, ID_SAVES = 107, ID_MODDIR = 108, ID_COPT0 = 400, ID_OPT0 = 200, ID_QOPT0 = 300, TIMER_UI = 1 };
+enum { ID_PICK = 101, ID_PLAY = 102, ID_QUIT = 103, ID_STOP = 105, ID_LOGS = 106, ID_SAVES = 107, ID_MODDIR = 108, ID_COPT0 = 400, ID_OPT0 = 200, ID_QOPT0 = 300, TIMER_UI = 1 };
 enum { PG_PLAY, PG_GRAPHICS, PG_GAME, PG_MODS, PG_CHEATS, PG_ABOUT, N_PAGES };
 enum { NAV_QUIT = N_PAGES };   /* item extra da sidebar (nao e pagina) */
 static const wchar_t *kNavName[N_PAGES] = {L"Play", L"Graphics", L"Game", L"Mods", L"Cheats", L"About"};
-static HWND g_wnd, g_bpick, g_play, g_bdirect, g_bstop, g_blogs, g_bsaves, g_bmoddir;
+static HWND g_wnd, g_bpick, g_play, g_bstop, g_blogs, g_bsaves, g_bmoddir;
 static HANDLE g_proc;                       /* jogo em andamento (processo filho); a janela continua aberta */
 static int g_page = PG_PLAY, g_navhot = -1;
 
@@ -148,9 +148,9 @@ static void opt_step(int i, int dir) {
     for (int k = 0; k < NQ; k++) if (kQuick[k] == i) { SetWindowTextW(g_qsel[k], o.names[g_cur[i]]); InvalidateRect(g_qsel[k], nullptr, FALSE); }
     InvalidateRect(g_wnd, nullptr, FALSE);   /* "Ready check" mostra o renderizador */
 }
-static void launch_game(bool direct) {
+static void launch_game() {
     wchar_t exe[MAX_PATH]; GetModuleFileNameW(nullptr, exe, MAX_PATH);
-    std::wstring cmd = L"\"" + std::wstring(exe) + L"\" " + (direct ? L"--iso \"" + g_path + L"\"" : L"--dados \"" + g_data + L"\"");
+    std::wstring cmd = L"\"" + std::wstring(exe) + L"\" " + L"--dados \"" + g_data + L"\"";
     STARTUPINFOW si = {sizeof si}; PROCESS_INFORMATION pi;
     if (!CreateProcessW(nullptr, &cmd[0], nullptr, nullptr, FALSE, 0, nullptr, exe_dir().c_str(), &si, &pi)) { tf_msgbox(g_wnd, L"Could not start the game.", L"Tag Force Recomp", MB_ICONERROR); return; }
     CloseHandle(pi.hThread); g_proc = pi.hProcess;
@@ -169,27 +169,24 @@ static void stop_game() {
 static bool is_sel(int id) { return (id >= ID_COPT0 && id < ID_COPT0 + 5) ||  (id >= ID_OPT0 && id < ID_OPT0 + N_OPT) || (id >= ID_QOPT0 && id < ID_QOPT0 + NQ); }
 static int sel_option(int id) { return id >= ID_QOPT0 ? kQuick[id - ID_QOPT0] : id - ID_OPT0; }
 
-/* quais controles aparecem em cada pagina */
+/* which controls each page shows */
 static void apply_page() {
-    bool run = game_running(), busy = g_installing;
     for (int i = 0; i < N_OPT; i++) ShowWindow(g_sel[i], g_page == PG_GRAPHICS ? SW_SHOW : SW_HIDE);
     for (int i = 0; i < 5; i++) ShowWindow(g_csel[i], g_page == PG_CHEATS ? SW_SHOW : SW_HIDE);
     for (int k = 0; k < NQ; k++) ShowWindow(g_qsel[k], g_page == PG_PLAY ? SW_SHOW : SW_HIDE);
     ShowWindow(g_bpick, g_page == PG_GAME ? SW_SHOW : SW_HIDE);
-    ShowWindow(g_bdirect, g_page == PG_GAME && !g_installed && !jit_generic() ? SW_SHOW : SW_HIDE);
     ShowWindow(g_bmoddir, g_page == PG_MODS ? SW_SHOW : SW_HIDE);
     ShowWindow(g_blogs, g_page == PG_ABOUT ? SW_SHOW : SW_HIDE); ShowWindow(g_bsaves, g_page == PG_ABOUT ? SW_SHOW : SW_HIDE);
-    EnableWindow(g_bdirect, !busy && !run && !g_installed && iso_ok());
 }
 static void refresh() {
     bool busy = g_installing, run = game_running();
     EnableWindow(g_play, !busy && !run && (g_installed || iso_ok())); EnableWindow(g_bpick, !busy && !run);
     EnableWindow(g_bstop, run); for (int i = 0; i < 5; i++) EnableWindow(g_csel[i], !run && dir_exists(cheat_dir()));
-    EnableWindow(g_bstop, run); for (int i = 0; i < N_OPT; i++) EnableWindow(g_sel[i], !run); for (int k = 0; k < NQ; k++) EnableWindow(g_qsel[k], !run);
+    for (int i = 0; i < N_OPT; i++) EnableWindow(g_sel[i], !run); for (int k = 0; k < NQ; k++) EnableWindow(g_qsel[k], !run);
     SetWindowTextW(g_play, run ? L"PLAYING..." : g_installed ? L"PLAY" : L"INSTALL AND PLAY"); SetWindowTextW(g_bpick, g_installed ? L"Reinstall from ISO..." : L"Select ISO...");
     apply_page();
     InvalidateRect(g_wnd, nullptr, FALSE);
-    for (HWND b : {g_bpick, g_play, g_bdirect, g_bstop, g_blogs, g_bsaves, g_bmoddir}) InvalidateRect(b, nullptr, FALSE);
+    for (HWND b : {g_bpick, g_play, g_bstop, g_blogs, g_bsaves, g_bmoddir}) InvalidateRect(b, nullptr, FALSE);
     for (int i = 0; i < N_OPT; i++) InvalidateRect(g_sel[i], nullptr, FALSE); for (int k = 0; k < NQ; k++) InvalidateRect(g_qsel[k], nullptr, FALSE);
 }
 static void show_page(int p) { if (p == g_page) return; g_page = p; if (p == PG_MODS) { mods_reload(); g_modscroll = 0; } if (p == PG_CHEATS) { cheat_load(); cheat_text(); } refresh(); }
@@ -206,11 +203,11 @@ static void start_install(bool install = true) {
     if (g_thr.joinable()) g_thr.join();
     g_installing = true; g_inst_done = false; g_inst_ok = false; g_prog = 0; { std::lock_guard<std::mutex> lk(g_mu); g_err.clear(); g_msg = L"preparing..."; }
     g_thr = std::thread([install] {
-        std::wstring err; bool ok = true; const bool gen = jit_generic();
+        std::wstring err; bool ok = true;
         auto prog = [](double f, const wchar_t *m, void *c) { double lo = c ? *(double *)c : 0, hi = c ? ((double *)c)[1] : 1; g_prog = (int)((lo + f * (hi - lo)) * 1000); std::lock_guard<std::mutex> lk(g_mu); g_msg = m; };
-        double inst[2] = {0, gen ? 0.4 : 1}, code[2] = {gen && install ? 0.4 : 0, 1};
+        double inst[2] = {0, 0.4}, code[2] = {install ? 0.4 : 0, 1};
         if (install) ok = iso_install(g_path.c_str(), g_data.c_str(), prog, inst, &err);
-        if (ok && gen) {   /* the release has no game code: translate it from the installed files (a few minutes, only once) */
+        if (ok) {   /* the release has no game code: translate it from the installed files (a few minutes, only once) */
             std::string id = game_id_dir(g_data); if (id.empty()) id = game_id_built();
             game_id_set_built(id);
             ok = code_prepare(id, g_data, prog, code, &err);
@@ -458,7 +455,7 @@ static void paint(HWND h) {
             if (!err.empty()) text(dc, g_fSmall, C_ERR, w, err.c_str(), DT_LEFT | DT_WORDBREAK);
             else if (g_installed) text(dc, g_fSmall, C_OK, w, L"\x2713 Ready to play \x2014 the ISO is no longer needed");
             else if (!g_path.empty() && !iso_ok()) text(dc, g_fSmall, C_WARN, w, L"File not found \x2014 choose the ISO again.");
-            else if (iso_ok()) text(dc, g_fSmall, C_DIM, w, jit_generic() ? L"First run: copies the game files (about 760 MB) and prepares the game. A few minutes, only once." : L"Installation copies the game files to the jogo/ folder (about 760 MB).");
+            else if (iso_ok()) text(dc, g_fSmall, C_DIM, w, L"First run: copies the game files (about 760 MB) and prepares the game. A few minutes, only once.");
         }
     } else if (g_page == PG_MODS) {
         draw_mods_page(dc, cx, cw);
@@ -492,10 +489,9 @@ static LRESULT CALLBACK proc(HWND h, UINT m, WPARAM w, LPARAM l) {
         case ID_PICK: if (pick(h)) { { std::lock_guard<std::mutex> lk(g_mu); g_err.clear(); } if (g_installed && iso_ok()) { if (tf_msgbox(h, L"Rebuild the jogo/ folder from this ISO? The files currently in the folder will be replaced.", L"Reinstall", MB_YESNO | MB_ICONQUESTION) == IDYES) start_install(); } refresh(); } return 0;
         case ID_PLAY:
             if (game_running()) return 0;
-            if (g_installed) { if (jit_generic() && !code_ready(game_id_dir(g_data))) start_install(false); else { launch_game(false); refresh(); } }
+            if (g_installed) { if (!code_ready(game_id_dir(g_data))) start_install(false); else { launch_game(); refresh(); } }
             else if (iso_ok()) { show_page(PG_GAME); start_install(); }
             return 0;
-        case ID_DIRECT: if (iso_ok() && !game_running()) { launch_game(true); refresh(); } return 0;
         case ID_STOP:
             if (game_running() && tf_msgbox(h, L"Close the game? Anything not saved inside the game will be lost.", L"Tag Force Recomp", MB_YESNO | MB_ICONQUESTION) == IDYES) { stop_game(); refresh(); }
             return 0;
@@ -540,13 +536,13 @@ static LRESULT CALLBACK proc(HWND h, UINT m, WPARAM w, LPARAM l) {
     case WM_TIMER:
         if (w == TIMER_UI) {
             { static bool was[24 + N_OPT]; static POINT lastp; int i = 0; POINT cp; GetCursorPos(&cp); bool moved = cp.x != lastp.x || cp.y != lastp.y; lastp = cp;   /* hover dos botoes: so redesenha quando muda */
-              std::vector<HWND> bs = {g_bpick, g_play, g_bdirect, g_bstop, g_blogs, g_bsaves, g_bmoddir}; bs.insert(bs.end(), g_qsel, g_qsel + NQ); bs.insert(bs.end(), g_sel, g_sel + N_OPT); bs.insert(bs.end(), g_csel, g_csel + 5);
+              std::vector<HWND> bs = {g_bpick, g_play, g_bstop, g_blogs, g_bsaves, g_bmoddir}; bs.insert(bs.end(), g_qsel, g_qsel + NQ); bs.insert(bs.end(), g_sel, g_sel + N_OPT); bs.insert(bs.end(), g_csel, g_csel + 5);
               for (HWND b : bs) { bool hot = is_hot(b); if (hot != was[i] || (hot && moved && i >= 7)) { was[i] = hot; InvalidateRect(b, nullptr, FALSE); } i++; } }
             { static bool wasrun; bool run = game_running(); if (run != wasrun) { wasrun = run; refresh(); } }
             if (g_installing) { RECT bar; GetClientRect(h, &bar); InvalidateRect(h, &bar, FALSE); }
             if (g_installing && g_inst_done) {   /* terminou */
                 g_installing = false; if (g_thr.joinable()) g_thr.join();
-                if (g_inst_ok) { check_installed(); launch_game(false); refresh(); }   /* instalou: ja joga */
+                if (g_inst_ok) { check_installed(); launch_game(); refresh(); }   /* instalou: ja joga */
                 else { if (g_err.empty()) g_err = L"Installation failed."; refresh(); }
             }
         }
@@ -600,7 +596,6 @@ std::string launcher_pick_iso(std::wstring *data) {
     cheat_load();
     for (int i = 0; i < 5; i++) g_csel[i] = btn(kCheat[i].names[g_cc[i]], ID_COPT0 + i, cx + cw - S(270), S(100) + i * S(56) + S(4), S(270), S(34));
     g_bpick = btn(L"Select ISO...", ID_PICK, cx, S(220), S(200), S(40));
-    g_bdirect = btn(L"Play directly from the ISO", ID_DIRECT, cx + S(212), S(220), S(260), S(40));
     g_blogs = btn(L"Open logs folder", ID_LOGS, cx, S(326), S(200), S(40));
     g_bsaves = btn(L"Open saves folder", ID_SAVES, cx + S(212), S(326), S(200), S(40));
     g_bmoddir = btn(L"Open mods folder", ID_MODDIR, cx + cw - S(200), S(24), S(200), S(40));

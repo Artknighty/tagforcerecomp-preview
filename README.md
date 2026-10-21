@@ -69,8 +69,8 @@ slider settings in the menu. See [`docs/MODS.md`](docs/MODS.md) to build your ow
    only once; the ISO is not needed afterwards). From then on just click **Play**.
 
 Nothing needs to be installed: the zip carries the runtime, FFmpeg, a small C compiler (TinyCC) and the translator. It contains **no
-game data and no game code**: the game's code is translated from your copy on your computer (`gen/`) and compiled in memory each time
-the game starts (about 4 s).
+game data and no game code**: the game's code is translated from your copy on your computer (`gen/`), compiled once (a few seconds,
+kept in `gen/jitcache/`) and loaded in memory each time the game starts.
 
 **Controls.** Keyboard and mouse (default PC layout): WASD or arrows; Space, E or left click = ✕; Backspace, C or right click = ○;
 F = □; R = △; Q / Tab = L / R; Enter = START; Ctrl = SELECT; Shift = run; mouse wheel = up/down. The classic layout (arrows, Z = ✕,

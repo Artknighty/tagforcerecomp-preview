@@ -600,7 +600,7 @@ void display_present(void) {
     static const bool ge_stats = getenv("GE_STATS") != nullptr, no_pace = getenv("NO_PACE") != nullptr, load_dbg = getenv("TF_LOAD_DEBUG") != nullptr;
     if (ge_stats && (g_frames % 60) == 0) fprintf(stderr, "[stats] frame %llu prims=%llu fbwrites=%llu fb=%08x fmt=%u stride=%u", (unsigned long long)g_frames, (unsigned long long)g_prims, (unsigned long long)g_fb_writes, g_fb_addr, g_fb_fmt, g_fb_stride), fputc(10, stderr);
     if (!g_ready) return;
-    LARGE_INTEGER q0, q1, q2, qf; QueryPerformanceCounter(&q0);
+    LARGE_INTEGER q0, qpump, q2, qf; QueryPerformanceCounter(&q0);
     /* a saida da chamada (a hora em que o jogo e o audio voltam a rodar) e regulada por pace_exit */
     bool call_timed = false;
     struct ExitMark { bool &timed; ~ExitMark() { tail_end(); pace_exit(timed); } } exit_mark{call_timed};
@@ -618,7 +618,7 @@ void display_present(void) {
             if (PtInRect(&cr, cp)) { g_cursor_hidden = true; SetCursor(nullptr); }
         }
     }
-    QueryPerformanceCounter(&q1);
+    QueryPerformanceCounter(&qpump);
     g_frames++;
     { extern volatile uint64_t g_diag_frames; g_diag_frames = g_frames; }
     if (g_notify_until && g_frames >= g_notify_until) { g_notify_until = 0; SetWindowTextA(g_wnd, win_title()); }
@@ -626,7 +626,7 @@ void display_present(void) {
     { static const bool f60 = getenv("TF_FPS60") != nullptr;   /* teste: motor do jogo em 60 FPS (g_fps_alvo em 08903908; 30 = limitador de 2 vblanks) */
       if (f60 && *(uint32_t *)mem_ptr(0x08903908) == 30) *(uint32_t *)mem_ptr(0x08903908) = 60; }
     QueryPerformanceCounter(&q2); QueryPerformanceFrequency(&qf);
-    g_pump_ms = (q1.QuadPart - q0.QuadPart) * 1000.0 / qf.QuadPart; g_pad_ms = (q2.QuadPart - q1.QuadPart) * 1000.0 / qf.QuadPart;
+    g_pump_ms = (qpump.QuadPart - q0.QuadPart) * 1000.0 / qf.QuadPart; g_pad_ms = (q2.QuadPart - qpump.QuadPart) * 1000.0 / qf.QuadPart;
     { static const char *md = getenv("MEM_DUMP");   /* MEM_DUMP="q1,q2": grava a RAM do PSP (0x08800000, 24 MB) em gen/mem_<q>.bin (achar variaveis comparando dois quadros) */
       if (md && quadro_na_lista(md, g_frames)) { char fn[64]; snprintf(fn, sizeof fn, "gen/mem_%llu.bin", (unsigned long long)g_frames);
           if (FILE *f = fopen(fn, "wb")) { fwrite(mem_ptr(0x08800000), 1, 0x1800000, f); fclose(f); } } }

@@ -3,7 +3,7 @@
     python tools/package_release.py [--out gen/release] [--no-build] [--version 0.1-preview]
 
 The package contains NO game data and no game code. It holds:
-  TagForceRecomp.exe   the generic runtime (build with runtime/core/generic_index.cpp: no game modules linked in)
+  TagForceRecomp.exe   the generic runtime (no game code inside)
   avcodec/avutil.dll   slim LGPL-only FFmpeg with just the ATRAC3/3+ and H.264 decoders (tools/build/build_ffmpeg_lite.sh)
   mods/                the behavior mods of plugins/src/ (plugin.dll), switched on or off in the Mods menu
   tcc/ include/        TinyCC (LGPL) and the one runtime header the generated code includes
@@ -24,13 +24,6 @@ MSYS_USR = r'C:\msys64\usr\bin'
 TOOLS = ['build_modules.py', 'recomp.py', 'allegrex.py', 'pspmod.py', 'elfscan.py', 'imports.py', 'merge.tsv', 'modules.tsv', 'modules_ULUS10136.tsv']
 PY_KEEP = ['python.exe', 'python311.dll', 'python3.dll', 'vcruntime140.dll', 'vcruntime140_1.dll', 'LICENSE.txt', 'python311.zip']
 SKIP_MODS = {'MonstrosNoCampo'}   # prototype that needs art generated from the game; not part of the first release
-RUNTIME = ['ctl', 'main_run', 'gameid', 'host', 'kernel', 'iso', 'isofolder', 'install', 'hle_misc', 'hle_io', 'hle_ge', 'hle_audio', 'modules', 'vfpu',
-           'hle_utility', 'display', 'hle_mpeg', 'hle_font', 'launcher', 'text_input', 'diag', 'audio_out', 'raster_pool', 'ffmpeg_dec', 'menu', 'mouse_ui',
-           'gfx', 'imgio', 'texrepl', 'bc7', 'plugins', 'modbox', 'gpu', 'interp', 'pacing', 'hdfont', 'jit', 'gpu_d3d11', 'gpu_vulkan', 'pc_text', 'mods', 'util',
-           'prepare', 'dark_ui', 'slider_dialog', 'generic_index']
-
-DECOMP_DIRS = ['decomp/libduelrecord', 'decomp/libtitle', 'decomp/libcharalist', 'decomp/libstory', 'decomp/libfield', 'decomp/libduel_eng',
-               'decomp/libduel_mgr', 'decomp/libduel_draw', 'decomp/boot']
 
 
 def run(cmd, **kw):
@@ -70,7 +63,7 @@ def main():
         icon = os.path.join(ROOT, 'runtime', 'app.ico').replace('\\', '/')
         open(rc, 'w').write('1 24 "%s"\n1 ICON "%s"\n' % (manifest, icon))
         res = os.path.join(out, 'app_res.o'); run(['windres', rc, '-O', 'coff', '-o', res], env=env)
-        srcs = [glob.glob('runtime/*/%s.cpp' % n)[0].replace(os.sep, '/') for n in RUNTIME] + ['decomp/decomp.cpp'] + sorted(f.replace(os.sep, '/') for d in DECOMP_DIRS for f in glob.glob(d + '/*.cpp'))
+        srcs = [f.replace(os.sep, '/') for f in sorted(glob.glob('runtime/*/*.cpp')) + ['decomp/decomp.cpp'] + sorted(glob.glob('decomp/*/*.cpp'))]   # same set as tools/build.sh
         run(['g++', '-std=c++17', '-O2', '-DPSP_TRACE', '-DTF_GAME_ID="ULES-00600"', '-Wall', '-Wno-misleading-indentation', '-Iruntime', '-Iruntime/core', '-Iruntime/hle', '-Iruntime/gpu', '-Iruntime/ui', '-Iruntime/audio', '-Iruntime/mods', '-o', exe] + srcs + [res,
              '-static', '-mwindows', '-ldwmapi', '-lgdi32', '-luser32', '-lcomdlg32', '-lshell32', '-lwinmm', '-lsynchronization', '-ld3d11', '-ldxgi', '-ld3dcompiler',
              '-lole32', '-loleaut32', '-luuid', '-lwindowscodecs', '-lgdiplus'], env=env)

@@ -1,10 +1,8 @@
 #include "gameid.h"
 #include "util.h"
-#include "dark_ui.h"
 #include <stdio.h>
 #include <string.h>
 #include <stdint.h>
-#include <windows.h>
 #include <vector>
 
 static std::string g_built = TF_GAME_ID;
@@ -45,25 +43,3 @@ std::string game_id_iso(const std::wstring &iso) {   /* leitor minimo de ISO9660
 }
 static std::wstring compact(const std::string &id) { std::wstring w; for (char c : id) if (c != '-') w += (wchar_t)c; return w; }
 std::wstring game_data_dir_name(const std::string &id) { return id.empty() || id == "ULES-00600" ? L"jogo" : L"jogo_" + compact(id); }
-std::wstring game_exe_name(const std::string &id) { return id.empty() || id == "ULES-00600" ? L"run.exe" : L"run_" + compact(id) + L".exe"; }
-
-bool game_handoff(const std::string &iso, const std::wstring &data) {
-    std::string id = !data.empty() ? game_id_dir(data) : game_id_iso(to_wide(iso));
-    if (id.empty() || id == game_id_built()) return false;
-    std::wstring exe = exe_dir() + game_exe_name(id);
-    DWORD a = GetFileAttributesW(exe.c_str());
-    if (a == INVALID_FILE_ATTRIBUTES) {
-        std::wstring msg = L"This game is version " + to_wide(id) + L", but this executable was built for " + to_wide(game_id_built()) +
-            L".\n\nEach version needs its own executable (" + game_exe_name(id) + L"). Build it with:\n    sh tools/recomp_tudo.sh <ISO>\n(see docs/VERSIONS.md)";
-        fprintf(stderr, "[run] jogo %s, executavel %s: falta %ls\n", id.c_str(), game_id_built().c_str(), game_exe_name(id).c_str());
-        tf_msgbox(nullptr, msg.c_str(), L"Tag Force Recomp", MB_ICONINFORMATION); return true;
-    }
-    std::wstring cmd = L"\"" + exe + L"\" " + (!data.empty() ? L"--dados \"" + data + L"\"" : L"--iso \"" + to_wide(iso) + L"\"");
-    STARTUPINFOW si = {sizeof si}; PROCESS_INFORMATION pi = {};
-    std::vector<wchar_t> c(cmd.begin(), cmd.end()); c.push_back(0);
-    fprintf(stderr, "[run] jogo %s: abrindo %ls\n", id.c_str(), exe.c_str());
-    if (!CreateProcessW(exe.c_str(), c.data(), nullptr, nullptr, FALSE, 0, nullptr, nullptr, &si, &pi)) {
-        tf_msgbox(nullptr, L"Could not open the executable for this version of the game.", L"Tag Force Recomp", MB_ICONERROR); return true;
-    }
-    CloseHandle(pi.hThread); CloseHandle(pi.hProcess); return true;
-}

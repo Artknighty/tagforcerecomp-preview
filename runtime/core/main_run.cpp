@@ -85,17 +85,16 @@ int main() {
     }
     fprintf(stderr, "[run] ISO: %s\n", iso.c_str());
 started:
-    if (jit_generic()) {   /* release build: the game version is whatever was installed; its code is translated on first run (prepare.cpp) */
+    {   /* the game version is whatever was installed; its code is translated on first run (prepare.cpp) */
         if (data.empty()) data = exe_dir() + game_data_dir_name(game_id_iso(to_wide(iso)));
         std::string id = game_id_dir(data);
         if (id.empty() || !iso_open_folder(data.c_str())) { tf_msgbox(nullptr, L"The game is not installed yet. Start the program without arguments and pick your ISO.", L"Tag Force Recomp", MB_ICONERROR); diag_flush(); return 1; }
         game_id_set_built(id);
         if (!code_ready(id)) { std::wstring err; if (!code_prepare(id, data, [](double, const wchar_t *m, void *) { fprintf(stderr, "[prepare] %ls\n", m); }, nullptr, &err)) { tf_msgbox(nullptr, err.c_str(), L"Tag Force Recomp", MB_ICONERROR); diag_flush(); return 1; } }
     }
-    if (game_handoff(iso, data)) { diag_flush(); return 0; }   /* ISO/pasta de outra versao do jogo: o executavel dela cuida (gameid.cpp) */
     if (!acquire_save_lock()) { diag_flush(); return 1; }
     diag_start_game();
-    if (!jit_init() && jit_generic()) { tf_msgbox(nullptr, L"Could not compile the translated game code (see the log in the logs folder). Delete the gen folder and start again; if it keeps failing, please report it.", L"Tag Force Recomp", MB_ICONERROR); diag_flush(); return 1; }   /* TF_JIT=1: modulos compilados em memoria pelo TinyCC */
+    if (!jit_init()) { tf_msgbox(nullptr, L"Could not compile the translated game code (see the log in the logs folder). Delete the gen folder and start again; if it keeps failing, please report it.", L"Tag Force Recomp", MB_ICONERROR); diag_flush(); return 1; }
     ffmpeg_preload(); host_create(); k_init(); mods_init(); texrepl_init(); plugins_load(); decomp_init(); display_init(); display_set_iso(iso.c_str()); if (!data.empty()) display_set_data(data.c_str());
     bool ok; module_load("SYSDIR/BOOT.BIN", &ok);
     const GenModule *boot = nullptr;

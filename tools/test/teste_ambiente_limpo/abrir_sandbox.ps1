@@ -3,7 +3,7 @@
   Opens Windows Sandbox (a clean, disposable Windows) and runs the clean-room build test inside it.
 
 .DESCRIPTION
-  The test installs MSYS2 and the build tools from scratch, copies this repository, runs tools/recomp_tudo.sh with YOUR ISO, and checks that the
+  The test installs MSYS2 and the build tools from scratch, copies this repository, runs tools/build.sh and tools/install_dev.sh with YOUR ISO, and checks that the
   game boots to the title screen. Results (a log, RESULTADO.txt and screenshots) are written to the output folder on the host.
   The repository and the ISO folder are mapped READ-ONLY into the sandbox; nothing on your machine is modified.
 
@@ -28,7 +28,7 @@ param(
 $ErrorActionPreference = 'Stop'
 
 if (-not (Test-Path -LiteralPath $Iso -PathType Leaf)) { throw "ISO not found: $Iso" }
-if (-not (Test-Path -LiteralPath (Join-Path $Repo 'tools\recomp_tudo.sh'))) { throw "Not a Tag Force Recomp repository: $Repo" }
+if (-not (Test-Path -LiteralPath (Join-Path $Repo 'tools\build.sh'))) { throw "Not a Tag Force Recomp repository: $Repo" }
 if (-not $Out) { $Out = Join-Path $Repo 'gen\teste_limpo_resultado' }
 New-Item -ItemType Directory -Force -Path $Out | Out-Null
 Get-ChildItem -LiteralPath $Out -Force | Remove-Item -Recurse -Force -ErrorAction SilentlyContinue

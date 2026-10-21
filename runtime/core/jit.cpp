@@ -1,10 +1,11 @@
-/* Compilacao dos modulos traduzidos em tempo de execucao, em memoria, com o TinyCC (libtcc.dll, LGPL): o codigo C do jogo (gen/<modulo>.c, gerado na
- * maquina do usuario a partir da copia dele) NAO precisa ser compilado antes nem vir pronto numa distribuicao: o runtime o compila ao iniciar
- * (~3 s para os 29 modulos). A tabela de modulos (GenModule) e montada a partir dos simbolos de cada modulo (NOME_fns, NOME_gp...) e da lista
- * gen/modulos.tsv (nome <tab> caminho no disco). Sem TF_JIT ou sem libtcc.dll o runtime usa os modulos ligados estaticamente (build normal). */
+/* The translated game modules are compiled at run time, in memory, with TinyCC (libtcc.dll, LGPL): the game's C code (gen/<module>.c, written on
+ * the player's machine from their own copy) is never compiled ahead of time nor shipped. The first start compiles the ~30 modules (~2.3 s) and
+ * keeps the objects in gen/jitcache/; later starts only link them. The module table (GenModule) is built from each module's symbols
+ * (NAME_fns, NAME_gp...) and from gen/modulos.tsv (name <tab> path on the disc). */
 #include "hle.h"
 #include "util.h"
 #include "gameid.h"
+#include "xxh.h"
 #include <stdio.h>
 #include <string.h>
 #include <windows.h>
@@ -18,6 +19,7 @@ static struct {
     TCCState *(*nw)(void); void (*del)(TCCState *); void (*libpath)(TCCState *, const char *); void (*errf)(TCCState *, void *, void (*)(void *, const char *));
     void (*opts)(TCCState *, const char *); int (*inc)(TCCState *, const char *); void (*def)(TCCState *, const char *, const char *); int (*otype)(TCCState *, int);
     int (*cstr)(TCCState *, const char *); int (*addsym)(TCCState *, const char *, const void *); int (*reloc)(TCCState *, void *); void *(*getsym)(TCCState *, const char *);
+    int (*addfile)(TCCState *, const char *); int (*outfile)(TCCState *, const char *);
 } T;
 static std::vector<GenModule> g_jit; static std::deque<std::string> g_names; static bool g_jit_on;
 extern "C" uint32_t g_trace[1024]; extern "C" uint32_t g_trace_i, g_watch, g_watch_val;
@@ -40,6 +42,7 @@ static bool load_tcc(const std::wstring &dir) {
 #define L_(f, n) *(void **)&T.f = (void *)GetProcAddress(T.h, n); if (!T.f) return false;
     L_(nw, "tcc_new") L_(del, "tcc_delete") L_(libpath, "tcc_set_lib_path") L_(errf, "tcc_set_error_func") L_(opts, "tcc_set_options") L_(inc, "tcc_add_include_path")
     L_(def, "tcc_define_symbol") L_(otype, "tcc_set_output_type") L_(cstr, "tcc_compile_string") L_(addsym, "tcc_add_symbol") L_(reloc, "tcc_relocate") L_(getsym, "tcc_get_symbol")
+    L_(addfile, "tcc_add_file") L_(outfile, "tcc_output_file")
 #undef L_
     return true;
 }
@@ -53,27 +56,32 @@ static std::string tcc_path(const std::wstring &w) {   /* TCC usa caminhos narro
 }
 
 static void jit_selftest(void);
-bool jit_generic(void) { return g_gen_nmodules == 0; }
-#include "hooks.h"
-void hook_skip_next(uint32_t addr); extern uint32_t g_hook_cur;
-static std::vector<std::pair<uint32_t, void (*)(CPU *)>> g_gccfn;
-static bool gccfn_hook(CPU *c) {   /* depuracao: roda a versao compilada pelo gcc (estatica) desta funcao */
-    for (auto &p : g_gccfn) if (p.first == g_hook_cur) { hook_skip_next(g_hook_cur); p.second(c); return true; }
-    return false;
+static std::string read_all(const std::wstring &path) {   /* "" when missing or empty */
+    std::string s; FILE *f = _wfopen(path.c_str(), L"rb"); if (!f) return s;
+    std::vector<char> b(1 << 20); size_t n; while ((n = fread(b.data(), 1, b.size(), f)) > 0) s.append(b.data(), n);
+    fclose(f); return s;
 }
-static void gccfn_install(void) {
-    const char *fn = getenv("TF_JIT_GCCFN"); if (!fn) return;
-    FILE *f = fopen(fn, "r"); if (!f) return; char ln[64]; int n = 0;
-    while (fgets(ln, sizeof ln, f)) {
-        uint32_t a = (uint32_t)strtoul(ln, nullptr, 16); if (!a) continue;
-        for (unsigned k = 0; k < g_gen_nmodules; k++) for (unsigned q = 0; q < g_gen_modules[k].nfns; q++)
-            if (g_gen_modules[k].fns[q].addr == a) { g_gccfn.push_back({a, g_gen_modules[k].fns[q].fn}); hook_install(a, gccfn_hook); n++; }
-    }
-    fclose(f); fprintf(stderr, "[jit] %d funcoes redirecionadas para a versao do gcc\n", n);
+static void add_symbols(TCCState *s) {   /* runtime functions and variables the generated code calls by name */
+    T.addsym(s, "psp_call", (const void *)psp_call); T.addsym(s, "psp_hook", (const void *)psp_hook); T.addsym(s, "psp_watch_hit", (const void *)psp_watch_hit);
+    T.addsym(s, "vfpu_exec", (const void *)vfpu_exec); T.addsym(s, "psp_break", (const void *)psp_break); T.addsym(s, "psp_syscall", (const void *)psp_syscall);
+    T.addsym(s, "__builtin_clz", (const void *)jit_clz); T.addsym(s, "__builtin_bswap32", (const void *)jit_bswap32); T.addsym(s, "isunordered", (const void *)jit_isunordered);
+    T.addsym(s, "tf_nearbyint", (const void *)jit_nearbyint); T.addsym(s, "tf_sqrtf", (const void *)jit_sqrtf); T.addsym(s, "tf_floor", (const void *)jit_floor); T.addsym(s, "tf_trunc", (const void *)jit_trunc); T.addsym(s, "tf_ceil", (const void *)jit_ceil);
+    T.addsym(s, "psp_unimpl", (const void *)psp_unimpl);
+    T.addsym(s, "tf_ftrace", (const void *)tf_ftrace); T.addsym(s, "tf_wlog", (const void *)tf_wlog); T.addsym(s, "g_trace", g_trace); T.addsym(s, "g_trace_i", &g_trace_i);
+    T.addsym(s, "g_watch", &g_watch); T.addsym(s, "g_watch_val", &g_watch_val); T.addsym(s, "g_hookbm", &g_hookbm); T.addsym(s, "g_hook_any", &g_hook_any);
+}
+static void drop_stale(const std::wstring &dir, const std::string &mod, const std::wstring &keep) {   /* older objects of this module: <mod>_<16 hex>.o */
+    const std::wstring pre = to_wide(mod) + L"_"; WIN32_FIND_DATAW fd;
+    HANDLE h = FindFirstFileW((dir + pre + L"*.o").c_str(), &fd); if (h == INVALID_HANDLE_VALUE) return;
+    do {
+        const std::wstring n = fd.cFileName;
+        if (n.size() != pre.size() + 18 || dir + n == keep) continue;   /* libtutorial_*.o also matches libtutorial_09f7e200_<key>.o: length tells them apart */
+        if (n.find_first_not_of(L"0123456789abcdef", pre.size()) == pre.size() + 16) DeleteFileW((dir + n).c_str());
+    } while (FindNextFileW(h, &fd));
+    FindClose(h);
 }
 bool jit_init(void) {
-    const char *e = getenv("TF_JIT"); if (!jit_generic() && (!e || !*e || *e == '0')) return false;   /* the release build always compiles the game code at start */
-    std::wstring tccdir = exe_dir() + L"tcc\\", gen = jit_generic() ? code_dir(game_id_built()) : exe_dir();   /* libtcc.dll, include/ e lib/ do TinyCC em tcc/; modulos .c em gen/ (aqui: ao lado do .exe) */
+    std::wstring tccdir = exe_dir() + L"tcc\\", gen = code_dir(game_id_built());   /* TinyCC's libtcc.dll, include/ and lib/ in tcc/; the translated modules in gen/ */
     if (const wchar_t *d = _wgetenv(L"TF_JIT_TCC")) tccdir = d;
     if (const wchar_t *g = _wgetenv(L"TF_JIT_GEN")) gen = g;
     if (!tccdir.empty() && tccdir.back() != L'\\') tccdir += L'\\';
@@ -83,31 +91,56 @@ bool jit_init(void) {
     if (const char *i = getenv("TF_JIT_INC")) incdir = i;
     FILE *mf = _wfopen((gen + L"modulos.tsv").c_str(), L"rb"); if (!mf) { fprintf(stderr, "[jit] sem modulos.tsv\n"); return false; }
     std::string man; { char b[4096]; size_t n; while ((n = fread(b, 1, sizeof b, mf)) > 0) man.append(b, n); } fclose(mf);
-    DWORD t0 = GetTickCount(); size_t pos = 0; int ok = 0;
+    /* Compiled-code cache (2026-10-20): compiling the ~35 MB of translated C took ~2.3 s at every start. Each module is now compiled once to an
+     * object file, gen/jitcache/<module>_<key>.o, and the following starts only load and link it. The key hashes the module source, the runtime
+     * header the code includes (include/psp_rt.h), libtcc.dll's size and the compile flags: a new translation, a new runtime or other flags
+     * compile again. Any cache failure (path TinyCC cannot open, disk full) falls back to compiling in memory. TF_JIT_NOCACHE=1 skips the cache. */
+    const bool trace = !getenv("TF_JIT_NOTRACE"), ftrace = getenv("TF_JIT_FTRACE") != nullptr;   /* no TRC function trace / TF_FTRACE bisection hooks */
+    const std::wstring cache = gen + L"jitcache\\";
+    const bool use_cache = !getenv("TF_JIT_NOCACHE") && tcc_path(cache).find('?') == std::string::npos;   /* '?': the path has characters TinyCC cannot open */
+    uint64_t seed = (trace ? 1 : 0) | (ftrace ? 2 : 0);
+    { const char *i = getenv("TF_JIT_INC"); const std::string h = read_all((i ? to_wide(i) : exe_dir() + L"include") + L"\\psp_rt.h"); seed = xxh64(h.data(), h.size(), seed);
+      WIN32_FILE_ATTRIBUTE_DATA a; if (GetFileAttributesExW((tccdir + L"libtcc.dll").c_str(), GetFileExInfoStandard, &a)) seed ^= ((uint64_t)a.nFileSizeHigh << 32 | a.nFileSizeLow) * 0x9E3779B97F4A7C15ull; }
+    if (use_cache) CreateDirectoryW(cache.c_str(), nullptr);
+    DWORD t0 = GetTickCount(); size_t pos = 0; int ok = 0, hits = 0;
     while (pos < man.size()) {
         size_t en = man.find('\n', pos); if (en == std::string::npos) en = man.size();
         std::string line = man.substr(pos, en - pos); pos = en + 1;
         if (!line.empty() && line.back() == '\r') line.pop_back();
         size_t tab = line.find('\t'); if (tab == std::string::npos || line[0] == '#') continue;
         std::string c = line.substr(0, tab), iso = line.substr(tab + 1);
-        { static const char *skip = getenv("TF_JIT_SKIP");   /* depuracao: modulos que ficam com a versao estatica (lista separada por virgula) */
-          if (skip && (std::string(",") + skip + ",").find("," + c + ",") != std::string::npos) { for (unsigned k = 0; k < g_gen_nmodules; k++) if (c == g_gen_modules[k].name) g_jit.push_back(g_gen_modules[k]); ok++; continue; } }
-        FILE *f = _wfopen((gen + to_wide(c) + L".c").c_str(), L"rb"); if (!f) { fprintf(stderr, "[jit] sem %s.c\n", c.c_str()); return false; }
-        std::string src; { std::vector<char> b(1 << 20); size_t n; while ((n = fread(b.data(), 1, b.size(), f)) > 0) src.append(b.data(), n); } fclose(f);
-        TCCState *s = T.nw();
-        T.errf(s, nullptr, tcc_error); T.libpath(s, tcc_path(tccdir).c_str()); T.opts(s, "-w -nostdinc");   /* -nostdinc: so os cabecalhos abaixo */
-        T.inc(s, incdir.c_str()); T.inc(s, (tcc_path(tccdir) + "include").c_str()); T.otype(s, 1);   /* 1 = TCC_OUTPUT_MEMORY */
-        if (!getenv("TF_JIT_NOTRACE")) T.def(s, "PSP_TRACE", "1");   /* TF_JIT_NOTRACE=1: sem o rastreio de funcoes (TRC) */
-        T.addsym(s, "psp_call", (const void *)psp_call); T.addsym(s, "psp_hook", (const void *)psp_hook); T.addsym(s, "psp_watch_hit", (const void *)psp_watch_hit);
-        T.addsym(s, "vfpu_exec", (const void *)vfpu_exec); T.addsym(s, "psp_break", (const void *)psp_break); T.addsym(s, "psp_syscall", (const void *)psp_syscall);
-        T.addsym(s, "__builtin_clz", (const void *)jit_clz); T.addsym(s, "__builtin_bswap32", (const void *)jit_bswap32); T.addsym(s, "isunordered", (const void *)jit_isunordered);
-        T.addsym(s, "tf_nearbyint", (const void *)jit_nearbyint); T.addsym(s, "tf_sqrtf", (const void *)jit_sqrtf); T.addsym(s, "tf_floor", (const void *)jit_floor); T.addsym(s, "tf_trunc", (const void *)jit_trunc); T.addsym(s, "tf_ceil", (const void *)jit_ceil);
-        T.addsym(s, "psp_unimpl", (const void *)psp_unimpl);
-        if (getenv("TF_JIT_FTRACE")) T.def(s, "TF_FTRACE", "1");   /* bisection tool only (TF_FTRACE_FILE): it makes every function entry and every guest store a call */
-        T.addsym(s, "tf_ftrace", (const void *)tf_ftrace); T.addsym(s, "tf_wlog", (const void *)tf_wlog); T.addsym(s, "g_trace", g_trace); T.addsym(s, "g_trace_i", &g_trace_i);
-        T.addsym(s, "g_watch", &g_watch); T.addsym(s, "g_watch_val", &g_watch_val); T.addsym(s, "g_hookbm", &g_hookbm); T.addsym(s, "g_hook_any", &g_hook_any);
-        if (T.cstr(s, src.c_str()) < 0) { fprintf(stderr, "[jit] erro compilando %s\n", c.c_str()); return false; }
-        if (T.reloc(s, (void *)1) < 0) { fprintf(stderr, "[jit] erro ligando %s\n", c.c_str()); return false; }   /* TCC_RELOCATE_AUTO */
+        const std::string src = read_all(gen + to_wide(c) + L".c"); if (src.empty()) { fprintf(stderr, "[jit] sem %s.c\n", c.c_str()); return false; }
+        auto setup = [&](int otype) {   /* -nostdinc: only the headers below */
+            TCCState *s = T.nw();
+            T.errf(s, nullptr, tcc_error); T.libpath(s, tcc_path(tccdir).c_str()); T.opts(s, "-w -nostdinc");
+            T.inc(s, incdir.c_str()); T.inc(s, (tcc_path(tccdir) + "include").c_str()); T.otype(s, otype);
+            if (trace) T.def(s, "PSP_TRACE", "1");
+            if (ftrace) T.def(s, "TF_FTRACE", "1");   /* bisection tool only (TF_FTRACE_FILE): it makes every function entry and every guest store a call */
+            return s;
+        };
+        TCCState *s = nullptr;
+        if (use_cache) {
+            char key[17]; snprintf(key, sizeof key, "%016llx", (unsigned long long)xxh64(src.data(), src.size(), seed));
+            const std::wstring obj = cache + to_wide(c) + L"_" + to_wide(key) + L".o";
+            if (GetFileAttributesW(obj.c_str()) == INVALID_FILE_ATTRIBUTES) {   /* miss: compile to a temporary object, then move it in place (parallel replays) */
+                const std::wstring tmp = obj + L"." + std::to_wstring(GetCurrentProcessId()) + L".tmp";
+                TCCState *o = setup(4);   /* 4 = TCC_OUTPUT_OBJ */
+                const bool built = T.cstr(o, src.c_str()) >= 0 && T.outfile(o, tcc_path(tmp).c_str()) >= 0;
+                T.del(o);
+                if (!built) { DeleteFileW(tmp.c_str()); fprintf(stderr, "[jit] %s: cache nao gravado, compilando em memoria\n", c.c_str()); }
+                else if (MoveFileExW(tmp.c_str(), obj.c_str(), MOVEFILE_REPLACE_EXISTING)) drop_stale(cache, c, obj);
+                else DeleteFileW(tmp.c_str());
+            } else hits++;
+            if (GetFileAttributesW(obj.c_str()) != INVALID_FILE_ATTRIBUTES) {
+                s = setup(1); add_symbols(s);
+                if (T.addfile(s, tcc_path(obj).c_str()) < 0 || T.reloc(s, (void *)1) < 0) { fprintf(stderr, "[jit] %s: cache invalido, compilando em memoria\n", c.c_str()); T.del(s); DeleteFileW(obj.c_str()); s = nullptr; }
+            }
+        }
+        if (!s) {
+            s = setup(1); add_symbols(s);   /* 1 = TCC_OUTPUT_MEMORY */
+            if (T.cstr(s, src.c_str()) < 0) { fprintf(stderr, "[jit] erro compilando %s\n", c.c_str()); return false; }
+            if (T.reloc(s, (void *)1) < 0) { fprintf(stderr, "[jit] erro ligando %s\n", c.c_str()); return false; }   /* TCC_RELOCATE_AUTO */
+        }
         auto sym = [&](const char *suf) { return T.getsym(s, (c + "_" + suf).c_str()); };
         for (const char *need : {"base", "gp", "memsz", "textsz", "datasz", "bsssz", "entry", "fns", "nfns", "imports", "nimports", "exports", "nexports"})
             if (!sym(need)) { fprintf(stderr, "[jit] %s: o codigo gerado nao tem o simbolo %s_%s\n", c.c_str(), c.c_str(), need); return false; }   /* sem isto o ponteiro nulo era lido logo abaixo */
@@ -120,9 +153,9 @@ bool jit_init(void) {
         m.exps = (const ExportEntry *)sym("exports"); m.nexps = *(unsigned *)sym("nexports");
         g_jit.push_back(m); ok++;   /* o TCCState fica vivo: o codigo gerado mora na memoria dele */
     }
-    fprintf(stderr, "[jit] %d modulos compilados em memoria com o TinyCC em %.1f s\n", ok, (GetTickCount() - t0) / 1000.0);
+    fprintf(stderr, "[jit] %d modulos compilados em memoria com o TinyCC em %.1f s (%d do cache)\n", ok, (GetTickCount() - t0) / 1000.0, hits);
     if (getenv("TF_JIT_SELFTEST")) jit_selftest();
-    g_jit_on = ok > 0; if (g_jit_on) gccfn_install(); return g_jit_on;
+    g_jit_on = ok > 0; return g_jit_on;
 }
 /* TF_JIT_SELFTEST=1: compila um trecho com o TinyCC (mesmos simbolos do JIT) e imprime conversoes float -> int */
 static void jit_selftest(void) {
@@ -140,7 +173,4 @@ static void jit_selftest(void) {
     fprintf(stderr, "[jit] selftest: %d falhas em 200000 repeticoes\n", bad);
     for (int i = 0; i < 6; i++) fprintf(stderr, "[jit] selftest %g: nearest=%d trunc=%d ceil=%d floor=%d\n", v[i], out[i * 4], out[i * 4 + 1], out[i * 4 + 2], out[i * 4 + 3]);
 }
-const GenModule *gen_modules(unsigned *n) {
-    if (g_jit_on) { *n = (unsigned)g_jit.size(); return g_jit.data(); }
-    *n = g_gen_nmodules; return g_gen_modules;
-}
+const GenModule *gen_modules(unsigned *n) { *n = g_jit_on ? (unsigned)g_jit.size() : 0; return g_jit.data(); }

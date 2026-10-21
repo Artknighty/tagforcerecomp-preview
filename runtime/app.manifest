@@ -1,8 +1,8 @@
 <?xml version="1.0" encoding="UTF-8" standalone="yes"?>
-<!-- Manifesto do run.exe: controles comuns versao 6 (botoes, caixas de texto e barras no estilo atual do Windows, e o tema
-     escuro dos controles; sem isso tudo saia no tema classico) e compatibilidade declarada com o Windows 10/11.
-     A consciencia de DPI NAO e declarada aqui: o processo continua sem DPI proprio (o jogo cuida da propria janela) e as
-     janelas que precisam (tela de abertura, caixas de mensagem) ligam o DPI por thread. -->
+<!-- Manifest of TagForceRecomp.exe: common controls version 6 (buttons, edit boxes and bars in the current Windows style, and the
+     dark theme of the controls; without it everything came out in the classic theme) and declared Windows 10/11 compatibility.
+     DPI awareness is NOT declared here: the process stays DPI-unaware (the game handles its own window) and the windows
+     that need it (launcher, message boxes) turn on DPI awareness per thread. -->
 <assembly xmlns="urn:schemas-microsoft-com:asm.v1" manifestVersion="1.0">
   <assemblyIdentity type="win32" name="TagForceRecomp" version="1.0.0.0" processorArchitecture="*"/>
   <dependency>

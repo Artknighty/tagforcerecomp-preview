@@ -1,6 +1,6 @@
-"""Instala os dados do jogo (versao em Python da instalacao do run.exe: o resultado e o MESMO formato de pasta, ver runtime/core/isofolder.cpp).
-Serve para a primeira compilacao (o run.exe ainda nao existe) e para scripts. Uso: python tools/game/extrair_jogo.py <iso> [pasta]   (padrao: gen/jogo)
-Cria: arquivos soltos com os nomes originais, _setores.bin (setores fora de arquivos e nao-nulos) e, por ultimo, _disco.tsv (instalacao completa).
+"""Installs the game data (a Python version of TagForceRecomp.exe --install: the result is the SAME folder layout, see runtime/core/isofolder.cpp).
+For scripts that need the files without the exe. Usage: python tools/game/extrair_jogo.py <iso> [folder]   (default: gen/jogo)
+Creates: loose files with their original names, _setores.bin (non-zero sectors outside any file) and, last, _disco.tsv (complete install).
 Nada vai para o git (a pasta fica em gen/ ou jogo/, ambos ignorados)."""
 import os, struct, sys
 sys.path.insert(0, os.path.dirname(__file__))

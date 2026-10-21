@@ -19,7 +19,7 @@ def rows():
         seen.add(n)
         yield c, n, b, iso, exp
 
-JOGO = os.environ.get("TF_JOGO") or os.path.join(ROOT, "gen", "jogo_" + VER if VER else "jogo")   # dados instalados (run.exe --instalar ou tools/game/extrair_jogo.py): fonte preferida dos modulos
+JOGO = os.environ.get("TF_JOGO") or os.path.join(ROOT, "gen", "jogo_" + VER if VER else "jogo")   # installed data (TagForceRecomp.exe --install or tools/game/extrair_jogo.py): preferred source of the modules
 ISO_DE = {}   # modulo -> caminho dentro do disco (modules.tsv)
 def src_path(n, iso=''):
     cand = os.path.join(JOGO, 'PSP_GAME', *(iso or ISO_DE.get(n, '')).split('/'))

@@ -2,7 +2,7 @@
   Runs INSIDE Windows Sandbox (started by abrir_sandbox.ps1). Clean-room test of the documented build:
     1. install MSYS2 + build tools from scratch;
     2. copy the repository (mapped read-only at C:\src) to a writable folder;
-    3. run tools/recomp_tudo.sh with the ISO (mapped at C:\iso);
+    3. run tools/build.sh, then tools/install_dev.sh with the ISO (mapped at C:\iso);
     4. start the game headless with the software renderer and check that it draws the title screen (screenshots);
     5. (optional) repeat with Direct3D 11 and Vulkan and report, without failing the test.
   Output: C:\out\teste.log, C:\out\RESULTADO.txt, screenshots (mapped to the host).
@@ -30,7 +30,7 @@ function Bash([string]$cmd, [string]$logName) {
 
 Write-Host "Clean-room test started $(Get-Date -Format s). ISO: C:\iso\$IsoName"
 Passo 'ISO is visible in the sandbox' (Test-Path "C:\iso\$IsoName") "C:\iso\$IsoName"
-Passo 'repository is visible in the sandbox' (Test-Path 'C:\src\tools\recomp_tudo.sh')
+Passo 'repository is visible in the sandbox' (Test-Path 'C:\src\tools\build.sh')
 
 # ---- 1. MSYS2 -------------------------------------------------------------------------------------------------------------------------------
 try {
@@ -53,14 +53,17 @@ try {
 try {
     New-Item -ItemType Directory -Force -Path $work | Out-Null
     robocopy C:\src $work /E /XD gen .git /NFL /NDL /NJH /NJS | Out-Null
-    Passo 'repository copied to a writable folder' (Test-Path "$work\tools\recomp_tudo.sh") $work
+    Passo 'repository copied to a writable folder' (Test-Path "$work\tools\build.sh") $work
 } catch { Passo 'copy repository' $false $_.Exception.Message }
 
-# ---- 3. recomp_tudo.sh (install data, translate modules, build run.exe) -----------------------------------------------------------------------
-$rc = Bash "cd /c/work/TagforceRecomp && sh tools/recomp_tudo.sh '/c/iso/$IsoName'" 'recomp_tudo.log'
-Passo 'tools/recomp_tudo.sh completed' ($rc -eq 0) "exit $rc"
-Passo 'gen\run.exe was produced' (Test-Path "$work\gen\run.exe")
-Passo 'behavior mods were built (gen\mods\*\plugin.dll)' ((Get-ChildItem "$work\gen\mods" -Recurse -Filter plugin.dll -ErrorAction SilentlyContinue | Measure-Object).Count -ge 3) ''
+# ---- 3. build.sh (the dev package: exe, TinyCC, Python, plugins) and install_dev.sh (game data from the ISO) -----------------------------------
+$pkg = "$work\gen\pkg\TagForceRecomp"; $exe = "$pkg\TagForceRecomp.exe"
+$rc = Bash "cd /c/work/TagforceRecomp && sh tools/build.sh" 'build.log'
+Passo 'tools/build.sh completed' ($rc -eq 0) "exit $rc"
+Passo 'gen\pkg\TagForceRecomp\TagForceRecomp.exe was produced' (Test-Path $exe)
+Passo 'behavior mods were built (mods\*\plugin.dll)' ((Get-ChildItem "$pkg\mods" -Recurse -Filter plugin.dll -ErrorAction SilentlyContinue | Measure-Object).Count -ge 3) ''
+$rc = Bash "cd /c/work/TagforceRecomp && sh tools/install_dev.sh '/c/iso/$IsoName'" 'install.log'
+Passo 'tools/install_dev.sh installed the game data' (($rc -eq 0) -and (Test-Path "$pkg\jogo")) "exit $rc"
 
 # ---- 4. headless boot with the software renderer ---------------------------------------------------------------------------------------------
 function Boot([string]$nome, [string]$gpu) {
@@ -68,14 +71,14 @@ function Boot([string]$nome, [string]$gpu) {
     $env:TF_LOG_DIR = "$work\gen\logs_$nome"; $env:TF_INI = "$work\gen\logs_$nome\teste.ini"
     New-Item -ItemType Directory -Force -Path $env:TF_LOG_DIR | Out-Null
     Remove-Item "$work\gen\snap_*.bmp" -ErrorAction SilentlyContinue
-    $p = Start-Process -FilePath "$work\gen\run.exe" -ArgumentList @('--iso', "C:\iso\$IsoName") -WorkingDirectory $work -PassThru -WindowStyle Hidden
-    if (-not $p.WaitForExit(240000)) { $p.Kill(); return $false }
+    $p = Start-Process -FilePath $exe -ArgumentList @('--dados', "$pkg\jogo") -WorkingDirectory $work -PassThru -WindowStyle Hidden
+    if (-not $p.WaitForExit(600000)) { $p.Kill(); return $false }   # the first start also translates the game code (a few minutes)
     $snaps = Get-ChildItem "$work\gen\snap_*.bmp" -ErrorAction SilentlyContinue
     foreach ($s in $snaps) { Copy-Item $s.FullName (Join-Path $out ("{0}_{1}" -f $nome, $s.Name)) -Force }
     Copy-Item "$env:TF_LOG_DIR\*.log" (Join-Path $out ("{0}_sessao.log" -f $nome)) -Force -ErrorAction SilentlyContinue
     return ($snaps.Count -ge 1)
 }
-if (Test-Path "$work\gen\run.exe") {
+if ((Test-Path $exe) -and (Test-Path "$pkg\jogo")) {
     $okSw = Boot 'software' '0'
     Passo 'game boots and draws frames (software renderer)' $okSw 'see software_snap_*.bmp'
     # ---- 5. GPU backends (informational: a virtual GPU may not support them) ----
