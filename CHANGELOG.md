@@ -2,6 +2,11 @@
 
 Format: [Keep a Changelog](https://keepachangelog.com/en/1.1.0/). Versioning: [SemVer](https://semver.org/).
 
+## [Unreleased]
+
+### Fixed
+- Deck Edit no longer freezes when moving a card from the Deck to the Trunk (a rewritten window helper ignored one of its arguments).
+
 ## [0.3.3] - 2026-10-21
 
 ### Fixed

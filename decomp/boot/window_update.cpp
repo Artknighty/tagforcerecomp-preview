@@ -21,28 +21,29 @@ constexpr uint32_t kAnswerFrames = 9;   /* how long a chosen cell stays lit (the
 constexpr uint32_t kConfirmCancelMasks = 0x088ECBE4;   /* two pad masks (u16 each) */
 constexpr uint32_t kButtonsAvailable = 0x088ED414;     /* per ButtonLayout: which of the eight button slots exist (a bit each) */
 
-/* FUN_08843984 is in window_content.cpp: the slot of the item whose style is `style`; here the window's own item */
-int32_t ownItem(SwapCtx &x, const WindowBlock &block, uint32_t blockAddress) {
+/* FUN_08843984 is in window_content.cpp: the slot of the item whose style is `style` (callers outside BOOT, such as the deck editor, pass a style other than the block's own) */
+int32_t itemSlot(SwapCtx &x, const WindowBlock &block, uint32_t style) {
     for (int32_t i = 0; i < 16; i++) {
         const uint32_t item = block.item[i];
-        if (item != 0 && x.at<WindowItem>(item).style == blockAddress + offsetof(WindowBlock, style)) return i;
+        if (item != 0 && x.at<WindowItem>(item).style == style) return i;
     }
     return -1;
 }
+uint32_t ownStyle(uint32_t blockAddress) { return blockAddress + offsetof(WindowBlock, style); }
 
 /* F60A4259(block, style): the window's item has finished appearing or disappearing (it is shown, or closed) */
-bool itemSettled(SwapCtx &x, uint32_t blockAddress) {
+bool itemSettled(SwapCtx &x, uint32_t blockAddress, uint32_t style) {
     const WindowBlock &block = x.at<WindowBlock>(blockAddress);
-    const int32_t slot = ownItem(x, block, blockAddress);
+    const int32_t slot = itemSlot(x, block, style);
     if (slot < 0) return false;
     const uint32_t phase = x.at<WindowItem>(block.item[slot]).phase;
     return phase == 4 || phase == 2;
 }
 
 /* FA53F08C(block, style): start the window's item closing */
-bool startItemClosing(SwapCtx &x, uint32_t blockAddress) {
+bool startItemClosing(SwapCtx &x, uint32_t blockAddress, uint32_t style) {
     const WindowBlock &block = x.at<WindowBlock>(blockAddress);
-    const int32_t slot = ownItem(x, block, blockAddress);
+    const int32_t slot = itemSlot(x, block, style);
     if (slot < 0) return false;
     WindowItem &item = x.at<WindowItem>(block.item[slot]);
     item.phase = 3;
@@ -53,7 +54,7 @@ bool startItemClosing(SwapCtx &x, uint32_t blockAddress) {
 /* B0F320E6(block): begin closing the window: its item animates out when the style has a close animation, else it is closed at once */
 void beginClose(SwapCtx &x, uint32_t blockAddress) {
     WindowBlock &block = x.at<WindowBlock>(blockAddress);
-    startItemClosing(x, blockAddress);
+    startItemClosing(x, blockAddress, ownStyle(blockAddress));
     block.state = block.style.closeAnimation < 1 ? kWindowClosed : kWindowClosing;
 }
 
@@ -161,10 +162,10 @@ int32_t updateWindow(SwapCtx &x, uint32_t blockAddress) {
         return kNoAnswer;
     }
     case kWindowOpening:
-        if (itemSettled(x, blockAddress)) block.state = kWindowOpen;
+        if (itemSettled(x, blockAddress, ownStyle(blockAddress))) block.state = kWindowOpen;
         return kNoAnswer;
     case kWindowClosing:
-        if (!itemSettled(x, blockAddress)) return kNoAnswer;
+        if (!itemSettled(x, blockAddress, ownStyle(blockAddress))) return kNoAnswer;
         block.state = kWindowClosed;
         [[fallthrough]];   /* and answers */
     case kWindowClosed:
@@ -248,10 +249,10 @@ SwapReg reg_UpdateWindow({"BOOT.UpdateWindow", MODULE, fn::UpdateWindow, swap_Up
 void swap_BeginClose(SwapCtx &x) { beginClose(x, x.arg(0)); }
 SwapReg reg_BeginClose({"BOOT.BeginClose", MODULE, fn::BeginClose, swap_BeginClose});
 
-void swap_ItemSettled(SwapCtx &x) { x.ret(itemSettled(x, x.arg(0))); }
+void swap_ItemSettled(SwapCtx &x) { x.ret(itemSettled(x, x.arg(0), x.arg(1))); }
 SwapReg reg_ItemSettled({"BOOT.ItemSettled", MODULE, fn::ItemSettled, swap_ItemSettled, true});
 
-void swap_StartItemClosing(SwapCtx &x) { x.ret(startItemClosing(x, x.arg(0))); }
+void swap_StartItemClosing(SwapCtx &x) { x.ret(startItemClosing(x, x.arg(0), x.arg(1))); }
 SwapReg reg_StartItemClosing({"BOOT.StartItemClosing", MODULE, fn::StartItemClosing, swap_StartItemClosing});
 
 void swap_ConfirmCancelMask(SwapCtx &x) { x.ret(confirmCancelMask(x, (int)x.arg(0))); }
