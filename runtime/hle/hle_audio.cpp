@@ -13,14 +13,14 @@ void audio_out_init(void);
 void audio_out_mix(uint64_t *cursor, const int16_t *src, uint32_t frames, bool stereo, int lvol, int rvol);
 
 /* ---- sceAudio: 8 canais; formato 0 = estereo, 0x10 = mono; volume 0..0x8000 ---- */
-struct AudioCh { uint32_t samples = 1024, fmt = 0; int lvol = 0x8000, rvol = 0x8000; uint64_t cursor = 0; };
+struct AudioCh { uint32_t samples = 1024, fmt = 0; int lvol = 0x8000, rvol = 0x8000; uint64_t cursor = 0; double vend = 0; };   /* vend: virtual time (us) at which the audio queued on this channel ends */
 static AudioCh g_ch[8];
 static uint32_t g_next_ch;
 
 HLE(sceAudioChReserve) {   /* (ch, samples, fmt) */
     audio_out_init();
     int ch = (int)ARG(0); if (ch < 0 || ch > 7) ch = (int)(g_next_ch++ & 7);
-    g_ch[ch].samples = ARG(1); g_ch[ch].fmt = ARG(2); g_ch[ch].cursor = 0; RET(ch);
+    g_ch[ch].samples = ARG(1); g_ch[ch].fmt = ARG(2); g_ch[ch].cursor = 0; g_ch[ch].vend = 0; RET(ch);
 }
 HLE(sceAudioChRelease) { RET(0); }
 HLE(sceAudioSetChannelDataLen) { if (ARG(0) < 8) g_ch[ARG(0)].samples = ARG(1); RET(0); }
@@ -36,7 +36,12 @@ static void audio_out(CPU *c, uint32_t ch, int lvol, int rvol, uint32_t buf, boo
         if (!f[ch & 7]) { snprintf(fn, sizeof fn, "gen/audio_ch%u_%s.raw", ch & 7, a.fmt == 0x10 ? "mono" : "stereo"); f[ch & 7] = fopen(fn, "wb"); }
         if (f[ch & 7]) fwrite(mem_ptr(buf), a.fmt == 0x10 ? 2 : 4, a.samples, f[ch & 7]);
     }
-    if (block) k_delay_current((uint64_t)a.samples * 1000000ull / 44100ull);   /* espera a duracao do bloco (tempo virtual) */
+    /* Like the PSP's audio hardware (and PPSSPP): each channel queues its blocks back to back on an absolute timeline; a blocking output returns
+     * when the block queued before it has finished playing. The old "wait one block length from now" added the game's own work time to every
+     * cycle and truncated the length to whole us, so the game produced audio at a rate slightly off 44100 Hz of game time. */
+    const double now = (double)k_now_us(), prev_end = std::max(a.vend, now);
+    a.vend = prev_end + (double)a.samples * 1000000.0 / 44100.0;
+    if (block && prev_end > now + 1.0) k_delay_current((uint64_t)(prev_end - now));
     RET(0);
 }
 HLE(sceAudioOutputBlocking) { audio_out(c, ARG(0), (int)ARG(1), (int)ARG(1), ARG(2), true); }

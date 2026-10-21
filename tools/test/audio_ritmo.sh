@@ -9,6 +9,7 @@ rm -rf "$D"; mkdir -p "$D"; cp -r gen/ms0 "$D/ms0" 2>/dev/null
 W=$(cygpath -m "$PWD/$D")
 export TF_KEEP_CWD=1 TF_LOG_DIR="$W/logs" TF_INI="$W/teste.ini" TF_LAT_DEBUG=1 TF_AUDIO_MUDO=1 TF_NO_MOVIES=1 TF_CONFIRM_AUTO=0
 export TF_MODS_DIR="$W/mods"; mkdir -p "$D/mods"
+cp gen/pkg/TagForceRecomp/TagForceRecomp.exe gen/pkg/TagForceRecomp/TagForceRecomp_bg.exe || { echo "TagForceRecomp_bg.exe in use: close the running test first"; exit 1; }
 EXE="$PWD/gen/pkg/TagForceRecomp/TagForceRecomp_bg.exe"; DATA=$(cygpath -m "$PWD/gen/pkg/TagForceRecomp/jogo")
-( cd "$D" && timeout "$SECS" "$EXE" --dados "$DATA" > /dev/null 2>&1 )
+( cd "$D" && EXIT_FRAME=$((SECS * 60)) timeout "$((SECS + 30))" "$EXE" --dados "$DATA" > /dev/null 2>&1 )
 python tools/analysis/audio_ritmo_resumo.py "$D"/logs/*.log

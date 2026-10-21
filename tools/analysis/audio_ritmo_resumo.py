@@ -17,6 +17,8 @@ def main():
     slow = sum(1 for v in q if v <= 59)
     print('seconds %d | frames/s avg %.2f min %d | seconds <= 59 fps: %d | virtual time per real s avg %.1f ms | stretch avg %.2f%% max %.2f%% | game speed %.2f%% of real time | underruns %d'
           % (len(q), sum(q) / len(q), min(q), slow, sum(vus) / len(vus) / 1000.0, sum(st) / len(st), max(st), speed, under))
+    smp = [int(m.group(1)) for l in sec for m in [re.search(r'canal0=(\d+) amostras', l)] if m]
+    if smp and vus: print('channel 0: %.1f samples per virtual second (44100 = exact)' % (sum(smp) / (sum(vus) / 1e6)))
     for l in catch[-3:]: print(l.split('] ', 1)[-1])
     for l in lines:
         if 'reserve raised' in l: print(l)

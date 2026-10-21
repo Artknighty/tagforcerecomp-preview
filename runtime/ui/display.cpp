@@ -453,7 +453,8 @@ static void profiler_dump(void) {
 void diag_flush(void);
 void texrepl_save_recent(void);
 /* toda saida passa por aqui (janela fechada, Esc, EXIT_FRAME, o jogo pedindo sceKernelExitGame): ExitProcess nao roda os atexit da CRT */
-static void quit_process(void) { perf_report(true); profiler_dump(); seq_esperar_gravacao(); texrepl_save_recent(); diag_flush(); ExitProcess(0); }
+void audio_out_shutdown(void);
+static void quit_process(void) { perf_report(true); profiler_dump(); seq_esperar_gravacao(); texrepl_save_recent(); audio_out_shutdown(); diag_flush(); ExitProcess(0); }
 void display_quit(void) { quit_process(); }
 /* fonte 5x7 minima (digitos, '.', ' ', f p s m) para o overlay */
 static const uint8_t *glyph(char ch) {
