@@ -9,7 +9,11 @@
  *
  * If a channel falls behind the read position (a hitch longer than the reserve), it is moved a reserve ahead (a short gap) and the reserve target
  * grows (adaptive, 75 -> 170 ms); if it is too far ahead (no limiter) the samples are dropped. WASAPI failing to start falls back to waveOut with the
- * same pull path; TF_AUDIO_WAVEOUT=1 forces it. Disabled with NO_AUDIO=1 or NO_PACE=1. */
+ * same pull path; TF_AUDIO_WAVEOUT=1 forces it. Disabled with NO_AUDIO=1 or NO_PACE=1.
+ *
+ * Fast-forward (Cheats menu, audio_out_speed(n), n = 2..8): the game runs n times faster, so it delivers n times more audio per real second. The device
+ * thread then reads the ring with WSOLA time-stretching (overlap-add of 40 ms grains, each placed where it best continues the previous one) so the music
+ * plays n times faster with the SAME pitch: not muted and not chipmunk-high. Switching in and out goes through a short fade. */
 #include <windows.h>
 #include <mmsystem.h>
 #include <mmdeviceapi.h>
@@ -40,6 +44,8 @@ static double now_ms(void) { LARGE_INTEGER q, f; QueryPerformanceCounter(&q); Qu
 /* Loading fast-forward: audio produced out of time is dropped; the volume follows a continuous ramp (down ~70 ms, which fits in the reserve
  * already in the ring, up ~0.6 s with a smoothstep curve when the new track starts). g_pos: 0 = mute, 1 = full volume. */
 static volatile bool g_skip;
+static volatile int g_ff_n = 1;                  /* fast-forward speed requested by the game (1 = normal) */
+void audio_out_speed(int n) { g_ff_n = std::max(1, std::min(8, n)); }
 static double g_pos = 1.0, g_skip_end_ms;
 void audio_out_skip(bool on) { if (g_skip && !on) g_skip_end_ms = now_ms(); g_skip = on; }
 
@@ -65,6 +71,62 @@ static double g_fill_ema = -1, g_adj, g_low_since;
 static double g_adj_max;                         /* largest |rate change| since the last debug line */
 static uint32_t g_dev_wakes, g_dev_empty; static double g_dev_gap_max;
 
+/* ---- fast-forward: WSOLA time-stretch (device thread, under g_mx) ---- */
+static bool g_ff_active, g_ff_first = true;
+static double g_ff_a, g_ff_sp;                   /* nominal analysis position / start of the previous grain (game samples, fractional) */
+static float g_ff_tail[2][4096], g_ff_hop[2][4096];   /* second half of the previous grain / the finished hop being played */
+static uint32_t g_ff_hop_pos, g_ff_hop_n;
+static double g_ff_adj, g_ff_fill;
+static const double FF_FILL = 0.15 * RATE;       /* game samples to keep ahead of the analysis position */
+static inline double ring_at(int64_t i, int c) { return g_ring[((uint64_t)i & (RING - 1)) * 2 + c]; }
+static inline double ring_cubic(double pos, int c) {
+    const int64_t i = (int64_t)pos; const double x = pos - (double)i;
+    const double y0 = ring_at(i - 1, c), y1 = ring_at(i, c), y2 = ring_at(i + 1, c), y3 = ring_at(i + 2, c);
+    return y1 + 0.5 * x * (y2 - y0 + x * (2.0 * y0 - 5.0 * y1 + 4.0 * y2 - y3 + x * (3.0 * (y1 - y2) + y3 - y0)));
+}
+/* Builds the next hop (Hs output frames) into g_ff_hop. head = the most advanced write position (game samples), or < 0 without a channel. */
+static void ff_make_hop(uint32_t dev_rate, double head) {
+    const uint32_t Hs = std::min<uint32_t>(2048, (uint32_t)(dev_rate * 0.02)), L = 2 * Hs;
+    const double base = (double)RATE / dev_rate, hop_in = (double)Hs * base;
+    const int N = g_ff_n, tol = (int)(0.005 * RATE);
+    static float grain[2][4096];
+    memset(grain, 0, sizeof grain);
+    bool have = false;
+    if (head >= 0) {
+        if (g_ff_first) { g_ff_a = head - FF_FILL; g_ff_sp = -1; }
+        const double adv = g_ff_first ? 0.0 : N * hop_in * (1.0 + g_ff_adj);
+        const double a = g_ff_a + adv;
+        if (a - tol - 8 > (double)g_cleared && a + tol + L * base + 8 < head) {
+            double s = a;
+            if (g_ff_sp >= 0) {   /* the candidate that best continues the previous grain (normalized correlation on the mono sum, every 4th sample) */
+                const double ref0 = g_ff_sp + hop_in; double best = -1e30;
+                const int seg = (int)hop_in;
+                for (int d = -tol; d <= tol; d += 2) {
+                    const int64_t c0 = (int64_t)(a + d), r0 = (int64_t)ref0; double dot = 0, en = 1e-3;
+                    for (int m = 0; m < seg; m += 4) { const double cv = ring_at(c0 + m, 0) + ring_at(c0 + m, 1), rv = ring_at(r0 + m, 0) + ring_at(r0 + m, 1); dot += cv * rv; en += cv * cv; }
+                    const double score = dot / sqrt(en);
+                    if (score > best) { best = score; s = (double)c0; }
+                }
+            }
+            for (uint32_t j = 0; j < L; j++) {
+                const double w = 0.5 - 0.5 * cos(6.283185307179586 * j / L), pos = s + j * base;
+                for (int c = 0; c < 2; c++) grain[c][j] = (float)(ring_cubic(pos, c) * w);
+            }
+            g_ff_a = a; g_ff_sp = s; g_ff_first = false; have = true;
+            g_ff_fill = head - a;
+            /* the ring behind the next grain's reference is no longer needed */
+            const uint64_t keep = (uint64_t)std::max(0.0, s + hop_in - 8);
+            if (keep > g_rd) g_rd = keep;
+            /* keep the reserve near FF_FILL by changing the tempo a little (pitch is not affected) */
+            const double err = (g_ff_fill - FF_FILL) / FF_FILL;   /* > 0: too much buffered -> go faster */
+            g_ff_adj = std::max(-0.12, std::min(0.12, 0.25 * err));
+        }
+    }
+    if (!have) g_ff_sp = -1;   /* nothing to play: the next grain starts fresh (silence meanwhile) */
+    for (uint32_t j = 0; j < Hs; j++) for (int c = 0; c < 2; c++) { g_ff_hop[c][j] = g_ff_tail[c][j] + grain[c][j]; g_ff_tail[c][j] = grain[c][Hs + j]; }
+    g_ff_hop_pos = 0; g_ff_hop_n = Hs;
+}
+
 /* Render n output frames (stereo float, -1..1) at 'dev_rate'. Called by the device thread only. */
 static void render(float *out, uint32_t n, uint32_t dev_rate) {
     std::lock_guard<std::mutex> lk(g_mx);
@@ -74,7 +136,17 @@ static void render(float *out, uint32_t n, uint32_t dev_rate) {
     for (int i = 0; i < g_nch; i++) if (g_ch[i].last_ms && t - g_ch[i].last_ms < 250.0) head = std::max(head, (double)*g_ch[i].key);
     if (g_target > RESERVE_MIN && t - g_under_ms > 60000.0) { g_target = std::max(RESERVE_MIN, g_target - RESERVE_STEP); g_under_ms = t; }
     const double base = (double)RATE / (double)dev_rate, dt = (double)n / dev_rate;
-    if (head >= 0) {
+    /* fast-forward on/off: fade to silence, switch the reading mode, fade back in (a few tens of ms) */
+    const bool want_ff = g_ff_n > 1;
+    bool switching = false; static double fade_in_s = 0.6;
+    if (want_ff != g_ff_active) {
+        if (g_pos <= 0.0005) {
+            g_ff_active = want_ff; fade_in_s = 0.2;
+            if (want_ff) { g_ff_first = true; g_ff_hop_n = g_ff_hop_pos = 0; memset(g_ff_tail, 0, sizeof g_ff_tail); g_ff_adj = 0; }
+            else { if (head >= 0) g_rpos = std::max(g_rpos, head - g_target); g_fill_ema = -1; g_adj = 0; g_rd = (uint64_t)g_rpos; }
+        } else switching = true;
+    }
+    if (!g_ff_active && head >= 0) {
         const double fill = head - g_rpos;
         /* the game delivers in bursts (3 blocks per 33 ms frame): smooth over ~0.4 s */
         if (g_fill_ema < 0) g_fill_ema = fill; else g_fill_ema += std::min(1.0, dt / 0.4) * (fill - g_fill_ema);
@@ -91,27 +163,29 @@ static void render(float *out, uint32_t n, uint32_t dev_rate) {
     }
     g_adj_max = std::max(g_adj_max, fabs(g_adj));
     const double step = base * (1.0 + g_adj);
+    const bool ff = g_ff_active;
     static const bool mute = getenv("TF_AUDIO_MUDO") != nullptr;   /* tests: everything runs, the device plays silence */
-    const double fade_out = 1.0 / (dev_rate * 0.07), fade_in = 1.0 / (dev_rate * 0.6);
+    const double fade_out = 1.0 / (dev_rate * 0.07), fade_in = 1.0 / (dev_rate * (g_skip ? 0.6 : fade_in_s));
     if (g_hist.empty()) { g_hist_rate = dev_rate; g_hist.assign((size_t)dev_rate * 8 * 2, 0); }
     const size_t hn = g_hist.size() / 2;
     for (uint32_t f = 0; f < n; f++) {
         const uint64_t i = (uint64_t)g_rpos; const double x = g_rpos - (double)i;
-        if (g_skip) g_pos = std::max(0.0, g_pos - fade_out); else g_pos = std::min(1.0, g_pos + fade_in);
+        if (g_skip || switching) g_pos = std::max(0.0, g_pos - fade_out); else g_pos = std::min(1.0, g_pos + fade_in);
         const double gain = mute ? 0.0 : g_pos * g_pos * (3.0 - 2.0 * g_pos) / 32768.0;
+        if (ff && g_ff_hop_pos >= g_ff_hop_n) ff_make_hop(dev_rate, head);
         for (int c = 0; c < 2; c++) {
             const double y0 = g_ring[((i - 1) & (RING - 1)) * 2 + c], y1 = g_ring[(i & (RING - 1)) * 2 + c],
                          y2 = g_ring[((i + 1) & (RING - 1)) * 2 + c], y3 = g_ring[((i + 2) & (RING - 1)) * 2 + c];
             /* Catmull-Rom (4-point cubic Hermite) */
-            const double v = y1 + 0.5 * x * (y2 - y0 + x * (2.0 * y0 - 5.0 * y1 + 4.0 * y2 - y3 + x * (3.0 * (y1 - y2) + y3 - y0)));
+            const double v = ff ? (double)g_ff_hop[c][g_ff_hop_pos] : y1 + 0.5 * x * (y2 - y0 + x * (2.0 * y0 - 5.0 * y1 + 4.0 * y2 - y3 + x * (3.0 * (y1 - y2) + y3 - y0)));
             const float s = (float)std::max(-1.0, std::min(1.0, v * gain));
             out[f * 2 + c] = s;
             g_hist[(size_t)((g_hist_n + f) % hn) * 2 + c] = (int16_t)lrintf(s * 32767.0f);
         }
-        g_rpos += step;
+        if (ff) g_ff_hop_pos++; else g_rpos += step;
     }
     g_hist_n += n;
-    g_rd = (uint64_t)g_rpos;
+    if (!ff) g_rd = (uint64_t)g_rpos;
     while (g_cleared + 4 < g_rd) { const uint32_t k = (uint32_t)(g_cleared & (RING - 1)) * 2; g_ring[k] = g_ring[k + 1] = 0; g_cleared++; }
 }
 

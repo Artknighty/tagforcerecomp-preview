@@ -53,7 +53,7 @@ Behavior mods in this repository (sources in [`plugins/src/`](plugins/src/)):
 | **Better Decks** (`DecksAprimorados`) | replaces the decks of duelists with edited ones, without touching the game files. See [`docs/DECKS.md`](docs/DECKS.md) |
 | **CPU vs CPU** (`CPUvsCPU`) | lets the CPU play your side too; also the engine of the AI/deck test arena |
 | **Booster box** (`CaixaDeBoosters`) | buy all remaining packs of a booster at once in the shop |
-| **Cheats** (`Cheats`) | optional cheats in their own **Cheats** menu: see the CPU's cards (F6), DP multiplier (1x to 10x), unlock everything (cards, packs and Free Duel duelists) |
+| **Cheats** (`Cheats`) | optional cheats in their own **Cheats** menu: see the CPU's cards (F6), DP multiplier (1x to 10x), fast-forward (1x to 8x, music keeps its pitch), unlock everything (cards, packs and Free Duel duelists) |
 | **Monsters on the field** (`MonstrosNoCampo`) | *experimental prototype*: shows your face-up monsters larger over their zone |
 
 Texture, video and button packs (HD menus, HD opening movie, EU cards, Xbox buttons) are separate mods distributed outside the repository.

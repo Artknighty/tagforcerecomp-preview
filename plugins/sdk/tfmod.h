@@ -20,7 +20,7 @@
 extern "C" {
 #endif
 
-#define TFMOD_API_VERSION 5   /* 2: guest_alloc; 3: add_slider; 4: add_toggle, panel, use_menu; 5: sprite, quad_near */
+#define TFMOD_API_VERSION 6   /* 2: guest_alloc; 3: add_slider; 4: add_toggle, panel, use_menu; 5: sprite, quad_near; 6: set_speed */
 
 typedef struct CPU TfCpu;                     /* PSP registers (opaque: use reg/set_reg) */
 /* hook: called on ENTRY of the game function. Return 0 to let the original body run next (the hook only observed/prepared), or
@@ -104,6 +104,11 @@ typedef struct TfModApi {
     /* 1 if, in the frame on screen, the game drew a textured 3D quad (a card on the field etc.) whose center is within `tol` pixels of
      * (x, y) and whose width is wmin..wmax pixels. Used to tell whether a field slot is really visible (and not covered by a cut-in). */
     int (*quad_near)(int x, int y, int tol, int wmin, int wmax);
+
+    /* ---- version 6 ---- */
+    /* Game speed (fast-forward): 1 = normal, 2..8 = that many times faster. The frame limiter is replaced by one at n times the game's own rate and
+     * the music is time-stretched (same pitch). The plugin owns the setting (it is not saved by the runtime): call it again on load. */
+    void (*set_speed)(int n);
 } TfModApi;
 #define TFMOD_MENU_MODS 0
 #define TFMOD_MENU_CHEATS 1

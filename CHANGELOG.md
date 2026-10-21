@@ -4,6 +4,9 @@ Format: [Keep a Changelog](https://keepachangelog.com/en/1.1.0/). Versioning: [S
 
 ## [Unreleased]
 
+### Added
+- Cheats > Fast-forward (game speed 1x to 8x), also in game with L + R + Left / Right. The music is time-stretched, so it speeds up without changing pitch. It always starts at 1x.
+
 ### Fixed
 - Deck Edit no longer freezes when moving a card from the Deck to the Trunk (a rewritten window helper ignored one of its arguments).
 

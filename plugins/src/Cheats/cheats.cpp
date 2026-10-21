@@ -16,7 +16,9 @@
  *      libduel_mgr 08f08534 duel_reward_calculate: lets the original run, measures the gain (player_dp before/after, BOOT 0883d908), adds
  *      gain x (N-1) with player_dp_add (0883d938, respects the cap) and multiplies the 4 parts of the context (09a151a4: +08..+14) that the
  *      result screen draws; the detail screens draw with number_draw_decimal (08f0d7f4), multiplied only on the DP rows (by the return address).
- *   3. Unlock everything (Cheats menu, one-shot): edits the save the game keeps in RAM (BOOT save_estado 0883d698, the same 0xFCA8-byte block
+ *   3. Fast-forward (1x to 8x; API 6 set_speed): the game runs faster, the music is time-stretched in the runtime (same pitch). Set it in the Cheats menu
+ *      or, in game, by holding L + R and pressing LEFT / RIGHT. It always starts at 1x (it is not saved, so a forgotten setting never surprises).
+ *   4. Unlock everything (Cheats menu, one-shot): edits the save the game keeps in RAM (BOOT save_estado 0883d698, the same 0xFCA8-byte block
  *      the game writes to DATA0 on its next save). It adds every card to the collection (3 copies, marked as seen), makes every card pack
  *      available in the shop and gives every duelist all of his real decks in the Free Duel opponent list. Nothing else (story progress, DP,
  *      level and the save flags) is touched. Save layout (BOOT functions save_*, carta_*, pacote_*, and decomp/libtitle):
@@ -58,6 +60,8 @@ static int g_canto = 1;      /*    panel corner: 0 top left, 1 top right, 2 bott
 static int g_mult = 1;       /* 2. DP multiplier */
 static int g_unlock_auto = 0; /* 3. unlock everything by itself once per start, when the save is loaded (set in the launcher) */
 static const int MULT_MAX = 10;
+static int g_speed = 1;      /* 3. fast-forward (not saved) */
+static const int SPEED_MAX = 8;
 static std::wstring cfg_path(void) { return std::wstring(A->mod_dir) + L"\\config.ini"; }
 static void cfg_save(void) {
     if (FILE *f = _wfopen(cfg_path().c_str(), L"w")) { fprintf(f, "show_opponent_cards=%d\npanel_corner=%d\ndp_multiplier=%d\nunlock_on_start=%d\n", g_ver, g_canto, g_mult, g_unlock_auto); fclose(f); }
@@ -161,7 +165,7 @@ static void canto_set(int v) { g_canto = std::max(0, std::min(3, v)); cfg_save()
 
 /* ------------------------------------------------------------------ 2. DP multiplier */
 static const uint32_t F_RECOMPENSA = 0x08f08534, F_DP = 0x0883d908, F_DP_SOMAR = 0x0883d938, P_CTX = 0x09a151a4, F_NUMERO = 0x08f0d7f4;
-static const uint32_t BTN_UP = 0x10, BTN_DOWN = 0x40, BTN_L = 0x100, BTN_R = 0x200;
+static const uint32_t BTN_UP = 0x10, BTN_DOWN = 0x40, BTN_L = 0x100, BTN_R = 0x200, BTN_LEFT = 0x80, BTN_RIGHT = 0x20;
 static uint64_t g_mult_show_until; static uint32_t g_prev_btn;
 static int mult_get(void) { return g_mult; }
 static void mult_set(int v) { g_mult = std::max(1, std::min(MULT_MAX, v)); cfg_save(); A->log("multiplicador de DP = %dx (menu Mods)", g_mult); }
@@ -210,7 +214,27 @@ static void mult_quadro(void) {   /* L + R + CIMA/BAIXO em qualquer tela */
     }
 }
 
-/* ------------------------------------------------------------------ 3. Unlock everything */
+/* ------------------------------------------------------------------ 3. Fast-forward */
+static uint64_t g_speed_show_until;
+static int speed_get(void) { return g_speed; }
+static void speed_set(int v) { g_speed = std::max(1, std::min(SPEED_MAX, v)); A->set_speed(g_speed); A->log("fast-forward = %dx", g_speed); }
+static void speed_quadro(void) {   /* L + R + LEFT/RIGHT on any screen */
+    static uint32_t prev;
+    const uint32_t b = A->buttons(), novo = b & ~prev; prev = b;
+    if ((b & (BTN_L | BTN_R)) == (BTN_L | BTN_R) && (novo & (BTN_LEFT | BTN_RIGHT))) {
+        speed_set(g_speed + ((novo & BTN_RIGHT) ? 1 : -1));
+        g_speed_show_until = A->frame() + 150;
+    }
+    if (A->frame() < g_speed_show_until) {
+        wchar_t l1[64], l2[16];
+        if (g_speed == 1) swprintf(l1, 64, L"Game speed: 1x (normal)"); else swprintf(l1, 64, L"Game speed: %dx", g_speed);
+        swprintf(l2, 16, L"=%d/%d", g_speed, SPEED_MAX);
+        const wchar_t *lines[2] = {l1, l2};
+        A->message_box(L"Fast-forward", lines, 2, L"L + R + Left / Right adjusts");
+    }
+}
+
+/* ------------------------------------------------------------------ 4. Unlock everything */
 static const uint32_t SAVE = 0x08a65418, SAVE_VERSION = 0x10002, F_COLECAO_ENTRADA = 0x0883de3c;
 static const uint32_t SAVE_DUELIST_RECORDS = 0x68, DUELIST_RECORD_SIZE = 0x12, DUELIST_RECORD_DECKS = 6;
 static const uint32_t SAVE_PACKS = 0x8ff4, PACK_SIZE = 0x2a, PACK_COUNT = 0x30, PACK_AVAILABLE = 2;
@@ -278,16 +302,17 @@ static void unlock_quadro(TfCpu *c) {
 }
 
 /* ------------------------------------------------------------------ */
-static int hk_quadro(TfCpu *c) { mult_quadro(); ver_cartas_quadro(c); unlock_quadro(c); return 0; }
+static int hk_quadro(TfCpu *c) { mult_quadro(); speed_quadro(); ver_cartas_quadro(c); unlock_quadro(c); return 0; }
 
 extern "C" __declspec(dllexport) int tfmod_init(const TfModApi *api) {
     A = api;
-    if (A->version < 4) { A->log("Cheats precisa da API 4 (runtime mais novo)"); return 1; }
+    if (A->version < 6) { A->log("Cheats precisa da API 6 (runtime mais novo)"); return 1; }
     cfg_load();
     A->use_menu(TFMOD_MENU_CHEATS);   /* everything in this mod goes in the bar's Cheats menu (separate from the mods) */
     A->add_toggle(L"&See the opponent's cards", VK_F6, ver_get, ver_set);
     A->add_slider(L"Card panel position (0 top left, 1 top right, 2 bottom left, 3 bottom right)", L"", 0, 3, 1, canto_get, canto_set);
     A->add_slider(L"&DP multiplier in duels", L"x", 1, MULT_MAX, 1, mult_get, mult_set);
+    A->add_slider(L"&Fast-forward (game speed)", L"x", 1, SPEED_MAX, 1, speed_get, speed_set);
     A->add_toggle(L"&Unlock everything (cards, packs, duelists)", VK_F2, unlock_get, unlock_set);
     A->hook(F_QUADRO, hk_quadro);
     A->hook(F_RECOMPENSA, hk_recompensa);

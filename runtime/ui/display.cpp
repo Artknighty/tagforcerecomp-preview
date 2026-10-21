@@ -488,6 +488,9 @@ static void toggle_fps_overlay(void) { g_show_fps = !g_show_fps; sync_menu(); }
 void display_toggle_fps(void) { toggle_fps_overlay(); }
 static void sync_menu(void) { menu_sync(g_fullscreen, g_show_fps, current_scale()); }
 void audio_out_skip(bool on);
+void audio_out_speed(int n);
+static volatile int g_speed = 1;   /* fast-forward (Cheats menu): the game runs g_speed times faster; 1 = normal */
+void display_set_speed(int n) { g_speed = n < 1 ? 1 : n > 8 ? 8 : n; audio_out_speed(g_speed); }
 double audio_out_dump(const wchar_t *path);
 std::wstring diag_session_prefix(void);
 const uint32_t *mpeg_hd_present(int *w, int *h, uint32_t *ver);
@@ -497,6 +500,8 @@ const uint32_t *mpeg_hd_present(int *w, int *h, uint32_t *ver);
 void ge_marca_texturas(int n);
 static void marcas_processar(void) {
     { static const char *mq = getenv("TF_MARCA_QUADRO"); if (mq && quadro_na_lista(mq, g_frames)) marca_cpu(); }    /* testes: marca nestes quadros (como F7) */
+    { static const char *ma = getenv("TF_MARCAA_QUADRO"); if (ma && quadro_na_lista(ma, g_frames)) marca_rapida(3); }   /* testes: marca de audio (grava o WAV dos ultimos 8 s) nestes quadros */
+    { static const char *sp = getenv("TF_SPEED"); if (sp && g_frames == 2) display_set_speed(atoi(sp)); }   /* testes: avanco rapido desde o inicio (sem o plugin Cheats) */
     { static const char *mg = getenv("TF_MARCAG_QUADRO"); if (mg && quadro_na_lista(mg, g_frames)) marca_graf(); }  /* testes: F8 nestes quadros */
     if (!g_marcag_pedida) return;
     if (text_input_busy()) return;   /* a caixa de texto do jogo (nome do jogador) esta aberta: a marca espera ela fechar */
@@ -641,7 +646,18 @@ void display_present(void) {
     { QueryPerformanceCounter(&g_tail0); g_tail_slept0 = pace_slept_peek_ms(); g_tail_on = true; }   /* inicio da apresentacao deste quadro (tail_end, no fim da chamada) */
     marcas_processar();   /* F7/F8: caixa de nota (pausa o jogo) e, se confirmada, a marca; a pausa sai das estatisticas do quadro seguinte (g_pausa_ms) */
     static bool ff_off = getenv("TF_NO_LOADING_FF") != nullptr;
-    audio_out_skip(g_loading_run >= 12 && !ff_off);
+    audio_out_skip(g_loading_run >= 12 && !ff_off);   /* the loading screens drop their audio; the Cheats fast-forward time-stretches it (audio_out.cpp) */
+    const int speed = g_speed;
+    if (speed > 1 && !(g_loading_run >= 12 && !ff_off)) {   /* fast-forward: no frame limiter, but at most `speed` times the normal 60 present calls per second */
+        static int64_t next; LARGE_INTEGER nq, nf; QueryPerformanceCounter(&nq); QueryPerformanceFrequency(&nf);
+        const int64_t step = nf.QuadPart / (60 * speed);
+        if (next == 0 || nq.QuadPart - next > nf.QuadPart / 10) next = nq.QuadPart;   /* far behind (a slow scene): do not try to catch up */
+        while (nq.QuadPart < next) {
+            if ((next - nq.QuadPart) * 1000 / nf.QuadPart >= 2) Sleep(1);
+            QueryPerformanceCounter(&nq);
+        }
+        next += step;
+    }
     /* quadro real pendente do modo 'apresentar antes' (ver abaixo): sai 1/60 s depois do intermediario; no 120 FPS o terceiro intermediario sai
      * meio passo antes dele (desenhado aqui: a GPU tem a fase inteira para ele). Sem limitador (testes) o terceiro sai na hora. */
     bool real_flushed = false;
@@ -666,7 +682,7 @@ void display_present(void) {
     /* Latencia do 60 FPS: o quadro novo ja esta pronto (o jogo termina em poucos ms) mas era segurado ate o vblank (~13 ms de espera) e o real
      * ainda um vblank depois. Com quadro novo + intermediario, o intermediario sai logo que a "fase" do jogo permite (ultima saida + phi, o tempo de
      * trabalho tipico) e o real 1/60 s depois; a grade de vblanks so avanca. O teclado e lido DEPOIS da espera (antes o jogo via o controle de ~13 ms atras). */
-    const bool pace_on = !no_pace && !(g_loading_run >= 12 && !ff_off);
+    const bool pace_on = !no_pace && !(g_loading_run >= 12 && !ff_off) && speed <= 1;
     {   /* sincronia com o monitor (pacing.cpp): taxa do monitor onde a janela esta (a cada ~1 s; ela pode mudar de monitor) */
         static int hz; static uint64_t next;
         if (g_frames >= next) {
@@ -839,7 +855,7 @@ void display_present(void) {
            * e nada foi desenhado nele desde entao (repetir custava um passe de escala 4K e, a ~7 ms da apresentacao anterior, o driver segurava 15-18 ms) */
           const bool same_img = g_real_fb_shown == gfb && g_real_ver_shown == interp_fb_version(gfb) && !ov_new;
           const bool skip_repeat = !interp_has_new(gfb) && (real_flushed || (same_img && pace_on && interp_enabled() && !no_slot));
-          const bool allow = mid_ok && !(g_loading_run >= 12 && !ff_off);
+          const bool allow = mid_ok && !(g_loading_run >= 12 && !ff_off) && speed <= 1;
           const int64_t t0 = pace_now();
           bool shown, slot_deferred = false; int64_t q1 = 0;   /* q1: hora em que o (1o) intermediario comecou a ser apresentado; os seguintes e o real contam dela (a duracao de cada
                                          * apresentacao varia 0,2-1,2 ms: contar do fim esticava o quadro e a malha de fase se perdia no 120 FPS) */
