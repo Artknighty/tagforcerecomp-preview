@@ -2,6 +2,16 @@
 
 Format: [Keep a Changelog](https://keepachangelog.com/en/1.1.0/). Versioning: [SemVer](https://semver.org/).
 
+## [0.3.3] - 2026-10-21
+
+### Fixed
+- Audio on slower PCs: late frames no longer cause crackling or lost game time; the audio reserve adapts to the machine.
+- Audio output rewritten (WASAPI with a continuous resampler) for cleaner, steadier sound.
+- 60 FPS no longer stays suspended when a heavy scene is over; it backs off and recovers.
+- Smoother frame pacing (D3D11 timing, three back buffers).
+- Faster startup after the first run: compiled code is cached.
+- Sharper application icon at every window size, correct at any display scaling.
+
 ## [0.3.2] - 2026-10-18
 
 ### Fixed
