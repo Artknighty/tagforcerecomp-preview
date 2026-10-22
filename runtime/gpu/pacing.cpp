@@ -193,9 +193,13 @@ int64_t pace_last_exit(void) { return g_exit_qpc; }
  * a regra era a media movel de "saida tarde" e suspendia com quadros que o perf mostrava sem atraso nenhum (sessao 2026-10-08, 7 vezes). */
 void pace_work(double work_ms) {
     /* um quadro isolado (carregamento, travada) conta no maximo 2 vblanks: so atraso sustentado suspende */
-    g_lag_ms = std::min(250.0, std::max(0.0, g_lag_ms + std::min(work_ms, 2000.0 / 60.0) - 1000.0 / 60.0));
+    /* The per-call time includes the blocked present / vblank wait (not counted as limiter sleep): at 120 FPS a healthy game frame is one call of
+     * ~33 ms (4 presents, 8.3 ms each) followed by a near-zero call. With the budget at exactly 16.7 ms the lag was a reflected random walk and
+     * crossed the threshold on its own (title screen idle: 5-7 suspensions in 2 min, each ~2.5-10 s at 30 FPS; Leo's session 20261021_202449).
+     * The budget now has 8 ms of slack and the threshold is 1.5 vblanks: only calls sustained above ~25 ms (3 heavy calls in a row) suspend. */
+    g_lag_ms = std::min(250.0, std::max(0.0, g_lag_ms + std::min(work_ms, 2000.0 / 60.0) - (1000.0 / 60.0 + 8.0)));
     static const bool nosusp = getenv("TF_INTERP_NOSUSP") != nullptr;   /* testes: replays escondidos sem limitador (apresentar numa janela oculta bloqueia ~8 ms e disparava a suspensao) */
-    if (g_lag_ms > 1000.0 / 60.0 && g_skip_mid == 0 && !nosusp) {
+    if (g_lag_ms > 1500.0 / 60.0 && g_skip_mid == 0 && !nosusp) {
         g_skip_mid = susp_len(150); g_lag_ms = 0; g_susp_n++;
         if (g_dbg) fprintf(stderr, "[perf] 60 FPS: GPU/CPU no limite, quadros intermediarios suspensos por ~2,5 s%c", 10);
     }
