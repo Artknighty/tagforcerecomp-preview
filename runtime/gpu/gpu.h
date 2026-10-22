@@ -53,6 +53,7 @@ struct GpuBackend {
     bool (*set_exclusive)(bool);   /* opcional: entra/sai da tela cheia exclusiva (so o Direct3D 11); false = indisponivel */
 };
 extern const GpuBackend gpu_backend_d3d11, gpu_backend_vulkan;
+extern volatile bool g_excl_failed;   /* D3D11 Present keeps failing in exclusive fullscreen (black screen): display.cpp falls back to borderless */
 extern volatile bool g_gpu_lost;   /* a backend saw DEVICE_REMOVED / DEVICE_LOST (driver reset, TDR, GPU unplugged): display.cpp rebuilds the renderer between two frames */
 bool gpu_select(int renderer);   /* GFX_RENDER_D3D11 / GFX_RENDER_VULKAN: escolhe o backend (ainda sem iniciar); false = renderer invalido */
 const char *gpu_backend_name(void);

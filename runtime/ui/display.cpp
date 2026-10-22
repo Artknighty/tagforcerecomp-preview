@@ -640,6 +640,7 @@ void display_present(void) {
         gfx_option_set(GFXOPT_TEXTURE_PACK, to); display_notify(to ? "Textures: Enhanced" : "Textures: Original (PSP)");
     }
     { static const long lose_at = getenv("TF_GPU_LOSE_AT") ? atol(getenv("TF_GPU_LOSE_AT")) : 0; if (lose_at && (long)g_frames == lose_at) g_gpu_lost = true; }   /* test: simulate a device loss at frame N */
+    if (g_excl_failed) { g_excl_failed = false; pres_drain(); if (g_exclusive) { g_kind = GFX_WIN_BORDERLESS; apply_exclusive(); display_notify("Exclusive fullscreen failed: using borderless"); } }
     if (g_gpu_lost) {   /* driver reset / TDR / GPU removed: rebuild the same renderer; after 3 losses in 60 s fall back to software (without touching the saved choice) */
         g_gpu_lost = false; pres_drain();
         static ULONGLONG t0; static int n; const ULONGLONG now = GetTickCount64();

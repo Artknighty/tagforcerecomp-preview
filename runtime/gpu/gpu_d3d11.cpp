@@ -15,10 +15,11 @@
 void d3d_flush(void);
 template <class T> static void rel(T *&p) { if (p) { p->Release(); p = nullptr; } }
 
+volatile bool g_excl_failed;
 volatile bool g_gpu_lost;   /* shared with the Vulkan backend (gpu.h) */
 static ID3D11Device *g_dev; static ID3D11DeviceContext *g_ctx;
 static IDXGISwapChain1 *g_swap; static ID3D11RenderTargetView *g_back; static int g_bw, g_bh;
-static bool g_tearing, g_dbg; static char g_adapter[128] = "?";
+static bool g_tearing, g_dbg, g_excl;   /* g_excl: swap chain in exclusive fullscreen (Present must not use ALLOW_TEARING there) */ static char g_adapter[128] = "?";
 static HWND g_hwnd;
 
 /* ------------------------------------------------------------------ sombreadores */
@@ -185,6 +186,7 @@ static bool ensure_swap(void) {
         if (SUCCEEDED(g_dev->QueryInterface(__uuidof(IDXGIDevice), (void **)&dd)) && SUCCEEDED(dd->GetAdapter(&ad)) && SUCCEEDED(ad->GetParent(__uuidof(IDXGIFactory2), (void **)&f2))) {
             IDXGIFactory5 *f5 = nullptr; BOOL t = FALSE;
             if (SUCCEEDED(f2->QueryInterface(__uuidof(IDXGIFactory5), (void **)&f5))) { if (SUCCEEDED(f5->CheckFeatureSupport(DXGI_FEATURE_PRESENT_ALLOW_TEARING, &t, sizeof t))) g_tearing = t != FALSE && tf_diag_opt("d3d_tearing", 1) != 0; rel(f5); }
+            if (!GetParent(g_hwnd)) g_tearing = false;   /* top-level window = exclusive fullscreen candidate: a swap chain with ALLOW_TEARING makes every Present fail (DXGI_ERROR_INVALID_CALL) there, leaving a black screen */
             DXGI_SWAP_CHAIN_DESC1 d = {}; d.Width = cw; d.Height = ch; d.Format = DXGI_FORMAT_R8G8B8A8_UNORM; d.SampleDesc.Count = 1;
             d.BufferUsage = DXGI_USAGE_RENDER_TARGET_OUTPUT; d.BufferCount = (UINT)std::max(2, std::min(4, tf_diag_opt("d3d_buffers", 3)));   /* 3 by default: with 2, the GPU work queued after a present waits for the back buffer to be released (up to one refresh) and late intermediate frames pile up on slow machines */ d.SwapEffect = DXGI_SWAP_EFFECT_FLIP_DISCARD;
             d.Flags = g_tearing ? DXGI_SWAP_CHAIN_FLAG_ALLOW_TEARING : 0;
@@ -636,7 +638,11 @@ static void present_srv(ID3D11ShaderResourceView *srv, int sw, int sh) {
     }
     ID3D11ShaderResourceView *nul = nullptr; g_ctx->PSSetShaderResources(0, 1, &nul);
     prof_end();
-    double tp = gpu_now_us(); const HRESULT phr = g_swap->Present(g_gfx.sync == 1 ? 1 : 0, g_gfx.sync != 1 && g_tearing ? DXGI_PRESENT_ALLOW_TEARING : 0);
+    double tp = gpu_now_us(); const HRESULT phr = g_swap->Present(g_gfx.sync == 1 ? 1 : 0, g_gfx.sync != 1 && g_tearing && !g_excl ? DXGI_PRESENT_ALLOW_TEARING : 0);
+    if (FAILED(phr) && phr != DXGI_ERROR_DEVICE_REMOVED && phr != DXGI_ERROR_DEVICE_RESET) { static int n; if (n++ < 5) fprintf(stderr, "[d3d] Present failed: 0x%08lx (excl %d, sync %d)\n", (unsigned long)phr, (int)g_excl, (int)g_gfx.sync);
+        if (n <= 1) { RECT cr = {}; GetClientRect(g_hwnd, &cr); BOOL fs = FALSE; IDXGIOutput *o = nullptr; g_swap->GetFullscreenState(&fs, &o); DXGI_OUTPUT_DESC od = {}; if (o) o->GetDesc(&od); fprintf(stderr, "[d3d] buffers %dx%d, client %ldx%ld, fullscreen %d, output %ldx%ld, device reason 0x%08lx\n", g_bw, g_bh, cr.right, cr.bottom, (int)fs, od.DesktopCoordinates.right - od.DesktopCoordinates.left, od.DesktopCoordinates.bottom - od.DesktopCoordinates.top, (unsigned long)g_dev->GetDeviceRemovedReason()); rel(o); } }
+    if (g_excl && phr == DXGI_ERROR_INVALID_CALL) { static int bad; if (++bad >= 30) { bad = 0; g_excl_failed = true; } }
+    else if (SUCCEEDED(phr)) { static int ok; if (ok++ == 0 || ok == 100 || ok == 1000) fprintf(stderr, "[d3d] Present ok (#%d, excl %d)\n", ok, (int)g_excl); }
     if (phr == DXGI_ERROR_DEVICE_REMOVED || phr == DXGI_ERROR_DEVICE_RESET) {
         if (!g_gpu_lost) fprintf(stderr, "[d3d] device lost (Present 0x%08lx, reason 0x%08lx)\n", (unsigned long)phr, (unsigned long)g_dev->GetDeviceRemovedReason());
         g_gpu_lost = true;
@@ -686,13 +692,14 @@ static void d3d_destroy_all(void) {
     rel(g_back); rel(g_kickQ); g_kickPend = false;
     if (g_ctx) { g_ctx->ClearState(); g_ctx->Flush(); }
     if (g_swap) g_swap->SetFullscreenState(FALSE, nullptr);   /* DXGI exige sair do modo exclusivo antes de soltar a swapchain */
-    rel(g_swap); rel(g_ctx); rel(g_dev);
+    g_excl = false; rel(g_swap); rel(g_ctx); rel(g_dev);
 }
 static void d3d_release_all(void) { d3d_destroy_all(); }
 static bool d3d_set_exclusive(bool on) {
     if (!g_swap) return false;
     const HRESULT hr = g_swap->SetFullscreenState(on ? TRUE : FALSE, nullptr);
     fprintf(stderr, "[d3d] exclusive fullscreen %s: %s (0x%08lx)\n", on ? "on" : "off", SUCCEEDED(hr) ? "ok" : "refused", (unsigned long)hr);
+    g_excl = SUCCEEDED(hr) && on;
     return SUCCEEDED(hr);
 }
 const GpuBackend gpu_backend_d3d11 = {"Direct3D 11", d3d_init, d3d_ready, d3d_release_all, d3d_adapter_name, d3d_fb_create, d3d_fb_destroy, d3d_fb_upload, d3d_check_start, d3d_check_get,
