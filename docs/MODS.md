@@ -154,7 +154,7 @@ a mistake" mark number `n` (F7 or L3+R3, after typing the note): a good place to
 
 When a hook calls game functions (`call`) before letting the original run, save and restore **all** registers around the call: the PSP
 passes up to 8 arguments in a0–a3 and t0–t3, and `r2` holds the original's result when the hook wraps it (see `chama()` in
-`plugins/src/Cheats/cheats.cpp`).
+`runtime/mods/cheats.cpp`, built into the exe).
 
 ### Creating a mod
 
@@ -178,7 +178,7 @@ API than the player's runtime starts with `TFMOD_REQUIRE(api, N)`: it then refus
   in the classic layout; RB on a controller): the game's own message window asks "Buy all N packs for X DP?" and YES buys every remaining pack of that booster
   at once (limited by DP). The text is placed in PSP memory with `guest_alloc` and a hook on the game's string reader delivers it when
   the window is built.
-- **Cheats** (`plugins/src/Cheats`, see its README): optional cheats, each off by default, in their own **Cheats** menu (separate from Mods).
+- **Cheats** (built into the recomp, `runtime/mods/cheats.cpp`, see [`CHEATS.md`](CHEATS.md); not a mod): optional cheats, each off by default, in their own **Cheats** menu (separate from Mods).
   **See the opponent's cards** (F6): a panel lists the CPU's hand and its face-down cards, one row per card in the color of its frame
   (Normal, Effect, Fusion, Ritual, Spell, Trap) with attribute, level and ATK/DEF (or the Spell/Trap type, e.g. Quick-Play); it only
   reads the duel state. **DP multiplier** (formerly the separate "DP multiplier" mod): 1x (default) to 10x the DP earned at

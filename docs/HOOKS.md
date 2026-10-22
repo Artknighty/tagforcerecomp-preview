@@ -12,17 +12,17 @@ To find a new one, run the game with `TF_HOOK_TRACE=addr,addr` (logs frame and a
 
 | Address | What it is | Used by |
 |---|---|---|
-| `08833fc4` | called once per frame: the place for a per-frame callback | Cheats, Monsters on the field |
+| `08833fc4` | called once per frame: the place for a per-frame callback | Cheats (built in), Monsters on the field |
 | `0884a694` | `libehsys_85A292D7(recipe, out)`: the **deck reader**; fills `out` (0x108 bytes: counts, main/side/extra card ids) for recipe `RCPnnn` | Better Decks, Card / Deck Randomizers |
 | `0884a5cc` | `libehsys_E1677D35(recipe)`: pointer to the recipe's name (UTF-16) | Deck Randomizers |
 | `0883f4f8` | `libehsys_F11F0D9A`: commits the duel setup (the player's saved deck is copied into the duel here) | Card / Player Deck Randomizer |
-| `0884b46c` | card id -> card name | Cheats, Better AI |
+| `0884b46c` | card id -> card name | Cheats (built in), Better AI |
 | `0884b4b8` | card id -> card description | Better AI |
-| `0884b4f8` | card id -> address of the card's 8 bytes in `CARD_Prop` (ATK/DEF/level/attribute, layout in `tools/game/cartas.py`) | Card Randomizer, Cheats |
+| `0884b4f8` | card id -> address of the card's 8 bytes in `CARD_Prop` (ATK/DEF/level/attribute, layout in `tools/game/cartas.py`) | Card Randomizer, Cheats (built in) |
 | `0884b7ec` / `0884b830` / `0884b77c` | card id -> ATK / DEF / level | Better AI |
 | `0884c0d8` | card id -> is it a monster? | Better AI |
-| `0883d908` / `0883d938` | read / add the player's DP | Cheats |
-| `0883de3c` | card id -> collection entry (0 for ids that are not collectable cards) | Cheats |
+| `0883d908` / `0883d938` | read / add the player's DP | Cheats (built in) |
+| `0883de3c` | card id -> collection entry (0 for ids that are not collectable cards) | Cheats (built in) |
 
 ## Duel (`libduel`, `0x09e.....` / `0x09f.....`)
 
@@ -38,8 +38,8 @@ To find a new one, run the game with `TF_HOOK_TRACE=addr,addr` (logs frame and a
 | `09e87760` | AI: execute the chosen action | Better AI |
 | `09e8133c` / `09e82bd4` | AI: simulate an action / predict Dark Hole | Better AI |
 | `09e75cc0` | AI: score of the hypothetical board (original: total damage of the simulated attack) | Better AI |
-| `08f08534` | duel reward routine (DP at the end of the duel) | Cheats |
-| `08f0d7f4` | number drawn on the duel result screen | Cheats |
+| `08f08534` | duel reward routine (DP at the end of the duel) | Cheats (built in) |
+| `08f0d7f4` | number drawn on the duel result screen | Cheats (built in) |
 | `09f79d1c` | (data) duel field slots, stride `0xfac` | Monsters on the field |
 
 ## Card shop (`libshop`, `0x091c....`)

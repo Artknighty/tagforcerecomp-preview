@@ -21,6 +21,7 @@ uint32_t display_buttons(void);
 uint64_t display_frames(void);
 void display_set_speed(int n);
 bool host_module_loaded(const char *name);
+int cheats_init(const TfModApi *api);   /* cheats.cpp */
 
 namespace {
 struct Plugin { std::string name; std::wstring dir; HMODULE dll; TfModApi api; int menu = 0; };   /* menu: onde entram os proximos ajustes (use_menu) */
@@ -79,9 +80,33 @@ void api_log(const char *fmt, ...) {
 
 void plugins_marca(int n) {   /* tecla F7 / L3+R3: chama tfmod_marca(n) dos plugins que a exportam (na thread do jogo) */
     for (Plugin *p : g_plugins) {
-        auto f = (void (*)(int))(void *)GetProcAddress(p->dll, "tfmod_marca"); if (!f) continue;
+        auto f = p->dll ? (void (*)(int))(void *)GetProcAddress(p->dll, "tfmod_marca") : nullptr; if (!f) continue;
         void *prev = g_hook_owner; g_hook_owner = p; f(n); g_hook_owner = prev;
     }
+}
+
+/* fills the API for p and runs its init; on failure removes what it installed and returns false (p is then the caller's to free) */
+static bool plugin_start(Plugin *p, int (*init)(const TfModApi *)) {
+    TfModApi &a = p->api;
+    a.version = TFMOD_API_VERSION; a.mod_dir = p->dir.c_str();
+    a.mem = api_mem; a.reg = api_reg; a.set_reg = api_set_reg;
+    a.hook = api_hook; a.call_original = api_call_original; a.call = api_call;
+    a.buttons = api_buttons; a.frame = api_frame; a.module_loaded = api_module_loaded;
+    a.message_box = api_message_box; a.log = api_log;
+    a.guest_alloc = api_guest_alloc;   /* versao 2 */
+    a.add_slider = api_add_slider;     /* versao 3 */
+    a.add_toggle = api_add_toggle; a.panel = api_panel; a.use_menu = api_use_menu;   /* versao 4 */
+    a.sprite = api_sprite; a.quad_near = api_quad_near;   /* versao 5 */
+    a.set_speed = display_set_speed;   /* versao 6 */
+    g_init = p; const int r = init(&a); g_init = nullptr;
+    if (r != 0) {   /* falhou: tira os ganchos e os ajustes que ele tenha posto (as funcoes deles somem com a DLL: o menu chamaria get() de codigo descarregado) */
+        hook_remove_owner(p);
+        g_toggles.erase(std::remove_if(g_toggles.begin(), g_toggles.end(), [p](const Toggle &t) { return t.p == p; }), g_toggles.end());
+        fprintf(stderr, "[mods] %s: init devolveu %d (ignorado)\n", p->name.c_str(), r); return false;
+    }
+    g_plugins.push_back(p);
+    fprintf(stderr, "[mods] %s: plugin carregado\n", p->name.c_str());
+    return true;
 }
 
 void plugins_load(void) {
@@ -102,25 +127,11 @@ void plugins_load(void) {
         auto init = (int (*)(const TfModApi *))(void *)GetProcAddress(h, "tfmod_init");
         if (!init) { fprintf(stderr, "[mods] %s: plugin.dll sem tfmod_init (ignorado)\n", m.first.c_str()); FreeLibrary(h); continue; }
         Plugin *p = new Plugin{m.first, m.second, h, {}};
-        TfModApi &a = p->api;
-        a.version = TFMOD_API_VERSION; a.mod_dir = p->dir.c_str();
-        a.mem = api_mem; a.reg = api_reg; a.set_reg = api_set_reg;
-        a.hook = api_hook; a.call_original = api_call_original; a.call = api_call;
-        a.buttons = api_buttons; a.frame = api_frame; a.module_loaded = api_module_loaded;
-        a.message_box = api_message_box; a.log = api_log;
-        a.guest_alloc = api_guest_alloc;   /* versao 2 */
-        a.add_slider = api_add_slider;     /* versao 3 */
-        a.add_toggle = api_add_toggle; a.panel = api_panel; a.use_menu = api_use_menu;   /* versao 4 */
-        a.sprite = api_sprite; a.quad_near = api_quad_near;   /* versao 5 */
-        a.set_speed = display_set_speed;   /* versao 6 */
-        g_init = p; const int r = init(&a); g_init = nullptr;
-        if (r != 0) {   /* falhou: tira os ganchos e os ajustes que ele tenha posto (as funcoes deles somem com a DLL: o menu chamaria get() de codigo descarregado) */
-            hook_remove_owner(p);
-            g_toggles.erase(std::remove_if(g_toggles.begin(), g_toggles.end(), [p](const Toggle &t) { return t.p == p; }), g_toggles.end());
-            fprintf(stderr, "[mods] %s: tfmod_init devolveu %d (ignorado)\n", m.first.c_str(), r); FreeLibrary(h); delete p; continue;
-        }
-        g_plugins.push_back(p);
-        fprintf(stderr, "[mods] %s: plugin carregado\n", m.first.c_str());
+        if (!plugin_start(p, init)) { FreeLibrary(h); delete p; continue; }
+    }
+    if (game_id_built() == "ULES-00600") {   /* Cheats is a feature of the recomp (cheats.cpp, compiled into the exe), started through the same API; its hooks are for the European game */
+        Plugin *p = new Plugin{"Cheats", exe_dir(), nullptr, {}};
+        if (!plugin_start(p, cheats_init)) delete p;
     }
 }
 

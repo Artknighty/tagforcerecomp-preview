@@ -56,7 +56,6 @@ Behavior mods in this repository (sources in [`plugins/src/`](plugins/src/)):
 | **Better Decks** (`BetterDecks`) | replaces the decks of duelists with edited ones, without touching the game files. See [`docs/DECKS.md`](docs/DECKS.md) |
 | **CPU vs CPU** (`CPUvsCPU`) | lets the CPU play your side too; also the engine of the AI/deck test arena |
 | **Booster box** (`BoosterBox`) | buy all remaining packs of a booster at once in the shop |
-| **Cheats** (`Cheats`) | optional cheats in their own **Cheats** menu: see the CPU's cards (F6), DP multiplier (1x to 10x), fast-forward (1x to 8x, music keeps its pitch), unlock everything (cards, packs and Free Duel duelists) |
 | **Card Randomizer** (`CardRandomizer`) | every deck of every duel is refilled with random cards from the whole card pool |
 | **Player / Opponent Deck Randomizer** (`PlayerDeckRandomizer`, `OpponentDeckRandomizer`) | every duel, your / the opponent's deck becomes a random whole recipe of the game, with its own deck name; use one or both |
 | **Monsters on the field** (`MonstersOnField`) | *experimental prototype*: shows your face-up monsters larger over their zone |

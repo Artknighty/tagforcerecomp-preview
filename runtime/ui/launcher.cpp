@@ -72,7 +72,7 @@ static std::vector<ModEntry> g_modlist; static int g_modscroll;   /* g_modlist: 
 static std::wstring mods_dir() { return exe_dir() + L"mods"; }
 static void mods_reload() { g_modlist.clear(); for (auto &e : mods_list_dir(mods_dir())) if (e.visible) g_modlist.push_back(e); }
 static bool file_exists(const std::wstring &p); static bool dir_exists(const std::wstring &p);
-/* pagina Cheats: mods/Cheats/config.ini (o plugin le ao iniciar) + o interruptor do proprio mod (arquivo disabled) */
+/* Cheats page: cheats.ini next to the exe (cheats.cpp reads it at start; the master switch is its "enabled" key) */
 struct CheatOpt { const wchar_t *label, *hint; int count; const wchar_t *const *names; };
 static const int N_CHEAT = 6;
 static const wchar_t *const kOnOff[2] = {L"Off", L"On"}, *const kCorner[4] = {L"Top left", L"Top right", L"Bottom left", L"Bottom right"},
@@ -86,29 +86,31 @@ static const CheatOpt kCheat[N_CHEAT] = {
     {L"Fast-forward", L"Game speed when the game starts (the music keeps its pitch). In game: Cheats menu, or L + R + Left / Right.", 8, kMult},
 };
 static HWND g_csel[N_CHEAT]; static int g_cc[N_CHEAT] = {1, 0, 1, 0, 0, 0};
-static std::wstring cheat_dir() { return exe_dir() + L"mods/Cheats"; }
-static std::wstring cheat_ini() { return cheat_dir() + L"/config.ini"; }
-static void cheat_load() {
-    g_cc[0] = dir_exists(cheat_dir()) && !file_exists(cheat_dir() + L"/disabled") ? 1 : 0; g_cc[1] = 0; g_cc[2] = 1; g_cc[3] = 0; g_cc[4] = 0; g_cc[5] = 0;
-    if (FILE *f = _wfopen(cheat_ini().c_str(), L"r")) {
-        char l[96]; int v;
-        while (fgets(l, sizeof l, f)) {
-            if (sscanf(l, "show_opponent_cards=%d", &v) == 1) g_cc[1] = v != 0;
-            else if (sscanf(l, "unlock_on_start=%d", &v) == 1) g_cc[4] = v != 0;
-            else if (sscanf(l, "panel_corner=%d", &v) == 1) g_cc[2] = std::max(0, std::min(3, v));
-            else if (sscanf(l, "dp_multiplier=%d", &v) == 1) g_cc[3] = std::max(1, std::min(10, v)) - 1;
-            else if (sscanf(l, "fast_forward=%d", &v) == 1) g_cc[5] = std::max(1, std::min(8, v)) - 1;
-        }
-        fclose(f);
+std::wstring cheats_ini_path(void);   /* cheats.cpp */
+static bool cheat_read(const std::wstring &path) {
+    FILE *f = _wfopen(path.c_str(), L"r"); if (!f) return false;
+    char l[96]; int v;
+    while (fgets(l, sizeof l, f)) {
+        if (sscanf(l, "enabled=%d", &v) == 1) g_cc[0] = v != 0;
+        else if (sscanf(l, "show_opponent_cards=%d", &v) == 1) g_cc[1] = v != 0;
+        else if (sscanf(l, "unlock_on_start=%d", &v) == 1) g_cc[4] = v != 0;
+        else if (sscanf(l, "panel_corner=%d", &v) == 1) g_cc[2] = std::max(0, std::min(3, v));
+        else if (sscanf(l, "dp_multiplier=%d", &v) == 1) g_cc[3] = std::max(1, std::min(10, v)) - 1;
+        else if (sscanf(l, "fast_forward=%d", &v) == 1) g_cc[5] = std::max(1, std::min(8, v)) - 1;
     }
+    fclose(f); return true;
+}
+static void cheat_load() {
+    g_cc[0] = 1; g_cc[1] = 0; g_cc[2] = 1; g_cc[3] = 0; g_cc[4] = 0; g_cc[5] = 0;
+    if (cheat_read(cheats_ini_path())) return;
+    const std::wstring old = exe_dir() + L"mods/Cheats";   /* settings from when Cheats was a mod: cheats.cpp imports the same files on the first start */
+    if (cheat_read(old + L"/config.ini") && file_exists(old + L"/disabled")) g_cc[0] = 0;
 }
 static void cheat_save() {
-    const std::wstring marker = cheat_dir() + L"/disabled";
-    if (g_cc[0]) DeleteFileW(marker.c_str()); else if (dir_exists(cheat_dir())) { if (HANDLE h = CreateFileW(marker.c_str(), GENERIC_WRITE, 0, nullptr, CREATE_ALWAYS, FILE_ATTRIBUTE_NORMAL, nullptr)) CloseHandle(h); }
-    if (FILE *f = _wfopen(cheat_ini().c_str(), L"w")) { fprintf(f, "show_opponent_cards=%d\npanel_corner=%d\ndp_multiplier=%d\nunlock_on_start=%d\nfast_forward=%d\n", g_cc[1], g_cc[2], g_cc[3] + 1, g_cc[4], g_cc[5] + 1); fclose(f); }
+    if (FILE *f = _wfopen(cheats_ini_path().c_str(), L"w")) { fprintf(f, "enabled=%d\nshow_opponent_cards=%d\npanel_corner=%d\ndp_multiplier=%d\nunlock_on_start=%d\nfast_forward=%d\n", g_cc[0], g_cc[1], g_cc[2], g_cc[3] + 1, g_cc[4], g_cc[5] + 1); fclose(f); }
 }
 static void cheat_text() { for (int i = 0; i < N_CHEAT; i++) { SetWindowTextW(g_csel[i], kCheat[i].names[g_cc[i]]); InvalidateRect(g_csel[i], nullptr, FALSE); } }
-static void cheat_step(int i, int dir) { if (!dir_exists(cheat_dir())) return; g_cc[i] = (g_cc[i] + dir + kCheat[i].count) % kCheat[i].count; cheat_save(); cheat_text(); }
+static void cheat_step(int i, int dir) { g_cc[i] = (g_cc[i] + dir + kCheat[i].count) % kCheat[i].count; cheat_save(); cheat_text(); }
 static int S(int v) { return MulDiv(v, g_dpi, 96); }
 /* medidas em 96 dpi */
 static const int W96 = 1120, H96 = 720, SIDE96 = 220, BAR96 = 72;
@@ -184,7 +186,7 @@ static void apply_page() {
 static void refresh() {
     bool busy = g_installing, run = game_running();
     EnableWindow(g_play, !busy && !run && (g_installed || iso_ok())); EnableWindow(g_bpick, !busy && !run);
-    EnableWindow(g_bstop, run); for (int i = 0; i < N_CHEAT; i++) EnableWindow(g_csel[i], !run && dir_exists(cheat_dir()));
+    EnableWindow(g_bstop, run); for (int i = 0; i < N_CHEAT; i++) EnableWindow(g_csel[i], !run);
     for (int i = 0; i < N_OPT; i++) EnableWindow(g_sel[i], !run); for (int k = 0; k < NQ; k++) EnableWindow(g_qsel[k], !run);
     SetWindowTextW(g_play, run ? L"PLAYING..." : g_installed ? L"PLAY" : L"INSTALL AND PLAY"); SetWindowTextW(g_bpick, g_installed ? L"Reinstall from ISO..." : L"Select ISO...");
     apply_page();
@@ -464,7 +466,7 @@ static void paint(HWND h) {
         draw_mods_page(dc, cx, cw);
     } else if (g_page == PG_CHEATS) {
         text(dc, g_fHead, C_TXT, RECT{cx, S(22), cx + cw, S(58)}, L"Cheats");
-        text(dc, g_fSub, C_DIM, RECT{cx, S(58), cx + cw, S(80)}, dir_exists(cheat_dir()) ? L"For fun and testing. Saved in mods/Cheats/config.ini; changes apply on the next start." : L"The Cheats mod is not installed (mods/Cheats folder missing).");
+        text(dc, g_fSub, C_DIM, RECT{cx, S(58), cx + cw, S(80)}, L"For fun and testing. Part of the recomp (not a mod). Saved in cheats.ini; changes apply on the next start.");
         for (int i = 0; i < N_CHEAT; i++) {
             int y = S(100) + i * S(56);
             text(dc, g_fText, C_TXT, RECT{cx, y, cx + cw - S(300), y + S(24)}, kCheat[i].label);

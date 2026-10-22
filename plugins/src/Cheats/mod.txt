@@ -1,4 +1,0 @@
-name=Cheats
-author=Tag Force Recomp
-version=1.0
-description=Optional cheats for testing and fun: see the CPU cards (F6) and multiply the DP earned in duels (1x-10x). Each cheat is turned on in the Cheats menu

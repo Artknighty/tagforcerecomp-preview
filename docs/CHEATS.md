@@ -1,11 +1,10 @@
-# Cheats (behavior mod for Tag Force Recomp)
+# Cheats (part of the recomp)
 
-Optional cheats, useful for testing the game (for example, watching what the CPU holds while it plays) and for players who want them.
+Optional cheats, useful for testing the game (for example, watching what the CPU holds) and for players who want them.
+Cheats are a feature of the recomp itself (`runtime/mods/cheats.cpp`, compiled into the exe), not a mod: there is nothing to install and nothing in `mods/`.
 Every cheat starts **off** (the DP multiplier starts at 1x) and is turned on in the launcher's **Cheats** page (the game window has no menu bar);
-the choices are saved in `config.ini`.
-
-**Install:** copy the `Cheats` folder (`plugin.dll` + `mod.txt`) into the game's `mods/` folder and check it in the **Mods** menu (applies on restart).
-Requires Tag Force Recomp with mod API version 4 or newer.
+the choices are saved in `cheats.ini` next to `tagforce_recomp.ini`, where the page's master switch is the `enabled` key. Settings of the old `mods/Cheats`
+folder are imported on the first start. Works with the European version (the hooks use its addresses).
 
 ## Cheats
 
@@ -17,10 +16,10 @@ Requires Tag Force Recomp with mod API version 4 or newer.
 
 | **Fast-forward** | Cheats -> "Fast-forward (game speed)" (1x to 8x), or in game hold **L + R** and press **Left / Right**. The game runs faster and the music is time-stretched (same pitch). Always starts at 1x (not saved). |
 
-`config.ini`: `show_opponent_cards=0/1`, `panel_corner=0..3`, `dp_multiplier=1..10`, `unlock_on_start=0/1`. For tests: `TF_CHEAT_VER=1`, `TF_DPMUL=N`, `TF_CHEAT_UNLOCK=<frame>` (applies the unlock once at that frame, if a save is loaded).
+`cheats.ini`: `enabled=0/1`, `show_opponent_cards=0/1`, `panel_corner=0..3`, `dp_multiplier=1..10`, `unlock_on_start=0/1`. For tests: `TF_CHEAT_VER=1`, `TF_DPMUL=N`, `TF_CHEAT_UNLOCK=<frame>` (applies the unlock once at that frame, if a save is loaded).
 
-## Adding a cheat (for modders)
+## Adding a cheat
 
-`cheats.cpp` has one section per cheat (state + config + hook/per-frame code) and registers them in `tfmod_init` with the mod API
-(`plugins/sdk/tfmod.h`): `use_menu(TFMOD_MENU_CHEATS)` (items go to the Cheats menu), `add_toggle` (on/off item, optional in-game key), `add_slider` (value), `panel` (info panel on screen),
+`cheats.cpp` has one section per cheat (state + config + hook/per-frame code) and registers them in `cheats_init` with the plugin API
+(`plugins/sdk/tfmod.h`; `plugins.cpp` hands it over exactly as it does to a mod): `use_menu(TFMOD_MENU_CHEATS)`, `add_toggle` (on/off item, optional in-game key), `add_slider` (value), `panel` (info panel on screen),
 `message_box`, `hook`/`call` (game functions). The duel memory map used here is documented at the top of `cheats.cpp`.

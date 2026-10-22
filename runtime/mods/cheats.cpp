@@ -1,6 +1,8 @@
-/* Mod "Cheats" (plugin, API 4 in plugins/sdk/tfmod.h): optional cheats, for testing the game (e.g. watching what the CPU holds) and for
- * players who want them. Each cheat is switched on/off in the window's Cheats menu (some also by key) and the state is kept in config.ini in the mod folder.
- * To add a cheat: a section like the ones below (state + cfg + hook/frame) and its registration in tfmod_init.
+/* Cheats: a built-in feature of the recomp (not a mod; it is compiled into the exe). It uses the same API as the plugins (plugins/sdk/tfmod.h),
+ * handed over by plugins.cpp (plugins_load), so its hooks and menu items work like a plugin's. Optional cheats, for testing the game
+ * (e.g. watching what the CPU holds) and for players who want them. Each cheat is switched on/off in the launcher's Cheats page (some also by key)
+ * and the state is kept in cheats.ini next to tagforce_recomp.ini.
+ * To add a cheat: a section like the ones below (state + cfg + hook/frame) and its registration in cheats_init.
  *
  * Cheats:
  *   Everything lives in the menu bar's Cheats menu (use_menu, API 4), separate from the Mods menu.
@@ -28,8 +30,9 @@
  *        +0x155C + card_index*4:   card entry (byte0 bit0 flag, bits 1-2 status 0 unseen / 1 new / 2 seen, byte1 bit7 flag + bits 0-6 copies)
  *        +0x8FF4 + pack*0x2A:      pack (byte0 shop value, byte1 bits 0-1 state: 0 locked, 1 seen, 2 available), packs 0..47
  *   BOOT 08833fc4 ehsys_end_of_frame (every logical frame): panel, L + R + UP/DOWN and the pending unlock. */
-#include "tfmod.h"
-#include "../../../decomp/common/duelists.h"
+#include "../../plugins/sdk/tfmod.h"
+#include "../../decomp/common/duelists.h"
+#include "util.h"
 #include <windows.h>
 #include <algorithm>
 #include <map>
@@ -63,29 +66,42 @@ static const int MULT_MAX = 10;
 static int g_speed = 1;      /* 3. fast-forward: current speed; the starting speed (g_speed_start) comes from the launcher (fast_forward=) and in-game changes are not saved */
 static int g_speed_start = 1;
 static const int SPEED_MAX = 8;
-static std::wstring cfg_path(void) { return std::wstring(A->mod_dir) + L"\\config.ini"; }
+static int g_enabled = 1;    /* master switch (launcher): 0 = none of the cheats is loaded */
+std::wstring cheats_ini_path(void) {   /* cheats.ini next to the player's ini (TF_INI moves both, so tests never touch the player's settings) */
+    std::wstring p = app_ini_path(); const size_t k = p.find_last_of(L"/\\");
+    return (k == std::wstring::npos ? std::wstring() : p.substr(0, k + 1)) + L"cheats.ini";
+}
 static void cfg_save(void) {
-    if (FILE *f = _wfopen(cfg_path().c_str(), L"w")) { fprintf(f, "show_opponent_cards=%d\npanel_corner=%d\ndp_multiplier=%d\nunlock_on_start=%d\nfast_forward=%d\n", g_ver, g_canto, g_mult, g_unlock_auto, g_speed_start); fclose(f); }
+    if (FILE *f = _wfopen(cheats_ini_path().c_str(), L"w")) { fprintf(f, "enabled=%d\nshow_opponent_cards=%d\npanel_corner=%d\ndp_multiplier=%d\nunlock_on_start=%d\nfast_forward=%d\n", g_enabled, g_ver, g_canto, g_mult, g_unlock_auto, g_speed_start); fclose(f); }
+}
+static bool cfg_read(const std::wstring &path, bool *tem_mult) {
+    FILE *f = _wfopen(path.c_str(), L"r"); if (!f) return false;
+    char l[96]; int v;
+    while (fgets(l, sizeof l, f)) {
+        if (sscanf(l, "enabled=%d", &v) == 1) g_enabled = v != 0;
+        else if (sscanf(l, "show_opponent_cards=%d", &v) == 1) g_ver = v != 0;
+        else if (sscanf(l, "unlock_on_start=%d", &v) == 1) g_unlock_auto = v != 0;
+        else if (sscanf(l, "fast_forward=%d", &v) == 1) g_speed_start = std::max(1, std::min(SPEED_MAX, v));
+        else if (sscanf(l, "panel_corner=%d", &v) == 1) g_canto = std::max(0, std::min(3, v));
+        else if (sscanf(l, "dp_multiplier=%d", &v) == 1) { g_mult = std::max(1, std::min(MULT_MAX, v)); *tem_mult = true; }
+    }
+    fclose(f); return true;
 }
 static void cfg_load(void) {
     bool tem_mult = false;
-    if (FILE *f = _wfopen(cfg_path().c_str(), L"r")) {
-        char l[96]; int v;
-        while (fgets(l, sizeof l, f)) {
-            /* (the old Portuguese key names are still read, so existing config files keep working) */
-            if (sscanf(l, "show_opponent_cards=%d", &v) == 1 || sscanf(l, "ver_cartas_adversario=%d", &v) == 1) g_ver = v != 0;
-            else if (sscanf(l, "unlock_on_start=%d", &v) == 1) g_unlock_auto = v != 0;
-            else if (sscanf(l, "fast_forward=%d", &v) == 1) g_speed_start = std::max(1, std::min(SPEED_MAX, v));
-            else if (sscanf(l, "panel_corner=%d", &v) == 1 || sscanf(l, "canto_painel=%d", &v) == 1) g_canto = std::max(0, std::min(3, v));
-            else if (sscanf(l, "dp_multiplier=%d", &v) == 1 || sscanf(l, "multiplicador_dp=%d", &v) == 1) { g_mult = std::max(1, std::min(MULT_MAX, v)); tem_mult = true; }
+    if (!cfg_read(cheats_ini_path(), &tem_mult)) {   /* first run: bring the settings over from when Cheats was a mod (mods\Cheats\config.ini + its "disabled" marker) */
+        const std::wstring old = std::wstring(A->mod_dir) + L"mods/Cheats";
+        if (cfg_read(old + L"/config.ini", &tem_mult)) {
+            if (GetFileAttributesW((old + L"/disabled").c_str()) != INVALID_FILE_ATTRIBUTES) g_enabled = 0;
+            A->log("settings imported from the old Cheats mod folder");
         }
-        fclose(f);
-    }
-    if (!tem_mult) {   /* migration from the old "DP multiplier" mod (mods\DPMultiplicador\config.ini: multiplicador=N) */
-        if (FILE *f = _wfopen((std::wstring(A->mod_dir) + L"\\..\\DPMultiplicador\\config.ini").c_str(), L"r")) {
-            char l[64]; int v; while (fgets(l, sizeof l, f)) if (sscanf(l, "multiplicador=%d", &v) == 1) g_mult = std::max(1, std::min(MULT_MAX, v));
-            fclose(f); A->log("multiplicador de DP trazido do mod antigo DPMultiplicador: %dx", g_mult); cfg_save();
+        if (!tem_mult) {   /* ... and the DP multiplier from the even older "DP multiplier" mod (mods\DPMultiplicador\config.ini: multiplicador=N) */
+            if (FILE *f = _wfopen((std::wstring(A->mod_dir) + L"mods/DPMultiplicador/config.ini").c_str(), L"r")) {
+                char l[64]; int v; while (fgets(l, sizeof l, f)) if (sscanf(l, "multiplicador=%d", &v) == 1) g_mult = std::max(1, std::min(MULT_MAX, v));
+                fclose(f); A->log("DP multiplier imported from the old DPMultiplicador mod: %dx", g_mult);
+            }
         }
+        cfg_save();
     }
     if (const char *e = getenv("TF_CHEAT_VER")) g_ver = atoi(e) != 0;                              /* tests: override the file */
     if (const char *e = getenv("TF_DPMUL")) g_mult = std::max(1, std::min(MULT_MAX, atoi(e)));
@@ -306,11 +322,11 @@ static void unlock_quadro(TfCpu *c) {
 /* ------------------------------------------------------------------ */
 static int hk_quadro(TfCpu *c) { mult_quadro(); speed_quadro(); ver_cartas_quadro(c); unlock_quadro(c); return 0; }
 
-extern "C" __declspec(dllexport) int tfmod_init(const TfModApi *api) {
+int cheats_init(const TfModApi *api) {   /* called by plugins_load; non-zero = not loaded (switched off in the launcher) */
     A = api;
-    if (A->version < 6) { A->log("Cheats precisa da API 6 (runtime mais novo)"); return 1; }
     cfg_load();
-    A->use_menu(TFMOD_MENU_CHEATS);   /* everything in this mod goes in the bar's Cheats menu (separate from the mods) */
+    if (!g_enabled) { A->log("Cheats are switched off (launcher > Cheats)"); return 1; }
+    A->use_menu(TFMOD_MENU_CHEATS);
     A->add_toggle(L"&See the opponent's cards", VK_F6, ver_get, ver_set);
     A->add_slider(L"Card panel position (0 top left, 1 top right, 2 bottom left, 3 bottom right)", L"", 0, 3, 1, canto_get, canto_set);
     A->add_slider(L"&DP multiplier in duels", L"x", 1, MULT_MAX, 1, mult_get, mult_set);
@@ -320,6 +336,6 @@ extern "C" __declspec(dllexport) int tfmod_init(const TfModApi *api) {
     A->hook(F_QUADRO, hk_quadro);
     A->hook(F_RECOMPENSA, hk_recompensa);
     A->hook(F_NUMERO, hk_numero);
-    A->log("Cheats carregado: ver cartas do adversario %s (F6), multiplicador de DP %dx (L + R + Cima/Baixo)", g_ver ? "LIGADO" : "desligado", g_mult);
+    A->log("Cheats loaded: see the opponent's cards %s (F6), DP multiplier %dx (L + R + Up/Down)", g_ver ? "ON" : "off", g_mult);
     return 0;
 }

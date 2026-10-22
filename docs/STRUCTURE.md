@@ -58,7 +58,7 @@ drawing hook, and the duelist and deck tables. `decomp.cpp` registers the rewrit
 
 ## `plugins/`
 
-`plugins/` holds source code only; the built mods live in `mods/` (see below). Each folder in `plugins/src/` is one behavior mod (CPU vs CPU, Better AI, Better Decks, Cheats, Booster box, Monsters on the
+`plugins/` holds source code only; the built mods live in `mods/` (see below). Each folder in `plugins/src/` is one behavior mod (CPU vs CPU, Better AI, Better Decks, Booster box, Monsters on the
 field) with its `README.md`, `mod.txt` and C++ source. `tools/build/build_plugins.sh` compiles them to `mods/<Mod>/plugin.dll`
 against `plugins/sdk/tfmod.h`. See [`MODS.md`](MODS.md).
 

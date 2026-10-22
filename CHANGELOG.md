@@ -4,6 +4,9 @@ Format: [Keep a Changelog](https://keepachangelog.com/en/1.1.0/). Versioning: [S
 
 ## [Unreleased]
 
+### Changed
+- **Cheats is now part of the recomp, not a mod.** It lives in the exe (`runtime/mods/cheats.cpp`) and no longer needs `mods/Cheats`; the launcher's Cheats page and the in-game keys are unchanged. Settings moved to `cheats.ini` next to `tagforce_recomp.ini` (the old `mods/Cheats/config.ini` and its on/off switch are imported on the first start; an old `mods/Cheats` folder is ignored).
+
 ### Added
 - **Exclusive fullscreen** (Direct3D 11). The launcher's Window mode now has three choices: Windowed, Fullscreen (exclusive) and Fullscreen borderless (the previous "Fullscreen"; saved settings keep working). If the driver refuses exclusive mode, or with Vulkan, the game falls back to borderless. Alt+Tab leaves exclusive mode and comes back with the window.
 

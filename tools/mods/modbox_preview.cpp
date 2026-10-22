@@ -1,7 +1,7 @@
 /* Previa da caixa e dos paineis dos mods (runtime/ui/modbox.cpp) sem abrir o jogo: desenha um exemplo por cima de uma captura e salva PNG.
  * Compilar: g++ -std=c++17 -O1 -municode -Iruntime -o gen/modbox_preview.exe tools/mods/modbox_preview.cpp runtime/ui/modbox.cpp runtime/ui/dark_ui.cpp -lgdiplus -lgdi32 -lole32 -ldwmapi
  * Uso:      gen/modbox_preview.exe fundo.png saida.png [cantos: 0..3, ex. 1 ou 01] [caixa: 1]
- * O fundo (captura do jogo em qualquer tamanho) e esticado para 1920x1088; o exemplo e o painel do mod Cheats. */
+ * O fundo (captura do jogo em qualquer tamanho) e esticado para 1920x1088; o exemplo e o painel dos Cheats. */
 #include "modbox.h"
 #include "gpu.h"
 #include <windows.h>

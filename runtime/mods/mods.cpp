@@ -69,8 +69,10 @@ static void walk(const std::wstring &base, const std::wstring &rel, std::vector<
  * arquivos, texturas, videos e ganchos de plugin). Pastas fora do arquivo entram no fim (maior prioridade), em ordem alfabetica;
  * os pacotes de textura (Enhanced/TexturasPC) entram no inicio: qualquer mod do usuario vence o pacote. */
 static bool is_pack_folder(const std::string &f) { return f == "EnhancedTextures" || f == "TexturasPC"; }
-/* fora da lista do lancador: pacotes de textura (Graphics > Textures) e mods com menu proprio no jogo (Cheats) ou sem uso no dia a dia */
-static bool is_launcher_hidden(const std::string &f) { return is_pack_folder(f) || f == "Cheats" || f == "CPUvsCPU" || f == "MonstersOnField"; }
+/* fora da lista do lancador: pacotes de textura (Graphics > Textures) e mods sem uso no dia a dia */
+static bool is_launcher_hidden(const std::string &f) { return is_pack_folder(f) || f == "CPUvsCPU" || f == "MonstersOnField"; }
+/* mods/Cheats is what Cheats used to be (a mod): it is a built-in feature now (cheats.cpp), so an old folder is ignored (never listed nor loaded) */
+static bool is_retired_folder(const std::string &f) { return _stricmp(f.c_str(), "Cheats") == 0; }
 static std::vector<std::string> read_order_file(const std::wstring &root) {
     std::vector<std::string> o; FILE *f = _wfopen((root + L"\\load_order.txt").c_str(), L"rb"); if (!f) return o;
     char line[512];
@@ -97,7 +99,7 @@ static std::vector<std::string> ordered_folders(const std::wstring &root) {
     }
     std::sort(dirs.begin(), dirs.end(), [](const std::wstring &a, const std::wstring &b) { return _wcsicmp(a.c_str(), b.c_str()) < 0; });
     std::vector<std::string> alpha, packs, out, listed = read_order_file(root);
-    for (auto &d : dirs) { std::string n = to_utf8(d); (is_pack_folder(n) ? packs : alpha).push_back(n); }
+    for (auto &d : dirs) { std::string n = to_utf8(d); if (is_retired_folder(n)) continue; (is_pack_folder(n) ? packs : alpha).push_back(n); }
     auto has = [](const std::vector<std::string> &v, const std::string &s) { for (auto &x : v) if (_stricmp(x.c_str(), s.c_str()) == 0) return true; return false; };
     for (auto &p : packs) if (!has(listed, p)) out.push_back(p);
     std::vector<std::string> all = alpha; all.insert(all.end(), packs.begin(), packs.end());
