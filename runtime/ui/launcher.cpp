@@ -39,10 +39,11 @@ static int g_page = PG_PLAY, g_navhot = -1;
 /* Opcoes de graficos: mesmas chaves e valores do tagforce_recomp.ini que o jogo le (gfx.cpp / gfx_options.h) */
 struct LOpt { const wchar_t *label, *hint, *key; int count; const wchar_t *names[6]; const int *values; int def; };
 static const int kResV[6] = {1, 3, 4, 6, 8, 0};   /* resolucao: fator interno, 0 = a do monitor (gfx.h) */
+static const int kWinV[3] = {0, 2, 1};   /* modo de janela: janela, exclusiva (tela=2), sem bordas (tela=1, o "tela cheia" antigo) */
 static const LOpt kOpts[] = {
     {L"Renderer", L"Software uses the CPU. Direct3D 11 and Vulkan use the GPU.", L"renderizador", 3, {L"Software", L"Direct3D 11", L"Vulkan"}, nullptr, 1},
     {L"Resolution", L"Screen resolution, as in any PC game. 2560x1440 and 3840x2160 need the GPU.", L"resolucao", 6, {L"480 x 272 (PSP)", L"1280 x 720", L"1920 x 1080", L"2560 x 1440", L"3840 x 2160", L"Match monitor"}, kResV, 0},
-    {L"Window mode", L"Windowed or fullscreen. In game, F11 or Alt+Enter switches too.", L"tela", 2, {L"Windowed", L"Fullscreen"}, nullptr, 0},
+    {L"Window mode", L"Fullscreen is exclusive (Direct3D 11 only; Vulkan uses borderless). Borderless covers the screen with a window. In game, F11 or Alt+Enter switches too.", L"tela", 3, {L"Windowed", L"Fullscreen", L"Fullscreen borderless"}, kWinV, 0},
     {L"Textures", L"Original is the plain PSP look. Enhanced is the remastered package: textures, menus and text in high resolution.", nullptr, 2, {L"Original", L"Enhanced"}, nullptr, 1},
     {L"Frame rate", L"60 and 120 FPS are interpolated from the original 30 (GPU). 120 needs a 120 Hz monitor.", L"fps60", 3, {L"30 FPS", L"60 FPS", L"120 FPS"}, nullptr, 1},
     {L"Synchronization", L"Default avoids tearing. VSync waits for the monitor.", L"sincronizacao", 3, {L"Default", L"VSync", L"Lowest latency"}, nullptr, 0},

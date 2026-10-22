@@ -4,6 +4,9 @@ Format: [Keep a Changelog](https://keepachangelog.com/en/1.1.0/). Versioning: [S
 
 ## [Unreleased]
 
+### Added
+- **Exclusive fullscreen** (Direct3D 11). The launcher's Window mode now has three choices: Windowed, Fullscreen (exclusive) and Fullscreen borderless (the previous "Fullscreen"; saved settings keep working). If the driver refuses exclusive mode, or with Vulkan, the game falls back to borderless. Alt+Tab leaves exclusive mode and comes back with the window.
+
 ## [0.4.1] - 2026-10-22
 
 ### Added

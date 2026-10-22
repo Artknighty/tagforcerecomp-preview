@@ -38,6 +38,7 @@ bool gpu_select(int renderer) { GL;
 const char *gpu_backend_name(void) { return g_b ? g_b->name : "nenhum"; }
 bool gpu_init(HWND wnd) { GL; return g_b && g_b->init(wnd); }
 bool gpu_ready(void) { GL; return g_b && g_b->ready(); }
+bool gpu_set_exclusive(bool on) { GL; return g_b && g_b->set_exclusive && g_b->set_exclusive(on); }
 void gpu_release_swapchain(void) { GL; if (g_b) g_b->release_swapchain(); }
 int gpu_fb_create(int nw, int nh, int res) { GL; return g_b ? g_b->fb_create(nw, nh, res) : -1; }
 void gpu_fb_destroy(int fb) { GL; if (g_b) g_b->fb_destroy(fb); }

@@ -679,9 +679,16 @@ static void d3d_destroy_all(void) {
     rel(g_vs); rel(g_vsFull); rel(g_ps); rel(g_psResync); rel(g_psDown); rel(g_psPresent); rel(g_psOverlay); rel(g_il); rel(g_cb); rel(g_cb2); rel(g_vb);
     rel(g_back); rel(g_kickQ); g_kickPend = false;
     if (g_ctx) { g_ctx->ClearState(); g_ctx->Flush(); }
+    if (g_swap) g_swap->SetFullscreenState(FALSE, nullptr);   /* DXGI exige sair do modo exclusivo antes de soltar a swapchain */
     rel(g_swap); rel(g_ctx); rel(g_dev);
 }
 static void d3d_release_all(void) { d3d_destroy_all(); }
+static bool d3d_set_exclusive(bool on) {
+    if (!g_swap) return false;
+    const HRESULT hr = g_swap->SetFullscreenState(on ? TRUE : FALSE, nullptr);
+    fprintf(stderr, "[d3d] exclusive fullscreen %s: %s (0x%08lx)\n", on ? "on" : "off", SUCCEEDED(hr) ? "ok" : "refused", (unsigned long)hr);
+    return SUCCEEDED(hr);
+}
 const GpuBackend gpu_backend_d3d11 = {"Direct3D 11", d3d_init, d3d_ready, d3d_release_all, d3d_adapter_name, d3d_fb_create, d3d_fb_destroy, d3d_fb_upload, d3d_check_start, d3d_check_get,
     d3d_fb_readback, d3d_draw, d3d_flush, d3d_tex_create, d3d_tex_release, d3d_present_fb, d3d_present_pixels, d3d_present_last, d3d_set_overlay, d3d_has_stencil,
-    d3d_ring_push, d3d_ring_read, d3d_kick, d3d_wait_kicked, nullptr, nullptr, nullptr, nullptr, d3d_tex_create_bc7, d3d_wait_kicked_for};
+    d3d_ring_push, d3d_ring_read, d3d_kick, d3d_wait_kicked, nullptr, nullptr, nullptr, nullptr, d3d_tex_create_bc7, d3d_wait_kicked_for, d3d_set_exclusive};

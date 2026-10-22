@@ -50,12 +50,14 @@ struct GpuBackend {
     bool (*tex_update)(uint32_t, int, int, int, int, const uint32_t *, uint32_t);   /* opcional: troca um retangulo de uma textura (sem mipmaps), em ordem com os desenhos */   /* opcional: textura com os mipmaps ja prontos (niveis 1..n em sequencia) */
     uint32_t (*tex_create_bc7)(int, int, int, const uint8_t *);   /* opcional: textura BC7 com `levels` niveis em sequencia (bc7.h) */
     double (*wait_kicked_for)(double);   /* opcional: como wait_kicked, mas desiste depois de max_ms (devolve -1; o envio continua pendente) */
+    bool (*set_exclusive)(bool);   /* opcional: entra/sai da tela cheia exclusiva (so o Direct3D 11); false = indisponivel */
 };
 extern const GpuBackend gpu_backend_d3d11, gpu_backend_vulkan;
 bool gpu_select(int renderer);   /* GFX_RENDER_D3D11 / GFX_RENDER_VULKAN: escolhe o backend (ainda sem iniciar); false = renderer invalido */
 const char *gpu_backend_name(void);
 bool gpu_init(HWND wnd);                             /* cria dispositivo e swapchain (idempotente); false = sem GPU */
 bool gpu_ready(void);
+bool gpu_set_exclusive(bool on);                     /* tela cheia exclusiva do backend atual; false = nao suportada ou recusada (fica em tela cheia sem bordas) */
 void gpu_release_swapchain(void);                    /* ao voltar para o renderizador por software */
 bool gpu_has_stencil(void);                          /* os quadros sombra tem buffer de stencil (GpuState::st funciona) */
 

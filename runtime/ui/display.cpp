@@ -49,6 +49,25 @@ void display_notify(const char *msg) {
  * sem bordas e sem menu com F11 ou Alt+Enter, Esc sai da tela cheia ou pergunta antes de fechar o jogo. */
 static bool g_fullscreen; static WINDOWPLACEMENT g_wp = {sizeof(WINDOWPLACEMENT)};
 static bool g_show_fps = getenv("FPS_OVERLAY") != nullptr;   /* overlay de fps (F3 / menu Exibir) */
+/* Tela cheia: sem bordas (janela de monitor inteiro, o Windows apresenta em "Independent Flip") ou exclusiva (DXGI SetFullscreenState,
+ * so Direct3D 11; se o backend recusar, fica sem bordas). g_kind e o tipo que o F11 usa; g_exclusive diz se o modo exclusivo esta ativo.
+ * O DXGI so aceita o exclusivo numa janela de nivel superior: enquanto ele esta ligado a swapchain fica na janela principal (g_on_main)
+ * e nao na janela-filha de apresentacao. */
+static int g_kind = GFX_WIN_BORDERLESS; static bool g_exclusive, g_on_main;
+static bool gpu_mode(void);
+static void gpu_restart(int renderer, bool on_main);
+static void apply_exclusive(void) {   /* chamada depois de mudar a tela cheia ou o renderizador (a swapchain e nova) */
+    const bool want = g_fullscreen && g_kind == GFX_WIN_EXCLUSIVE && gpu_mode() && g_gfx.renderer == GFX_RENDER_D3D11;
+    if (want == g_exclusive) return;
+    if (want) {
+        if (!g_on_main) gpu_restart(GFX_RENDER_D3D11, true);
+        g_exclusive = g_on_main && gpu_set_exclusive(true);
+        if (!g_exclusive && g_on_main) gpu_restart(GFX_RENDER_D3D11, false);   /* recusado: volta para a janela-filha (tela cheia sem bordas) */
+    } else {
+        gpu_set_exclusive(false); g_exclusive = false;
+        if (g_on_main) gpu_restart(g_gfx.renderer, false);
+    }
+}
 static void toggle_fullscreen(void) {
     LONG st = GetWindowLongA(g_wnd, GWL_STYLE);
     if (!g_fullscreen) {
@@ -60,13 +79,15 @@ static void toggle_fullscreen(void) {
             g_fullscreen = true;
         }
     } else {
+        g_fullscreen = false; apply_exclusive();   /* sai do exclusivo antes de devolver a moldura da janela */
         SetWindowLongA(g_wnd, GWL_STYLE, (st & ~WS_POPUP) | WS_OVERLAPPEDWINDOW);
         SetWindowPlacement(g_wnd, &g_wp);
         SetWindowPos(g_wnd, nullptr, 0, 0, 0, 0, SWP_NOMOVE | SWP_NOSIZE | SWP_NOZORDER | SWP_NOOWNERZORDER | SWP_FRAMECHANGED);
         g_fullscreen = false;
     }
     InvalidateRect(g_wnd, nullptr, TRUE);
-    if (g_ready) gfx_ini_set_fullscreen(g_fullscreen);   /* lembra o modo para a proxima vez */
+    if (g_fullscreen) { UpdateWindow(g_wnd); apply_exclusive(); }   /* o child da GPU ja tem o tamanho do monitor quando a swapchain entra no exclusivo */
+    if (g_ready) gfx_ini_set_window_mode(g_fullscreen ? g_kind : GFX_WIN_WINDOWED);   /* lembra o modo para a proxima vez */
 }
 void display_set_fullscreen(bool fs) { if (fs != g_fullscreen) toggle_fullscreen(); }
 static int current_scale(void) {   /* 1..4 se a area do jogo for exatamente 480x272 vezes n; 0 = tamanho livre */
@@ -131,16 +152,32 @@ static int start_gpu(int r) {
     render_window_destroy();   /* software: o GDI pinta direto na janela principal */
     return GFX_RENDER_SOFTWARE;
 }
+/* recria o renderizador com a swapchain na janela principal (on_main, so Direct3D 11) ou na janela-filha de apresentacao */
+void ge_set_texscale(void);
+void ge_set_msaa(void);
+static void gpu_restart(int renderer, bool on_main) {
+    ge_set_gpu(false); gpu_release_swapchain(); g_on_main = false;
+    int got = renderer;
+    if (on_main && renderer == GFX_RENDER_D3D11) {
+        render_window_destroy();
+        if (gpu_select(renderer) && gpu_init(g_wnd)) { ge_set_gpu(true); g_gpu_gen++; g_on_main = true; }
+        else { gpu_release_swapchain(); got = start_gpu(renderer); }
+    } else got = start_gpu(renderer);
+    ge_set_texscale(); ge_set_msaa();   /* o backend novo comeca sem texturas nem quadros sombra */
+    g_gfx.renderer = got;
+    InvalidateRect(g_wnd, nullptr, TRUE);
+}
 /* troca o renderizador em execucao (menu Graficos > Renderizacao); cai para o proximo disponivel se o pedido nao iniciar */
 void ge_set_texscale(void);
 void ge_set_msaa(void);
 void display_set_renderer(int r) {
-    ge_set_gpu(false); gpu_release_swapchain();   /* solta o backend atual (quadros sombra, texturas, swapchain) */
+    ge_set_gpu(false); gpu_release_swapchain(); g_exclusive = false; g_on_main = false;   /* solta o backend atual (quadros sombra, texturas, swapchain) */
     int got = start_gpu(r);
     ge_set_texscale(); ge_set_msaa();   /* o backend novo comeca sem texturas nem quadros sombra: esvazia os caches do anterior (sem isso sobram quadrados brancos) */
     if (got != r) tf_msgbox(g_wnd, L"Could not start the chosen renderer; using another available one.", L"Tag Force Recomp", MB_ICONWARNING);
     g_gfx.renderer = got;
     gfx_save();
+    apply_exclusive();   /* swapchain nova: reaplica o exclusivo */
     InvalidateRect(g_wnd, nullptr, TRUE);
 }
 static void paint_frame(HDC dc) {   /* imagem 480x272 na janela: filtro/proporcao em gfx.cpp */
@@ -206,6 +243,10 @@ static LRESULT CALLBACK wndproc(HWND h, UINT m, WPARAM w, LPARAM l) {
         if (g_diag_paused > 0) g_diag_paused--;
         if (m == WM_EXITMENULOOP) g_keys_held_after_menu = true;   /* Enter/setas usados no menu nao vao para o jogo */
         return 0;
+    }
+    if (m == WM_ACTIVATEAPP && g_fullscreen && g_kind == GFX_WIN_EXCLUSIVE && gpu_mode()) {   /* Alt+Tab: o exclusivo nao pode ficar preso atras de outro programa */
+        if (!w) { if (g_exclusive) { gpu_set_exclusive(false); g_exclusive = false; ShowWindow(h, SW_MINIMIZE); } }
+        else { ShowWindow(h, SW_RESTORE); apply_exclusive(); }
     }
     if (m == WM_SIZE) { if (g_rwnd) MoveWindow(g_rwnd, 0, 0, LOWORD(l), HIWORD(l), FALSE); }   /* a janela de apresentacao da GPU acompanha a area do jogo */
     if (m == WM_KEYDOWN && w == VK_ESCAPE) {
@@ -278,9 +319,12 @@ void display_init(void) {
         set_app_icon(g_wnd);
         ShowWindow(g_wnd, getenv("TF_SEGUNDO_PLANO") ? SW_HIDE : mx ? SW_SHOWMAXIMIZED : SW_SHOW);   /* testes automaticos: janela escondida, sem roubar o foco (capturas vem do framebuffer) */
         if (fps) g_show_fps = true;
-        if (!getenv("TF_SEGUNDO_PLANO") &&gfx_ini_fullscreen()) fs = 1;   /* modo salvo (lancador / menu Graphics) */
+        const int saved = getenv("TF_SEGUNDO_PLANO") ? GFX_WIN_WINDOWED : gfx_ini_window_mode();   /* modo salvo (lancador / menu Graphics) */
+        if (saved != GFX_WIN_WINDOWED) { g_kind = saved; fs = 1; }
+        if (getenv("TF_SEGUNDO_PLANO")) g_kind = GFX_WIN_BORDERLESS;   /* testes escondidos: nunca exclusivo */
         if (fs) toggle_fullscreen();
         if (g_gfx.renderer != GFX_RENDER_SOFTWARE) g_gfx.renderer = start_gpu(g_gfx.renderer);   /* renderizador por GPU (padrao); sem GPU cai no software */
+        apply_exclusive();
     }
     g_ready = g_wnd != nullptr;
 }
