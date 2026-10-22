@@ -84,6 +84,25 @@ def shot(name='shot'):
     return os.path.join(CTL, name + '.png')
 
 
+def _amarelo(img):
+    """Yellow menu header ("MAIN MENU", "FREE DUEL"...): count of yellow pixels in the top band of the picture."""
+    im = img.convert('RGB'); w, h = im.size; band = im.crop((0, 0, w, h // 8)).convert('RGB').tobytes()
+    return sum(1 for i in range(0, len(band), 3) if band[i] > 220 and band[i + 1] > 200 and band[i + 2] < 90)
+
+
+def espera_tela(pred='viva', max_frames=3000, folga=60):
+    """Waits (30-frame steps) until the picture satisfies `pred` ('viva' = not black, 'amarelo' = a yellow menu header is up), then `folga` more
+    frames. Loads and fades vary in length, so fixed waits made the menu route flaky."""
+    from PIL import Image
+    q = 0
+    while q < max_frames:
+        send('step 30'); q += 30
+        im = Image.open(shot('_viva'))
+        if (pred == 'viva' and max(im.convert('L').getextrema()) > 40) or (pred == 'amarelo' and _amarelo(im) > im.size[0] * im.size[1] // 4000): break
+    else: raise SystemExit('ERRO: espera "%s" estourou %d quadros. Veja gen/ctl/_viva.png' % (pred, max_frames))
+    send('step %d' % folga)
+
+
 def run(script):
     last = ''
     for t in script.split():
@@ -99,6 +118,7 @@ def run(script):
             send('poke %08x %s' % (ptr + int(delta, 16), val))
         elif t.startswith('poke:'): print('poke', t[5:], send('poke ' + t[5:].replace(':', ' ')))   # poke:ENDERECO:HEX
         elif t.startswith('peek:'): print('peek', t[5:], send('peek ' + t[5:].replace(':', ' ')))   # peek:ENDERECO:BYTES (hex) dentro de um roteiro
+        elif t in ('viva', 'amarelo'): espera_tela(t)   # waits for the picture to leave black / for a yellow menu header (+60 frames)
         elif t == 'texdump': send('texdump')   # o proximo quadro desenhado despeja gen/tex_*.bmp e os [prim] no log do jogo
         elif t == 'release': send('hold 0')
         else:
@@ -120,11 +140,11 @@ def duelo(args):
     os.environ.update(envx)
     start((['--rapido'] if '--lento' not in args else []) + (['--texturas'] if '--texturas' in args else []) + (['--pesado', '--texturas'] if '--pesado' in args else []))
     n = int(opt('--oponente', 0))
-    run('w300 START w200 X w200 X w300 X w200 DOWN w30 X w150')   # titulo -> Continue -> (Data loaded) -> menu -> Free Duel
+    run("w450 START w150 X w600 X amarelo DOWN w30 X w150")   # title (START only registers after ~350 frames) -> Continue (loads the save, no confirm box) -> main menu -> Free Duel
     lp = int(opt('--lp', 2000))   # LP 2000 por padrao: duelo curto para testes (regra alterada na tela do Free Duel)
-    if lp == 8000: run('X w60 X w60 X w60 w60 X w180')                                  # Normal Duel, Single, regras padrao, Next
-    else: run('X w60 X w60 DOWN w20 X w60 ' + ' '.join(['DOWN w15'] * [2000, 4000, 8000, 12000, 16000].index(lp)) + ' X w60 X w60 X w180')   # ... Yes, LP, sem limite de tempo, Next
-    run('X w90 ' + ' '.join(['DOWN w15'] * n) + ' X w200')         # lista de duelistas: escolhe o N-esimo
+    if lp == 8000: run('X w60 X w60 X w60 w60 X w500')                                  # Normal Duel, Single, standard rules, Next
+    else: run('X w60 X w60 DOWN w20 X w60 ' + ' '.join(['DOWN w15'] * [2000, 4000, 8000, 12000, 16000].index(lp)) + ' X w60 X w60 X w500')   # ... Yes, LP, no time limit, Next
+    if opt('--oponente') is not None: run('X w120 ' + ' '.join(['DOWN w15'] * n) + ' X w300')   # opponent list (empty when the save has no duelists unlocked yet): pick the N-th. Without --oponente the preselected opponent plays
     run('DOWN w25 DOWN w25 DOWN w25 w20')
     print('start duel:', shot('duelo_pronto'))
     run('X w200')
@@ -134,7 +154,7 @@ def duelo(args):
         run('X w100')
     ls = [l for l in log_texto().splitlines() if '[arena] quadro' in l]
     if '--auto' in args and (not ls or 'LP 0 x 0' in ls[-1]):
-        shot('duelo_erro'); stop(quiet=True); raise SystemExit('ERRO: o duelo nao comecou (rota do menu falhou). Veja gen/ctl/duelo_erro.png')
+        shot('duelo_erro'); stop(quiet=True); raise SystemExit('ERRO: o duelo nao comecou (rota do menu falhou). Veja gen/ctl/duelo_erro.png' + (' (com --oponente a lista de duelistas precisa ter itens: no save atual ela esta vazia; sem --oponente joga o oponente pre-selecionado)' if opt('--oponente') is not None else ''))
     print('inicio do duelo:', shot('duelo_inicio'))
     if '--auto' in args and '--fim' in args:
         q = 0
@@ -150,6 +170,13 @@ def duelo(args):
         stop(quiet=True)
 
 
+def save_source():
+    """Most recent save of the user, read-only: the installed game keeps it in ./ms0 (next to the exe); gen/ms0 is the older location. TF_SAVE_FROM overrides."""
+    c = [os.environ['TF_SAVE_FROM']] if os.environ.get('TF_SAVE_FROM') else [os.path.join(ROOT, 'ms0'), os.path.join(ROOT, 'gen', 'ms0')]
+    c = [d for d in c if os.path.isdir(os.path.join(d, 'PSP', 'SAVEDATA'))]
+    return max(c, key=lambda d: max([os.path.getmtime(f) for f in glob.glob(os.path.join(d, 'PSP', 'SAVEDATA', '*', '*'))] or [0])) if c else None
+
+
 def start(args):
     if os.path.exists(os.path.join(CTL, 'pid')):
         try: stop(quiet=True)
@@ -163,7 +190,8 @@ def start(args):
     if not os.path.isdir(dados) and not os.path.isfile(iso): raise SystemExit('sem dados instalados em %s: rode tools/install_dev.sh ou defina TF_ISO' % dados)
     # save de teste = copia do save do usuario (ou vazio com --fresh); nunca escreve em gen/ms0
     shutil.rmtree(os.path.join(pkg, 'ms0'), ignore_errors=True)
-    if '--fresh' not in args and os.path.isdir(os.path.join(ROOT, 'gen', 'ms0')): shutil.copytree(os.path.join(ROOT, 'gen', 'ms0'), os.path.join(pkg, 'ms0'))
+    src = save_source()
+    if '--fresh' not in args and src: shutil.copytree(src, os.path.join(pkg, 'ms0'))
     mods = os.path.join(ROOT, 'gen', 'plugins_teste'); shutil.rmtree(mods, ignore_errors=True); os.makedirs(mods)
     for d in glob.glob(os.path.join(os.environ.get('TF_MODS_FROM') or os.path.join(ROOT, 'gen', 'mods'), '*')):   # TF_MODS_FROM=folder: test with only those mods
         if os.path.isfile(os.path.join(d, 'plugin.dll')) and not os.path.exists(os.path.join(d, 'disabled')):
@@ -225,7 +253,7 @@ if __name__ == '__main__':
     elif c == 'montage':   # junta capturas em gen/ctl/montagem.png (2 colunas)
         from PIL import Image
         n = a[1:]; m = Image.new('RGB', (960, 272 * ((len(n) + 1) // 2)))
-        for i, k in enumerate(n): m.paste(Image.open(os.path.join(CTL, k + '.png')), ((i % 2) * 480, (i // 2) * 272))
+        for i, k in enumerate(n): m.paste(Image.open(os.path.join(CTL, k + ".png")).resize((480, 272)), ((i % 2) * 480, (i // 2) * 272))
         m.save(os.path.join(CTL, 'montagem.png')); print(os.path.join(CTL, 'montagem.png'))
     elif c == 'ping': print(send('ping'))
     elif c == 'stop': stop()
