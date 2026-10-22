@@ -1,0 +1,4 @@
+name=Card Randomizer
+author=Tag Force Recomp
+version=1.0
+description=Every duel starts with randomly drawn decks: the cards of your deck and of the opponent's are replaced by random cards from the whole game. Options in config.ini

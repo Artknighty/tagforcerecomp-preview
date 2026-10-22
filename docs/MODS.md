@@ -178,6 +178,7 @@ base 0x091C4600) — check `module_loaded("libshop")` inside the hook.
   routine measures the DP actually earned, adds the extra with the game's own "add DP" function (which respects the 999,999,999 cap)
   and scales the parcels the result screen reads. The value saved by the old mod is imported.
 - **CPU vs CPU** (`plugins/src/CPUvsCPU`): the CPU also controls your side (see [`AI.md`](AI.md)); doubles as the test arena.
+- **Card Randomizer** (`plugins/src/CardRandomizer`): every deck the game reads for a duel (yours and the opponent's) is refilled with random cards from the whole card database (pool read from the game at run time: monsters, spells, traps; Fusion monsters for the extra deck). Options in the mod's `config.ini` (`randomize_player`, `randomize_opponent`, `keep_balance`, `max_copies`, `seed`); `TF_CARDRAND_OFF=1` disables it. It wraps the deck reader (`0884a694`), so it overrides Better Decks.
 - **Better AI** (`plugins/src/IAAprimorada`) and **Better Decks** (`plugins/src/DecksAprimorados`): see [`AI.md`](AI.md) and [`DECKS.md`](DECKS.md).
 
 ## Other bundled helpers
