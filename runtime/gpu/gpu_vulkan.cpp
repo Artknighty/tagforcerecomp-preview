@@ -67,7 +67,7 @@ static VkImageAspectFlags ds_aspect(void) { return VK_IMAGE_ASPECT_DEPTH_BIT | (
 static const VkImageLayout DS_LAYOUT = VK_IMAGE_LAYOUT_DEPTH_STENCIL_ATTACHMENT_OPTIMAL;
 static const char *vkres(VkResult r) { static char b[24]; snprintf(b, sizeof b, "VkResult %d", (int)r); return b; }
 #define CHK(x) do { VkResult r_ = (x); if (r_ < 0) { fprintf(stderr, "[vulkan] %s falhou: %s (linha %d)\n", #x, vkres(r_), __LINE__); return false; } } while (0)
-#define CHKV(x) do { VkResult r_ = (x); if (r_ < 0) { fprintf(stderr, "[vulkan] %s falhou: %s (linha %d)\n", #x, vkres(r_), __LINE__); } } while (0)
+#define CHKV(x) do { VkResult r_ = (x); if (r_ == VK_ERROR_DEVICE_LOST) { if (!g_gpu_lost) fprintf(stderr, "[vulkan] device lost (%s, line %d)\n", #x, __LINE__); g_gpu_lost = true; } else if (r_ < 0) { fprintf(stderr, "[vulkan] %s falhou: %s (linha %d)\n", #x, vkres(r_), __LINE__); } } while (0)
 
 static int mem_type(uint32_t bits, VkMemoryPropertyFlags want, VkMemoryPropertyFlags avoid = 0) {
     for (uint32_t i = 0; i < g_mem.memoryTypeCount; i++)
@@ -932,6 +932,7 @@ static void present_source(VkDescriptorSet srcSet, Img *srcImg, int sw, int sh) 
         gpu_lock_yield_end(sv); } g_qpMs += (gpu_now_us() - tq0) / 1000.0; g_npres++;
     if (g_dbg && r != VK_SUCCESS) { static int np; if (np++ < 20) fprintf(stderr, "[vulkan] present: %s\n", vkres(r)); }
     if (r == VK_ERROR_OUT_OF_DATE_KHR) { destroy_swap(); }
+    if (r == VK_ERROR_DEVICE_LOST) { if (!g_gpu_lost) fprintf(stderr, "[vulkan] device lost (present)\n"); g_gpu_lost = true; }
     g_gpu_us[2] += gpu_now_us() - tp;
     static uint64_t nfr; if (++nfr % 300 == 0) save_pcache();
 }

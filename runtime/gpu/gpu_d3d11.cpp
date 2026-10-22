@@ -15,6 +15,7 @@
 void d3d_flush(void);
 template <class T> static void rel(T *&p) { if (p) { p->Release(); p = nullptr; } }
 
+volatile bool g_gpu_lost;   /* shared with the Vulkan backend (gpu.h) */
 static ID3D11Device *g_dev; static ID3D11DeviceContext *g_ctx;
 static IDXGISwapChain1 *g_swap; static ID3D11RenderTargetView *g_back; static int g_bw, g_bh;
 static bool g_tearing, g_dbg; static char g_adapter[128] = "?";
@@ -635,7 +636,12 @@ static void present_srv(ID3D11ShaderResourceView *srv, int sw, int sh) {
     }
     ID3D11ShaderResourceView *nul = nullptr; g_ctx->PSSetShaderResources(0, 1, &nul);
     prof_end();
-    double tp = gpu_now_us(); g_swap->Present(g_gfx.sync == 1 ? 1 : 0, g_gfx.sync != 1 && g_tearing ? DXGI_PRESENT_ALLOW_TEARING : 0); const double pd = gpu_now_us() - tp; g_gpu_us[2] += pd;
+    double tp = gpu_now_us(); const HRESULT phr = g_swap->Present(g_gfx.sync == 1 ? 1 : 0, g_gfx.sync != 1 && g_tearing ? DXGI_PRESENT_ALLOW_TEARING : 0);
+    if (phr == DXGI_ERROR_DEVICE_REMOVED || phr == DXGI_ERROR_DEVICE_RESET) {
+        if (!g_gpu_lost) fprintf(stderr, "[d3d] device lost (Present 0x%08lx, reason 0x%08lx)\n", (unsigned long)phr, (unsigned long)g_dev->GetDeviceRemovedReason());
+        g_gpu_lost = true;
+    }
+    const double pd = gpu_now_us() - tp; g_gpu_us[2] += pd;
     { const double pm = pd / 1000.0; g_pf_pres += pm; g_pf_pres_max = std::max(g_pf_pres_max, pm); g_pf_pn++; prof_report(g_swap); }
     g_lastSrv = srv; g_lastW = sw; g_lastH = sh;
 }

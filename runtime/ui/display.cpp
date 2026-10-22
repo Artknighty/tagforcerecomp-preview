@@ -639,6 +639,16 @@ void display_present(void) {
         g_pending_pack = false; const int to = gfx_option_get(GFXOPT_TEXTURE_PACK) ? 0 : 1;
         gfx_option_set(GFXOPT_TEXTURE_PACK, to); display_notify(to ? "Textures: Enhanced" : "Textures: Original (PSP)");
     }
+    { static const long lose_at = getenv("TF_GPU_LOSE_AT") ? atol(getenv("TF_GPU_LOSE_AT")) : 0; if (lose_at && (long)g_frames == lose_at) g_gpu_lost = true; }   /* test: simulate a device loss at frame N */
+    if (g_gpu_lost) {   /* driver reset / TDR / GPU removed: rebuild the same renderer; after 3 losses in 60 s fall back to software (without touching the saved choice) */
+        g_gpu_lost = false; pres_drain();
+        static ULONGLONG t0; static int n; const ULONGLONG now = GetTickCount64();
+        if (now - t0 > 60000) { t0 = now; n = 0; }
+        const int want = g_gfx.renderer;
+        fprintf(stderr, "[gpu] device lost: recreating the renderer (%d in this minute)\n", n + 1);
+        if (++n > 3) { display_set_renderer(GFX_RENDER_SOFTWARE); g_gfx.renderer = want; gfx_save(); display_notify("GPU kept failing: using software rendering"); }
+        else { display_set_renderer(want); g_gpu_lost = false; display_notify("GPU reset: renderer restarted"); }
+    }
     if (g_pending_renderer >= 0) { const int r = g_pending_renderer; g_pending_renderer = -1; pres_drain(); display_set_renderer(r); }   /* pedido pela tela Graphics do jogo: trocado aqui, entre dois quadros */
     {   /* esconde o cursor depois de 5 s (3 s com controle ligado) sem mexer o mouse (so com a janela do jogo ativa e o cursor sobre a area do jogo) */
         static POINT last; static ULONGLONG moved = GetTickCount64(); POINT pt; GetCursorPos(&pt);
