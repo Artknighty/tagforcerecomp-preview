@@ -119,7 +119,7 @@ mods/
 It is switched on and off in the **Mods** menu like any other mod (applies on restart). The game loads the `plugin.dll` of the
 enabled mods at start-up, in alphabetical folder order, and calls `tfmod_init(api)`.
 
-### The API (`plugins/sdk/tfmod.h`, C only, version 6)
+### The API (`plugins/sdk/tfmod.h`, C ABI, version 6)
 
 The game code is recompiled, so a code mod does not "patch" the ISO: it **intercepts game functions by their PSP address**. Every
 recompiled function checks a bitmap on entry; if there is a hook, it runs with the PSP registers (`reg(c, 4..7)` = arguments, `r2` =
@@ -158,11 +158,19 @@ passes up to 8 arguments in a0–a3 and t0–t3, and `r2` holds the original's r
 
 ### Creating a mod
 
-Copy `plugins/src/BoosterBox` (a small, well-commented example) to `plugins/src/MyMod`, edit the `.cpp` and `mod.txt` and run
+Copy `plugins/examples/HelloMod` (a minimal template: per-frame hook, message box, log; `BoosterBox` is a bigger, well-commented example) to `plugins/src/MyMod`, edit the `.cpp` and `mod.txt` and run
 `sh tools/build/build_plugins.sh MyMod` (MSYS2 UCRT64; `package_release.py` and the first `build.sh` build all of them). The result goes to `gen/mods/MyMod/`
 (`plugin.dll` plus the other files of the folder). The DLL is statically linked: it only depends on Windows. To find what to hook,
 `TF_HOOK_TRACE=addr,addr` logs (frame, arguments) of each call. Careful: overlapping modules (libfield and libshop share the same
 base 0x091C4600) — check `module_loaded("libshop")` inside the hook.
+
+The game functions that existing mods already hook (deck reader, card data, duel AI, shop...) are listed in [`HOOKS.md`](HOOKS.md). A mod that needs a newer
+API than the player's runtime starts with `TFMOD_REQUIRE(api, N)`: it then refuses to load and logs why.
+
+**Changing the SDK safely:** after any change in `plugins/sdk/` or in the runtime's plugin loader (`runtime/mods/plugins.cpp`), run `sh tools/test/sdk_check.sh`
+(`--run` also starts the real game with every mod on). It checks that `TfModApi` keeps the offset of every field (`plugins/sdk/abi_check.cpp`), that all mods in
+`plugins/src` and `plugins/examples` still build, and with `--run` that every mod still loads. The API only grows: add new fields at the end, raise
+`TFMOD_API_VERSION`, and append the field to `abi_check.cpp`.
 
 ### Bundled behavior mods
 

@@ -5,13 +5,25 @@
  *     mods/MyMod/plugin.dll    uses this API; exports tfmod_init
  * At startup the game loads plugin.dll from the enabled mods (Mods menu) and calls tfmod_init(api). The plugin installs hooks on game
  * functions (by their PSP address) and, inside them, reads/writes PSP memory and registers, calls game functions and shows message
- * boxes. Example source: plugins/src/BoosterBox. Build with: sh tools/build/build_plugins.sh (MSYS2 UCRT64, g++).
+ * boxes. Start from plugins/examples/HelloMod (a minimal template); bigger examples: plugins/src/BoosterBox, plugins/src/Cheats. Game functions
+ * you can hook: docs/HOOKS.md. Build with: sh tools/build/build_plugins.sh (MSYS2 UCRT64, g++).
  *
  * Game version: hook addresses are valid for ONE version of the game. By default a plugin is valid only for the European one
  * (ULES-00600); for another version, export `const char *tfmod_game_ids = "ULES-00600,ULUS-10136";` (the list of versions the
  * addresses are correct for).
- * Rules: C only (stable ABI); the API only grows (new fields at the end, `version` goes up); a plugin built for version N runs on any
- * runtime with version >= N. Everything runs on the game thread, inside the frame: never block or wait. */
+ * Rules: the ABI is plain C (this header is C and C++ compatible; the mod's own code may be C++, built static); the API only grows (new fields at the end, `version` goes up); a plugin built for version N runs on any
+ * runtime with version >= N (tools/test/sdk_check.sh freezes the layout; use TFMOD_REQUIRE(api, N) below when a mod needs a newer API).
+ * Everything runs on the game thread, inside the frame: never block or wait.
+ *
+ * Exports a plugin can have (only tfmod_init is required):
+ *     int tfmod_init(const TfModApi *api)         install hooks and settings; return 0 if it loaded
+ *     const char *tfmod_game_ids                  game versions the addresses are valid for (see above)
+ *     void tfmod_marca(int n)                     the player recorded mark n (F7); dump the state into the log (see the end of this file)
+ *
+ * Several mods hooking the same function: the hooks run in load order and the first one to return 1 ends the chain, so a mod that only
+ * wants to observe or tweak an argument should return 0 (the original and the other mods' hooks still run). A mod that must replace a
+ * function's result returns 1 and cannot coexist with another that does the same: say so in its README.
+ * A per-frame callback is just a hook on the function the game calls once per frame (F_FRAME 0x08833fc4, docs/HOOKS.md). */
 #pragma once
 #include <stdint.h>
 #include <wchar.h>
@@ -112,6 +124,8 @@ typedef struct TfModApi {
     void (*set_speed)(int n);
 } TfModApi;
 #define TFMOD_MENU_MODS 0
+/* In tfmod_init: stop (and log why) if the runtime is older than the API version this mod needs. */
+#define TFMOD_REQUIRE(api, n) do { if ((api)->version < (unsigned)(n)) { (api)->log("needs plugin API %d, this runtime has %u: update the game", (int)(n), (api)->version); return 2; } } while (0)
 #define TFMOD_MENU_CHEATS 1
 
 /* The plugin exports this function. Return 0 if it loaded; any other value = error (the mod is ignored). */

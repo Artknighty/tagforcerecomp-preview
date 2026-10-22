@@ -4,6 +4,9 @@ Format: [Keep a Changelog](https://keepachangelog.com/en/1.1.0/). Versioning: [S
 
 ## [Unreleased]
 
+### Added
+- Modding: a minimal `HelloMod` template (`plugins/examples/HelloMod`), a list of the game functions mods can hook (`docs/HOOKS.md`), a `TFMOD_REQUIRE` version check for plugins, and `tools/test/sdk_check.sh`, which freezes the plugin ABI and checks that every mod still builds and loads after an SDK change.
+
 ### Changed
 - Mod folders have English names: `BoosterBox`, `BetterDecks`, `BetterAI`, `MonstersOnField` (were `CaixaDeBoosters`, `DecksAprimorados`, `IAAprimorada`, `MonstrosNoCampo`). An older folder is renamed automatically at startup, keeping its settings and on/off state.
 

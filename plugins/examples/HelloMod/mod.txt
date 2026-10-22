@@ -1,0 +1,4 @@
+name=Hello Mod
+author=Tag Force Recomp
+version=1.0
+description=Template for new behavior mods: shows a message box for three seconds and logs once every ten seconds.
