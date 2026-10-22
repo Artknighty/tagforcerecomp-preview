@@ -8,6 +8,7 @@ Format: [Keep a Changelog](https://keepachangelog.com/en/1.1.0/). Versioning: [S
 - **Cheats is now part of the recomp, not a mod.** It lives in the exe (`runtime/mods/cheats.cpp`) and no longer needs `mods/Cheats`; the launcher's Cheats page and the in-game keys are unchanged. Settings moved to `cheats.ini` next to `tagforce_recomp.ini` (the old `mods/Cheats/config.ini` and its on/off switch are imported on the first start; an old `mods/Cheats` folder is ignored).
 
 ### Added
+- **Story Duel LP** mod (`StoryLP`): story duels start with 4000 Life Points for both duelists instead of 8000 (idea from a community comment). The value is `lp=` in the mod's `config.ini`; Free Duel keeps the LP chosen on its rules screen.
 - **Exclusive fullscreen** (Direct3D 11). The launcher's Window mode now has three choices: Windowed, Fullscreen (exclusive) and Fullscreen borderless (the previous "Fullscreen"; saved settings keep working). If the driver refuses exclusive mode, or with Vulkan, the game falls back to borderless. Alt+Tab leaves exclusive mode and comes back with the window.
 
 ## [0.4.1] - 2026-10-22

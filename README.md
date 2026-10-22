@@ -58,6 +58,7 @@ Behavior mods in this repository (sources in [`plugins/src/`](plugins/src/)):
 | **Booster box** (`BoosterBox`) | buy all remaining packs of a booster at once in the shop |
 | **Card Randomizer** (`CardRandomizer`) | every deck of every duel is refilled with random cards from the whole card pool |
 | **Player / Opponent Deck Randomizer** (`PlayerDeckRandomizer`, `OpponentDeckRandomizer`) | every duel, your / the opponent's deck becomes a random whole recipe of the game, with its own deck name; use one or both |
+| **Story Duel LP** (`StoryLP`) | story duels start with 4000 LP for both duelists instead of 8000 (value in `config.ini`) |
 | **Monsters on the field** (`MonstersOnField`) | *experimental prototype*: shows your face-up monsters larger over their zone |
 
 Texture, video and button packs (HD menus, HD opening movie, EU cards, Xbox buttons) are separate mods distributed outside the repository.

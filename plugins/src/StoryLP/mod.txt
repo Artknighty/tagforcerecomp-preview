@@ -1,0 +1,4 @@
+name=Story Duel LP
+author=Tag Force Recomp
+version=0.1
+description=Starting Life Points of story duels (default 4000 for both duelists instead of 8000). Change the value in config.ini
