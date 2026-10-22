@@ -4,6 +4,8 @@ Format: [Keep a Changelog](https://keepachangelog.com/en/1.1.0/). Versioning: [S
 
 ## [Unreleased]
 
+## [0.4.1] - 2026-10-22
+
 ### Added
 - Modding: a minimal `HelloMod` template (`plugins/examples/HelloMod`), a list of the game functions mods can hook (`docs/HOOKS.md`), a `TFMOD_REQUIRE` version check for plugins, and `tools/test/sdk_check.sh`, which freezes the plugin ABI and checks that every mod still builds and loads after an SDK change.
 
