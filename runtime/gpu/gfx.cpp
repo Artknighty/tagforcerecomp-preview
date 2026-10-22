@@ -30,9 +30,8 @@ void gfx_load(void) {
     if (getenv("TF_GPU")) g_gfx.renderer = atoi(getenv("TF_GPU"));   /* testes: TF_GPU=0 software, 1 Direct3D 11, 2 Vulkan */
     if (g_gfx.renderer < 0 || g_gfx.renderer > 2) g_gfx.renderer = GFX_RENDER_SOFTWARE;
     if (g_gfx.res < 1 || g_gfx.res > 8) g_gfx.res = 1;
-    g_gfx.msaa = (int)GetPrivateProfileIntW(L"graficos", L"msaa", g_gfx.msaa, ini.c_str());
-    if (getenv("TF_MSAA")) g_gfx.msaa = atoi(getenv("TF_MSAA"));
-    if (g_gfx.msaa != 2 && g_gfx.msaa != 4 && g_gfx.msaa != 8) g_gfx.msaa = 1;
+    g_gfx.msaa = 1;   /* MSAA was removed (cost performance, barely visible): always off; drop the key an older ini may still carry */
+    if (GetPrivateProfileIntW(L"graficos", L"msaa", -1, ini.c_str()) != -1) WritePrivateProfileStringW(L"graficos", L"msaa", nullptr, ini.c_str());
     g_gfx.texscale = getenv("TF_TEXSCALE") ? atoi(getenv("TF_TEXSCALE")) : 1;   /* o ajuste saiu do menu (o pacote Enhanced cobre as texturas); so por teste, via variavel */
     if (g_gfx.texscale != 2 && g_gfx.texscale != 4) g_gfx.texscale = 1;
     g_gfx.fps = (int)GetPrivateProfileIntW(L"graficos", L"fps60", g_gfx.fps, ini.c_str());   /* a chave continua fps60: 0 = 30, 1 = 60, 2 = 120 */
@@ -52,7 +51,6 @@ void gfx_save(void) {
     swprintf(b, 16, L"%d", g_gfx.filter); WritePrivateProfileStringW(L"graficos", L"filtro", b, ini.c_str());
     swprintf(b, 16, L"%d", g_gfx.aspect); WritePrivateProfileStringW(L"graficos", L"proporcao", b, ini.c_str());
     swprintf(b, 16, L"%d", g_gfx.res_auto ? 0 : g_gfx.res); WritePrivateProfileStringW(L"graficos", L"resolucao", b, ini.c_str());
-    swprintf(b, 16, L"%d", g_gfx.msaa); WritePrivateProfileStringW(L"graficos", L"msaa", b, ini.c_str());
     swprintf(b, 16, L"%d", g_gfx.renderer); WritePrivateProfileStringW(L"graficos", L"renderizador", b, ini.c_str());
     swprintf(b, 16, L"%d", g_gfx.fps); WritePrivateProfileStringW(L"graficos", L"fps60", b, ini.c_str());
     swprintf(b, 16, L"%d", g_gfx.sync); WritePrivateProfileStringW(L"graficos", L"sincronizacao", b, ini.c_str());
@@ -141,7 +139,6 @@ void gfx_paint(HDC dc, const uint32_t *pix, int sw, int sh, int cw, int ch) {
 #include "gfx_options.h"
 #include "hdfont.h"
 void ge_set_res(int n);
-void ge_set_msaa(void);
 void ge_set_texscale(void);
 void display_request_renderer(int r);
 int mods_find(const char *folder);
@@ -152,11 +149,10 @@ bool mods_enabled_has_file(const char *relative);
 
 namespace {
 struct OptionInfo { const char *label; const char *help; int count; const char *names[6]; const int *values; };   /* values: what each choice stores (null = the index itself) */
-const int kResValues[6] = {1, 3, 4, 6, 8, 0}, kMsaaValues[4] = {1, 2, 4, 8};   /* resolucao: fator interno (0 = do monitor; ver gfx.h) */
+const int kResValues[6] = {1, 3, 4, 6, 8, 0};   /* resolucao: fator interno (0 = do monitor; ver gfx.h) */
 const OptionInfo kOptions[GFXOPT_COUNT] = {
     {"Renderer", "Software uses the CPU. Direct3D 11 and Vulkan use the GPU.", 3, {"Software", "Direct3D 11", "Vulkan"}, nullptr},
     {"Resolution", "Screen resolution, as in any PC game. 2560x1440 and 3840x2160 need the GPU.", 6, {"480x272", "1280x720", "1920x1080", "2560x1440", "3840x2160", "Monitor"}, kResValues},
-    {"Anti-aliasing (MSAA)", "Smooths jagged edges (GPU only).", 4, {"Off", "2x", "4x", "8x"}, kMsaaValues},
     {"Textures", "Original is the plain PSP look. Enhanced is the AI upscaled package.", 2, {"Original", "Enhanced"}, nullptr},
     {"Frame rate", "60 and 120 FPS are interpolated from the original 30 (GPU). 120 needs a 120 Hz monitor.", 3, {"30 FPS", "60 FPS", "120 FPS"}, nullptr},
     {"Synchronization", "Default avoids tearing. VSync waits for the monitor.", 3, {"Default", "VSync", "Lowest latency"}, nullptr},
@@ -167,7 +163,6 @@ int &stored(int option, int &scratch) {   /* the int field of g_gfx behind an op
     switch (option) {
     case GFXOPT_RENDERER: return g_gfx.renderer;
     case GFXOPT_RESOLUTION: scratch = g_gfx.res_auto ? 0 : g_gfx.res; return scratch;
-    case GFXOPT_MSAA: return g_gfx.msaa;
     case GFXOPT_FRAME_RATE: return g_gfx.fps;
     case GFXOPT_SYNC: return g_gfx.sync;
     case GFXOPT_FILTER: return g_gfx.filter;
@@ -232,7 +227,6 @@ void gfx_option_set(int option, int choice) {
     }
     case GFXOPT_RENDERER: display_request_renderer(value); break;   /* applied between two frames; saves by itself, and falls back to another renderer if this one does not start */
     case GFXOPT_RESOLUTION: g_gfx.res_auto = value == 0; g_gfx.res = value ? value : gfx_res_monitor(); ge_set_res(g_gfx.res); gfx_save(); break;
-    case GFXOPT_MSAA: g_gfx.msaa = value; ge_set_msaa(); gfx_save(); break;
     case GFXOPT_FRAME_RATE: g_gfx.fps = value; gfx_save(); break;
     case GFXOPT_SYNC: g_gfx.sync = value; gfx_save(); break;
     case GFXOPT_FILTER: g_gfx.filter = value; gfx_save(); break;

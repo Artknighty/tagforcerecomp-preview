@@ -5,10 +5,11 @@
 The package contains NO game data and no game code. It holds:
   TagForceRecomp.exe   the generic runtime (no game code inside)
   avcodec/avutil.dll   slim LGPL-only FFmpeg with just the ATRAC3/3+ and H.264 decoders (tools/build/build_ffmpeg_lite.sh)
-  mods/                the behavior mods of plugins/src/ (plugin.dll), switched on or off in the Mods menu
   tcc/ include/        TinyCC (LGPL) and the one runtime header the generated code includes
   tools/               the Allegrex -> C translator (tools/translator/, Python scripts) and the embedded Python that runs it
   gen/nids_hle.tsv     names of the system calls the runtime implements
+The main zip carries NO mods (it stays as close to the original game as possible). The behavior mods of plugins/src/ (plugin.dll) go in a
+second zip, TagForceRecomp-Mods-<version>.zip, whose mods/ folder the player copies next to the exe; each ships switched off.
 On first run the program installs the game files from the player's ISO and translates the game's code on the player's machine
 (runtime/core/prepare.cpp); the C code is then compiled in memory by TinyCC (runtime/core/jit.cpp).
 Needs (on the build machine only): MSYS2 UCRT64 (g++, windres, glslc, FFmpeg), Python 3. Downloads TinyCC and the embeddable Python
@@ -79,7 +80,10 @@ def main():
 
     # 3. behavior mods
     mods = [d for d in sorted(os.listdir('plugins/src')) if os.path.isdir(os.path.join('plugins/src', d)) and d not in SKIP_MODS]
-    mods_out = os.path.join(pkg, 'mods')
+    mods_pkg = os.path.join(out, 'TagForceRecomp-Mods')   # the mods are NOT part of the main package: they get their own zip
+    if os.path.isdir(mods_pkg): shutil.rmtree(mods_pkg)
+    mods_out = os.path.join(mods_pkg, 'mods')
+    os.makedirs(mods_out, exist_ok=True)
     for mod in mods:
         src = os.path.join('plugins/src', mod)
         dst = os.path.join(mods_out, mod)
@@ -95,6 +99,14 @@ def main():
         if srcs:
             run(['g++', '-std=c++17', '-O2', '-Wall', '-Wno-misleading-indentation', '-shared', '-static', '-s',
                  '-Iplugins/sdk', '-o', os.path.join(dst, 'plugin.dll')] + srcs + ['-lwinhttp', '-lws2_32'], env=env)
+        with open(os.path.join(dst, 'disabled'), 'w') as f:   # same marker the Mods page writes: the player opts in
+            f.write('Mod switched off in the Mods menu. Delete this file (or use the menu) to switch it on.\n')
+    open(os.path.join(mods_pkg, 'INSTALL.txt'), 'w').write(
+        'Tag Force Recomp - behavior mods - %s\r\n\r\n'
+        '1. Copy the "mods" folder of this zip into your TagForceRecomp folder (next to TagForceRecomp.exe); merge if it already exists.\r\n'
+        '2. Run TagForceRecomp.exe and open the Mods page: every mod here starts switched OFF; turn on the ones you want (applies on restart).\r\n\r\n'
+        'Each mod folder has a README.md. Do not combine mods that hook the same game function (Card Randomizer, Player/Opponent Deck\r\n'
+        'Randomizer and Better Decks all replace the decks): see docs/MODS.md. The SDK to make your own mods is in the source repository.\r\n' % version)
 
     # 4. TinyCC
     tz = fetch(TCC_URL, os.path.join(cache, 'tcc.zip'))
@@ -132,6 +144,7 @@ def main():
         '3. Click "Install and play". The first run copies the game files and prepares the game (a few minutes, only once).\r\n'
         '   Next time just click "Play"; the ISO is not needed any more.\r\n\r\n'
         'Nothing from the game is included in this download; everything is made on your computer from your own copy.\r\n'
+        'Mods are a separate download (TagForceRecomp-Mods zip of the same release): copy its mods folder next to the exe.\r\n'
         'This is an early preview: see docs/PREVIEW.md. Do not move TagForceRecomp.exe out of this folder.\r\n' % version)
 
     # 7. checks: nothing that looks like game data
@@ -146,6 +159,13 @@ def main():
             for f in fn:
                 p = os.path.join(dp, f); z.write(p, os.path.join('TagForceRecomp', os.path.relpath(p, pkg)))
     print('package: %s (%.1f MB)' % (zp, os.path.getsize(zp) / 1048576))
+    mz = os.path.join(out, 'TagForceRecomp-Mods-%s.zip' % version)
+    if os.path.exists(mz): os.remove(mz)
+    with zipfile.ZipFile(mz, 'w', zipfile.ZIP_DEFLATED, compresslevel=9) as z:
+        for dp, dn, fn in os.walk(mods_pkg):
+            for f in fn:
+                p = os.path.join(dp, f); z.write(p, os.path.relpath(p, mods_pkg))
+    print('mods package: %s (%.1f MB)' % (mz, os.path.getsize(mz) / 1048576))
 
 
 if __name__ == '__main__':

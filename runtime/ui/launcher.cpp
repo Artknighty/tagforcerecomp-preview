@@ -38,12 +38,11 @@ static int g_page = PG_PLAY, g_navhot = -1;
 
 /* Opcoes de graficos: mesmas chaves e valores do tagforce_recomp.ini que o jogo le (gfx.cpp / gfx_options.h) */
 struct LOpt { const wchar_t *label, *hint, *key; int count; const wchar_t *names[6]; const int *values; int def; };
-static const int kResV[6] = {1, 3, 4, 6, 8, 0}, kMsaaV[4] = {1, 2, 4, 8};   /* resolucao: fator interno, 0 = a do monitor (gfx.h) */
+static const int kResV[6] = {1, 3, 4, 6, 8, 0};   /* resolucao: fator interno, 0 = a do monitor (gfx.h) */
 static const LOpt kOpts[] = {
     {L"Renderer", L"Software uses the CPU. Direct3D 11 and Vulkan use the GPU.", L"renderizador", 3, {L"Software", L"Direct3D 11", L"Vulkan"}, nullptr, 1},
     {L"Resolution", L"Screen resolution, as in any PC game. 2560x1440 and 3840x2160 need the GPU.", L"resolucao", 6, {L"480 x 272 (PSP)", L"1280 x 720", L"1920 x 1080", L"2560 x 1440", L"3840 x 2160", L"Match monitor"}, kResV, 0},
     {L"Window mode", L"Windowed or fullscreen. In game, F11 or Alt+Enter switches too.", L"tela", 2, {L"Windowed", L"Fullscreen"}, nullptr, 0},
-    {L"Anti-aliasing (MSAA)", L"Smooths jagged edges (GPU only).", L"msaa", 4, {L"Off", L"2x", L"4x", L"8x"}, kMsaaV, 1},
     {L"Textures", L"Original is the plain PSP look. Enhanced is the remastered package: textures, menus and text in high resolution.", nullptr, 2, {L"Original", L"Enhanced"}, nullptr, 1},
     {L"Frame rate", L"60 and 120 FPS are interpolated from the original 30 (GPU). 120 needs a 120 Hz monitor.", L"fps60", 3, {L"30 FPS", L"60 FPS", L"120 FPS"}, nullptr, 1},
     {L"Synchronization", L"Default avoids tearing. VSync waits for the monitor.", L"sincronizacao", 3, {L"Default", L"VSync", L"Lowest latency"}, nullptr, 0},
@@ -51,7 +50,7 @@ static const LOpt kOpts[] = {
     {L"Aspect ratio", L"Proportion of the image: original 16:9, stretched or 4:3.", L"proporcao", 3, {L"16:9", L"Stretch", L"4:3"}, nullptr, 0},
 };
 static const int N_OPT = (int)(sizeof kOpts / sizeof kOpts[0]);
-enum { NQ = 4, OPT_FPS = 5 };
+enum { NQ = 4, OPT_FPS = 4 };
 static const int kQuick[NQ] = {0, 1, 2, OPT_FPS};     /* opcoes repetidas na pagina Play: renderer, resolucao, modo de janela, FPS */
 static HWND g_sel[N_OPT], g_qsel[NQ]; static int g_cur[N_OPT];
 static std::wstring g_path;                 /* ISO escolhida */
@@ -111,7 +110,7 @@ static void cheat_text() { for (int i = 0; i < N_CHEAT; i++) { SetWindowTextW(g_
 static void cheat_step(int i, int dir) { if (!dir_exists(cheat_dir())) return; g_cc[i] = (g_cc[i] + dir + kCheat[i].count) % kCheat[i].count; cheat_save(); cheat_text(); }
 static int S(int v) { return MulDiv(v, g_dpi, 96); }
 /* medidas em 96 dpi */
-static const int W96 = 1040, H96 = 700, SIDE96 = 220, BAR96 = 72;
+static const int W96 = 1120, H96 = 720, SIDE96 = 220, BAR96 = 72;
 
 static std::wstring ini_path() { return app_ini_path(); }
 static bool file_exists(const std::wstring &p) { DWORD a = GetFileAttributesW(p.c_str()); return a != INVALID_FILE_ATTRIBUTES && !(a & FILE_ATTRIBUTE_DIRECTORY); }
@@ -267,22 +266,22 @@ static void draw_button(const DRAWITEMSTRUCT *d) {   /* compoe num bitmap e copi
 }
 
 /* ---- geometria (px reais) ---- */
-static int nav_y(int i) { return S(124) + i * S(46); }
+static int nav_y(int i) { return S(116) + i * S(40); }
 static int nav_at(int x, int y) {
     if (x < 0 || x >= S(SIDE96)) return -1;
-    for (int i = 0; i < N_PAGES; i++) if (y >= nav_y(i) && y < nav_y(i) + S(46)) return i;
+    for (int i = 0; i < N_PAGES; i++) if (y >= nav_y(i) && y < nav_y(i) + S(40)) return i;
     RECT cr; GetClientRect(g_wnd, &cr); int qy = cr.bottom - S(BAR96);
     if (y >= qy && y < cr.bottom) return NAV_QUIT;   /* Quit ocupa a altura da barra inferior, na sidebar */
     return -1;
 }
 /* pagina Mods: linha k (0 = topo = maior prioridade) mostra g_modlist[n-1-k] */
-static int mod_row_h() { return S(62); }
+static int mod_row_h() { return S(56); }
 static RECT mod_area() { RECT cr; GetClientRect(g_wnd, &cr); return RECT{S(SIDE96) + S(28), S(100), cr.right - S(28), cr.bottom - S(BAR96) - S(10)}; }
 static int mod_rows_visible() { RECT a = mod_area(); return std::max(1, (int)((a.bottom - a.top) / mod_row_h())); }
 static void mod_clamp_scroll() { int mx = std::max(0, (int)g_modlist.size() - mod_rows_visible()); g_modscroll = std::min(std::max(g_modscroll, 0), mx); }
 static RECT mod_row_rect(int k) { RECT a = mod_area(); int y = a.top + (k - g_modscroll) * mod_row_h(); return RECT{a.left, y, a.right, y + mod_row_h() - S(8)}; }
 static RECT mod_btn_rect(RECT row, int part) {   /* part 1 = subir, 2 = descer */
-    int sz = S(34), x = row.right - S(14) - sz * 2 - S(8) + (part == 2 ? sz + S(8) : 0), y = (row.top + row.bottom - sz) / 2; return RECT{x, y, x + sz, y + sz};
+    int sz = S(30), x = row.right - S(14) - sz * 2 - S(8) + (part == 2 ? sz + S(8) : 0), y = (row.top + row.bottom - sz) / 2; return RECT{x, y, x + sz, y + sz};
 }
 /* devolve a linha (0 = topo) e a parte: 0 liga/desliga, 1 subir prioridade, 2 descer; -1 fora */
 static int mod_hit(int x, int y, int *part) {
@@ -304,7 +303,7 @@ static void mod_click(int x, int y) {
 }
 static void draw_mods_page(HDC dc, int cx, int cw) {
     text(dc, g_fHead, C_TXT, RECT{cx, S(22), cx + cw - S(210), S(58)}, L"Mods");
-    text(dc, g_fSub, C_DIM, RECT{cx, S(58), cx + cw, S(80)}, game_running() ? L"The game is running \x2014 close it to change mods." : L"Top = highest priority: when two mods change the same file, the upper one wins. Changes apply on the next start.");
+    text(dc, g_fSub, C_DIM, RECT{cx, S(58), cx + cw - S(190), S(96)}, game_running() ? L"The game is running \x2014 close it to change mods." : L"Top = highest priority: when two mods change the same file, the upper one wins. Changes apply on the next start.", DT_LEFT | DT_WORDBREAK);
     if (g_modlist.empty()) { text(dc, g_fText, C_DIM, RECT{cx, S(110), cx + cw, S(140)}, L"No mods installed. Use \"Open mods folder\" to add some."); return; }
     mod_clamp_scroll(); const int n = (int)g_modlist.size(); const bool lock = game_running();
     RECT a = mod_area(); int saved = SaveDC(dc); IntersectClipRect(dc, a.left, a.top, a.right, a.bottom);
@@ -317,10 +316,10 @@ static void draw_mods_page(HDC dc, int cx, int cw) {
         round_fill(dc, tg, e.enabled && !lock ? C_ACC : C_OFF, e.enabled && !lock ? C_ACC : C_LINE, S(12));
         int kn = S(18), kx = e.enabled ? tg.right - S(3) - kn : tg.left + S(3), ky = (tg.top + tg.bottom - kn) / 2;
         round_fill(dc, RECT{kx, ky, kx + kn, ky + kn}, e.enabled ? dark::ACC_TXT : C_DIM, e.enabled ? dark::ACC_TXT : C_DIM, S(9));
-        RECT nr = {tg.right + S(16), r.top + S(8), mod_btn_rect(r, 1).left - S(12), r.top + S(32)};
+        RECT nr = {tg.right + S(16), r.top + S(6), mod_btn_rect(r, 1).left - S(12), r.top + S(28)};
         text(dc, g_fText, e.enabled ? C_TXT : C_DIM, nr, e.label.c_str(), DT_LEFT | DT_SINGLELINE | DT_VCENTER | DT_END_ELLIPSIS);
         std::wstring d = e.detail.empty() ? std::wstring(e.enabled ? L"On" : L"Off") : e.detail + (e.enabled ? L"" : L"  \x00B7  off");
-        text(dc, g_fSmall, C_DIM, RECT{nr.left, r.top + S(32), nr.right, r.bottom - S(6)}, d.c_str(), DT_LEFT | DT_SINGLELINE | DT_VCENTER | DT_END_ELLIPSIS);
+        text(dc, g_fSmall, C_DIM, RECT{nr.left, r.top + S(28), nr.right, r.bottom - S(4)}, d.c_str(), DT_LEFT | DT_SINGLELINE | DT_VCENTER | DT_END_ELLIPSIS);
         for (int p = 1; p <= 2; p++) {
             RECT b = mod_btn_rect(r, p); bool can = !lock && (p == 1 ? k > 0 : k < n - 1);
             round_fill(dc, b, can ? C_BTN : C_OFF, can ? C_LINE : C_OFF, S(8));
@@ -384,7 +383,7 @@ static void paint(HWND h) {
     text(dc, g_fSmall, C_DIM, RECT{S(24), S(78), SW - S(12), S(96)}, L"PC recompilation");
     for (int i = 0; i <= N_PAGES; i++) {
         bool quit = i == NAV_QUIT, act = !quit && i == g_page, hot = i == g_navhot;
-        RECT it = quit ? RECT{0, cr.bottom - BH, SW - 1, cr.bottom} : RECT{0, nav_y(i), SW - 1, nav_y(i) + S(46)};
+        RECT it = quit ? RECT{0, cr.bottom - BH, SW - 1, cr.bottom} : RECT{0, nav_y(i), SW - 1, nav_y(i) + S(40)};
         if (quit) { RECT ln = {0, it.top, SW - 1, it.top + 1}; HBRUSH b = CreateSolidBrush(C_LINE); FillRect(dc, &ln, b); DeleteObject(b); }
         if (act || hot) { HBRUSH b = CreateSolidBrush(act ? C_BG : C_NAVHOT); FillRect(dc, &it, b); DeleteObject(b); }
         if (act) { RECT bar = {0, it.top, S(3), it.bottom}; HBRUSH b = CreateSolidBrush(C_ACC); FillRect(dc, &bar, b); DeleteObject(b); }
@@ -587,8 +586,8 @@ std::string launcher_pick_iso(std::wstring *data) {
     g_wnd = CreateWindowW(L"TagForceLauncher", L"Tag Force Recomp", st, (GetSystemMetrics(SM_CXSCREEN) - ww) / 2, (GetSystemMetrics(SM_CYSCREEN) - wh) / 2, ww, wh, nullptr, nullptr, hi, nullptr);
     menu_dark_window(g_wnd);
     set_app_icon(g_wnd);
-    g_fHero = make_font(34, FW_SEMIBOLD); g_fHead = make_font(26, FW_SEMIBOLD); g_fTitle = make_font(26, FW_SEMIBOLD); g_fSub = make_font(13, FW_NORMAL); g_fText = make_font(15, FW_NORMAL);
-    g_fSmall = make_font(12, FW_SEMIBOLD); g_fBtn = make_font(15, FW_SEMIBOLD); g_fPlay = make_font(19, FW_BOLD);
+    g_fHero = make_font(30, FW_SEMIBOLD); g_fHead = make_font(22, FW_SEMIBOLD); g_fTitle = make_font(22, FW_SEMIBOLD); g_fSub = make_font(12, FW_NORMAL); g_fText = make_font(14, FW_NORMAL);
+    g_fSmall = make_font(11, FW_SEMIBOLD); g_fBtn = make_font(14, FW_SEMIBOLD); g_fPlay = make_font(17, FW_BOLD);
     RECT cr; GetClientRect(g_wnd, &cr); int cx = S(SIDE96) + S(28), cw = cr.right - S(28) - cx;
     auto btn = [&](const wchar_t *t, int id, int x, int y, int w, int h) { return CreateWindowW(L"BUTTON", t, WS_CHILD | WS_VISIBLE | WS_TABSTOP | BS_OWNERDRAW, x, y, w, h, g_wnd, (HMENU)(INT_PTR)id, hi, nullptr); };
     opt_load();
@@ -598,13 +597,13 @@ std::string launcher_pick_iso(std::wstring *data) {
       for (int k = 0; k < NQ; k++) g_qsel[k] = btn(kOpts[kQuick[k]].names[g_cur[kQuick[k]]], ID_QOPT0 + k, rx, S(220) + S(26) + S(30) + S(24) + k * S(68), w, S(36)); }
     cheat_load();
     for (int i = 0; i < N_CHEAT; i++) g_csel[i] = btn(kCheat[i].names[g_cc[i]], ID_COPT0 + i, cx + cw - S(270), S(100) + i * S(56) + S(4), S(270), S(34));
-    g_bpick = btn(L"Select ISO...", ID_PICK, cx, S(220), S(200), S(40));
-    g_blogs = btn(L"Open logs folder", ID_LOGS, cx, S(326), S(200), S(40));
-    g_bsaves = btn(L"Open saves folder", ID_SAVES, cx + S(212), S(326), S(200), S(40));
-    g_bmoddir = btn(L"Open mods folder", ID_MODDIR, cx + cw - S(200), S(24), S(200), S(40));
-    { int by = cr.bottom - S(BAR96) + S(13), bh = S(46);
-      g_play = btn(L"PLAY", ID_PLAY, cr.right - S(28) - S(210), by, S(210), bh);
-      g_bstop = btn(L"Stop", ID_STOP, cr.right - S(28) - S(210) - S(10) - S(90), by, S(90), bh); }
+    g_bpick = btn(L"Select ISO...", ID_PICK, cx, S(220), S(180), S(36));
+    g_blogs = btn(L"Open logs folder", ID_LOGS, cx, S(326), S(180), S(36));
+    g_bsaves = btn(L"Open saves folder", ID_SAVES, cx + S(192), S(326), S(180), S(36));
+    g_bmoddir = btn(L"Open mods folder", ID_MODDIR, cx + cw - S(170), S(22), S(170), S(34));
+    { int by = cr.bottom - S(BAR96) + S(14), bh = S(42);
+      g_play = btn(L"PLAY", ID_PLAY, cr.right - S(28) - S(190), by, S(190), bh);
+      g_bstop = btn(L"Stop", ID_STOP, cr.right - S(28) - S(190) - S(10) - S(80), by, S(80), bh); }
     SendMessageW(g_wnd, DM_SETDEFID, ID_PLAY, 0);
     SetTimer(g_wnd, TIMER_UI, 60, nullptr);
     mods_reload();

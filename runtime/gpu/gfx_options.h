@@ -6,7 +6,6 @@
 enum GfxOption {
     GFXOPT_RENDERER,     /* Software / Direct3D 11 / Vulkan */
     GFXOPT_RESOLUTION,   /* internal resolution: 1x 2x 3x 4x 6x 8x */
-    GFXOPT_MSAA,         /* anti-aliasing: Off 2x 4x 8x */
     GFXOPT_TEXTURE_PACK, /* texture package: Original (mod TexturasPC) / Enhanced (mod EnhancedTextures); applied right away */
     GFXOPT_FRAME_RATE,   /* 30 FPS / 60 FPS / 120 FPS (interpolated) */
     GFXOPT_SYNC,         /* presentation: Default / VSync / Lowest latency */

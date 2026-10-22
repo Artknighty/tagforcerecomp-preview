@@ -4,10 +4,19 @@ Format: [Keep a Changelog](https://keepachangelog.com/en/1.1.0/). Versioning: [S
 
 ## [Unreleased]
 
+## [0.4.0] - 2026-10-21
+
 ### Added
+- **Player Deck Randomizer** and **Opponent Deck Randomizer** mods: every duel, your deck and/or the opponent's becomes a random whole recipe of the game, and the deck's own name shows at the start of the duel. Each works alone or together.
+- Card Randomizer mod: refills every duel deck with random cards from the whole card pool.
 - Fast-forward cheat (game speed 1x to 8x): in game with L + R + Left / Right, or a starting speed on the launcher's Cheats page. The music is time-stretched, so it speeds up without changing pitch.
 
+### Changed
+- **The main download no longer contains any mods** (closest to the original game). All behavior mods are in a second file of the release, `TagForceRecomp-Mods-<version>.zip`; each starts switched off. Copy its `mods` folder next to the exe and turn them on in the launcher's Mods page.
+- The launcher is more compact (smaller fonts and rows).
+
 ### Removed
+- MSAA anti-aliasing (it cost performance and was barely visible).
 - The game window's menu bar (File / View / Mods / Cheats / Help): every setting lives in the launcher now. F3, F5, F11, Alt+Enter and the in-game cheat combos still work. Plugin sliders (API v3 `add_slider`) are accepted but no longer shown.
 
 ### Fixed

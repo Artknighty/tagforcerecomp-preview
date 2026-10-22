@@ -8,7 +8,7 @@
 # Sem pacote de texturas e sem ampliacao (as substitutas chegam em tempos variaveis); o .ini do usuario e sobreposto pelas variaveis.
 cd "$(dirname "$0")/../.."
 MODE="${1:-cmp}"; FAST="$2"
-export TF_RES_BUDGET_MS=0 TF_TEXSCALE=1 TF_MSAA=1 TF_TEX_PREFETCH=0 TF_HDFONT=0   # fonte HD desligada: a referencia e anterior a ela
+export TF_RES_BUDGET_MS=0 TF_TEXSCALE=1 TF_TEX_PREFETCH=0 TF_HDFONT=0   # fonte HD desligada: a referencia e anterior a ela
 # caixas Sim/Nao respondidas com Nao (escondida, ninguem clica: o teste ficava parado para sempre; ex.: 'Exit to Desktop' do titulo)
 export TF_CONFIRM_AUTO=0
 R=gen/regressao_cur; rm -rf "$R"; mkdir -p "$R"

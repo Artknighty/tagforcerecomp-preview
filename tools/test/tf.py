@@ -165,7 +165,7 @@ def start(args):
     shutil.rmtree(os.path.join(pkg, 'ms0'), ignore_errors=True)
     if '--fresh' not in args and os.path.isdir(os.path.join(ROOT, 'gen', 'ms0')): shutil.copytree(os.path.join(ROOT, 'gen', 'ms0'), os.path.join(pkg, 'ms0'))
     mods = os.path.join(ROOT, 'gen', 'plugins_teste'); shutil.rmtree(mods, ignore_errors=True); os.makedirs(mods)
-    for d in glob.glob(os.path.join(ROOT, 'gen', 'mods', '*')):
+    for d in glob.glob(os.path.join(os.environ.get('TF_MODS_FROM') or os.path.join(ROOT, 'gen', 'mods'), '*')):   # TF_MODS_FROM=folder: test with only those mods
         if os.path.isfile(os.path.join(d, 'plugin.dll')) and not os.path.exists(os.path.join(d, 'disabled')):
             shutil.copytree(d, os.path.join(mods, os.path.basename(d)), ignore=shutil.ignore_patterns('llm'))
     if '--texturas' in args:   # liga o EnhancedTextures real (so leitura; mod.txt textures= aponta para a pasta dele) em GPU Vulkan 2x
@@ -179,7 +179,7 @@ def start(args):
     if '--texturas' in args: env.setdefault('TF_GPU', '2'); env.setdefault('TF_RES', '2')
     elif '--gpu' not in args: env.setdefault('TF_GPU', '0')
     if '--pesado' in args:   # config do usuario (gen/tagforce_recomp.ini): Vulkan 8x, MSAA, HD, limitador e interpolacao ligados (tempo real)
-        env.update(TF_GPU='2', TF_RES='8', TF_MSAA='1'); env.pop('NO_PACE', None); env.pop('TF_INTERP', None)
+        env.update(TF_GPU='2', TF_RES='8'); env.pop('NO_PACE', None); env.pop('TF_INTERP', None)
         env.setdefault('TF_TEX_WAIT_MS', '4000')   # a rota do duelo espera os PNGs de textura; TF_TEX_WAIT_MS no ambiente (ex.: 80, o padrao do jogo) mede o jogo real
     if '--audio' in args:   # real-time audio test: keeps the pacing limiter and the audio device on (the window stays hidden)
         env.pop('NO_PACE', None); env.pop('NO_AUDIO', None); env.pop('TF_NO_MOVIES', None)

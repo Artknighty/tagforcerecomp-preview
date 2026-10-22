@@ -2,7 +2,7 @@
 
 Gere as capturas com o replay gravando TODOS os quadros reais e intermediarios do trecho, ex. (1x basta):
   L=$(python -c "print(','.join(map(str,range(1400,2131))))")
-  TF_INTERP_SNAP=$L SNAPS=$L ENDF=2131 TF_GPU=2 TF_RES=1 TF_MSAA=1 TAG=_m sh tools/test/replay.sh <sessao>
+  TF_INTERP_SNAP=$L SNAPS=$L ENDF=2131 TF_GPU=2 TF_RES=1 TAG=_m sh tools/test/replay.sh <sessao>
   -> gen/replay/<sessao>_m/gen/snap_<vb>.bmp (real) e interp_<vb>.bmp (quadro do meio)
 
 Uso:

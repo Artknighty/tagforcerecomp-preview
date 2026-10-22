@@ -34,7 +34,7 @@ map is in [`STRUCTURE.md`](STRUCTURE.md).
 | `hle/` | `hle_io.cpp` | file system calls (disc → ISO or installed folder; `ms0:` → `./ms0`) |
 | `hle/` | `hle_ge.cpp` | GE (graphics chip): software rasterizer and the command stream feeding the GPU backends |
 | `hle/` | `hle_audio.cpp`, `hle_mpeg.cpp`, `hle_font.cpp`, `hle_utility.cpp`, `hle_misc.cpp`, `vfpu.cpp` | sceAudio/SAS/ATRAC, PSMF movies, fonts, savedata dialogs and text entry, small modules, VFPU math |
-| `gpu/` | `gpu.cpp`, `gpu_d3d11.cpp`, `gpu_vulkan.cpp`, `shaders/` | Direct3D 11 and Vulkan renderers (resolution scaling, MSAA, real stencil) |
+| `gpu/` | `gpu.cpp`, `gpu_d3d11.cpp`, `gpu_vulkan.cpp`, `shaders/` | Direct3D 11 and Vulkan renderers (resolution scaling, real stencil) |
 | `gpu/` | `interp.cpp`, `pacing.cpp` | **60/120 FPS interpolation** and frame pacing |
 | `gpu/` | `texrepl.cpp`, `imgio.cpp`, `bc7.cpp`, `hdfont.cpp`, `pc_text.cpp`, `gfx.cpp`, `raster_pool.cpp`, `capturas.inc` | texture replacement (PNG, BC7), 4x high-resolution font atlas, PC texts, graphics options, rasterizer threads, graphics diagnostic capture |
 | `ui/` | `display.cpp`, `launcher.cpp`, `menu.cpp`, `mouse_ui.cpp`, `text_input.cpp` | window and input, launcher, dark window theme (menu.cpp), mouse in menus, native text entry |

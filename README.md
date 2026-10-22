@@ -26,7 +26,7 @@ ATRAC3/3+) and H.264 movies through FFmpeg. Network/ad-hoc modes are not support
 
 **Built as a PC game, not an imitation of the PSP UI:**
 - Resizable window, fullscreen (F11 or Alt+Enter), dark theme, XInput controller, keyboard, native text box instead of the virtual keyboard.
-- **Renderers**: Software (CPU), **Direct3D 11** or **Vulkan**, with **internal resolution from 1x to 8x**, **MSAA** up to 8x, configurable filter and aspect ratio.
+- **Renderers**: Software (CPU), **Direct3D 11** or **Vulkan**, with **internal resolution from 1x to 8x**, configurable filter and aspect ratio.
 - **High-resolution textures** (PPSSPP-format packs, compressed to BC7 on the GPU for a quarter of the memory), a **high-resolution font**
   and redrawn menu/dialog boxes in the **Enhanced Textures** pack. **F5** switches Original / Enhanced.
 - **60 or 120 FPS by interpolation** (game logic stays at 30; the runtime creates the in-between frames) with a dedicated
@@ -37,7 +37,10 @@ ATRAC3/3+) and H.264 movies through FFmpeg. Network/ad-hoc modes are not support
 
 ## Mods
 
-Every mod is a folder in `mods/`, switched on or off in the window's **Mods** menu (applies on restart). There are three kinds:
+The main download has **no mods**: it is as close to the original game as possible. Mods come separately: every one is a folder in `mods/`
+(next to the exe), switched on or off on the launcher's **Mods** page (applies on restart). The release has a second file,
+`TagForceRecomp-Mods-<version>.zip`, with all the behavior mods below (each starts switched off); copy its `mods` folder next to the exe.
+There are three kinds of mod:
 
 | Kind | What it does |
 |---|---|
@@ -54,6 +57,8 @@ Behavior mods in this repository (sources in [`plugins/src/`](plugins/src/)):
 | **CPU vs CPU** (`CPUvsCPU`) | lets the CPU play your side too; also the engine of the AI/deck test arena |
 | **Booster box** (`CaixaDeBoosters`) | buy all remaining packs of a booster at once in the shop |
 | **Cheats** (`Cheats`) | optional cheats in their own **Cheats** menu: see the CPU's cards (F6), DP multiplier (1x to 10x), fast-forward (1x to 8x, music keeps its pitch), unlock everything (cards, packs and Free Duel duelists) |
+| **Card Randomizer** (`CardRandomizer`) | every deck of every duel is refilled with random cards from the whole card pool |
+| **Player / Opponent Deck Randomizer** (`PlayerDeckRandomizer`, `OpponentDeckRandomizer`) | every duel, your / the opponent's deck becomes a random whole recipe of the game, with its own deck name; use one or both |
 | **Monsters on the field** (`MonstrosNoCampo`) | *experimental prototype*: shows your face-up monsters larger over their zone |
 
 Texture, video and button packs (HD menus, HD opening movie, EU cards, Xbox buttons) are separate mods distributed outside the repository.
