@@ -73,7 +73,7 @@ static bool iniciar_melhor(int a_partir) { for (int v = a_partir; v < 3; v++) if
 
 void decisor_init(const wchar_t *mod_dir, void (*log)(const char *fmt, ...)) {
     g_log = log;
-    wchar_t abs[1024]; std::wstring dir = mod_dir;   /* caminho ABSOLUTO: no jogo o mod vem como "mods\IAAprimorada" (relativo) e o servidor roda com outra pasta de trabalho */
+    wchar_t abs[1024]; std::wstring dir = mod_dir;   /* caminho ABSOLUTO: no jogo o mod vem como "mods\BetterAI" (relativo) e o servidor roda com outra pasta de trabalho */
     if (const DWORD n = GetFullPathNameW(mod_dir, 1024, abs, nullptr)) if (n < 1024) dir = abs;
     g_dir = dir;
     const bool tem_modelo = arquivo_existe(dir + L"\\llm\\modelo.gguf") && (tem_variante(0) || tem_variante(1) || tem_variante(2));

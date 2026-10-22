@@ -25,7 +25,7 @@ rm -rf gen/logs_teste; export TF_LOG_DIR="$(cygpath -m "$PWD/gen/logs_teste" 2>/
 # .ini proprio do teste: o tagforce_recomp.ini of the player never e lido nem gravado (configuracoes so por TF_GPU/TF_RES/...)
 export TF_INI="$TF_LOG_DIR/teste.ini"
 # mods de comportamento ligados (plugin.dll) entram como in the real game; os de dados ficam de fora (TF_MODS_DIR=pasta escolhe outra)
-# (o modelo de IA do IAAprimorada, llm/ ~500 MB, so e copiado se for usado: TF_IA_LLM=1 ou llm=1 no config.ini do mod; o padrao e desligado)
+# (o modelo de IA do BetterAI, llm/ ~500 MB, so e copiado se for usado: TF_IA_LLM=1 ou llm=1 no config.ini do mod; o padrao e desligado)
 copiar_mod() { src="${1%/}"; dst="$2/$(basename "$src")"; mkdir -p "$dst"
   for f in "$src"/*; do if [ "$(basename "$f")" = llm ] && [ "${TF_IA_LLM:-0}" = 0 ] && ! grep -qs '^llm=1' "$src/config.ini"; then continue; fi; cp -r "$f" "$dst/"; done; }
 if [ -z "$TF_MODS_DIR" ]; then rm -rf gen/plugins_teste; mkdir -p gen/plugins_teste; for d in gen/pkg/TagForceRecomp/mods/*/; do [ -f "$d/plugin.dll" ] && [ ! -f "$d/disabled" ] && copiar_mod "$d" gen/plugins_teste; done; export TF_MODS_DIR="$(cygpath -m "$PWD/gen/plugins_teste" 2>/dev/null || echo "$PWD/gen/plugins_teste")"; fi

@@ -2,7 +2,7 @@
 
 Replaces the decks of duelists with edited ones, **without touching the game files**: it hooks the game's deck reader. Full documentation: `docs/DECKS.md`.
 
-**Install:** copy the `DecksAprimorados` folder into `mods/` and check it in the **Mods** menu (applies on restart). Turning it off restores the original decks.
+**Install:** copy the `BetterDecks` folder into `mods/` and check it in the **Mods** menu (applies on restart). Turning it off restores the original decks.
 
 **Deck files:** `decks/RCPnnn.txt` (nnn = the game's deck number). Format:
 ```

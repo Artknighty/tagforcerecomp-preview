@@ -2,7 +2,7 @@
 
 Makes CPU duelists play better. On = improved AI; off (Mods menu) = the original AI. Full documentation: `docs/AI.md` in the repository.
 
-**Install:** copy the `IAAprimorada` folder into `mods/` and check it in the **Mods** menu (applies on restart).
+**Install:** copy the `BetterAI` folder into `mods/` and check it in the **Mods** menu (applies on restart).
 
 **What it does**
 - Adaptive posture: from LP, monsters, hand and the opponent's face-down cards, the CPU picks defensive, neutral or aggressive.

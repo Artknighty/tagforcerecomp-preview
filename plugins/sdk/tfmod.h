@@ -5,7 +5,7 @@
  *     mods/MyMod/plugin.dll    uses this API; exports tfmod_init
  * At startup the game loads plugin.dll from the enabled mods (Mods menu) and calls tfmod_init(api). The plugin installs hooks on game
  * functions (by their PSP address) and, inside them, reads/writes PSP memory and registers, calls game functions and shows message
- * boxes. Example source: plugins/src/CaixaDeBoosters. Build with: sh tools/build/build_plugins.sh (MSYS2 UCRT64, g++).
+ * boxes. Example source: plugins/src/BoosterBox. Build with: sh tools/build/build_plugins.sh (MSYS2 UCRT64, g++).
  *
  * Game version: hook addresses are valid for ONE version of the game. By default a plugin is valid only for the European one
  * (ULES-00600); for another version, export `const char *tfmod_game_ids = "ULES-00600,ULUS-10136";` (the list of versions the
@@ -30,7 +30,7 @@ typedef int (*TfHook)(TfCpu *c);
 
 typedef struct TfModApi {
     uint32_t version;                                         /* TFMOD_API_VERSION of the runtime */
-    const wchar_t *mod_dir;                                   /* the mod's folder (e.g. mods\CaixaDeBoosters) */
+    const wchar_t *mod_dir;                                   /* the mod's folder (e.g. mods\BoosterBox) */
 
     /* PSP memory: pointer to the address (0x08000000.. user RAM, 0x04000000.. VRAM). Valid for the whole run. */
     uint8_t *(*mem)(uint32_t addr);

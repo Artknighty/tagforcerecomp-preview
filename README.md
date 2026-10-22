@@ -52,14 +52,14 @@ Behavior mods in this repository (sources in [`plugins/src/`](plugins/src/)):
 
 | Mod | What it does |
 |---|---|
-| **Better AI** (`IAAprimorada`) | makes CPU duelists play better: adaptive posture, smarter summons/attacks/Dark Hole, and an optional **small language model** (bundled `llama.cpp` server) that picks among legal moves. See [`docs/AI.md`](docs/AI.md) |
-| **Better Decks** (`DecksAprimorados`) | replaces the decks of duelists with edited ones, without touching the game files. See [`docs/DECKS.md`](docs/DECKS.md) |
+| **Better AI** (`BetterAI`) | makes CPU duelists play better: adaptive posture, smarter summons/attacks/Dark Hole, and an optional **small language model** (bundled `llama.cpp` server) that picks among legal moves. See [`docs/AI.md`](docs/AI.md) |
+| **Better Decks** (`BetterDecks`) | replaces the decks of duelists with edited ones, without touching the game files. See [`docs/DECKS.md`](docs/DECKS.md) |
 | **CPU vs CPU** (`CPUvsCPU`) | lets the CPU play your side too; also the engine of the AI/deck test arena |
-| **Booster box** (`CaixaDeBoosters`) | buy all remaining packs of a booster at once in the shop |
+| **Booster box** (`BoosterBox`) | buy all remaining packs of a booster at once in the shop |
 | **Cheats** (`Cheats`) | optional cheats in their own **Cheats** menu: see the CPU's cards (F6), DP multiplier (1x to 10x), fast-forward (1x to 8x, music keeps its pitch), unlock everything (cards, packs and Free Duel duelists) |
 | **Card Randomizer** (`CardRandomizer`) | every deck of every duel is refilled with random cards from the whole card pool |
 | **Player / Opponent Deck Randomizer** (`PlayerDeckRandomizer`, `OpponentDeckRandomizer`) | every duel, your / the opponent's deck becomes a random whole recipe of the game, with its own deck name; use one or both |
-| **Monsters on the field** (`MonstrosNoCampo`) | *experimental prototype*: shows your face-up monsters larger over their zone |
+| **Monsters on the field** (`MonstersOnField`) | *experimental prototype*: shows your face-up monsters larger over their zone |
 
 Texture, video and button packs (HD menus, HD opening movie, EU cards, Xbox buttons) are separate mods distributed outside the repository.
 

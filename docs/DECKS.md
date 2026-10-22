@@ -1,4 +1,4 @@
-# Duelist decks and the Better Decks mod (`DecksAprimorados`)
+# Duelist decks and the Better Decks mod (`BetterDecks`)
 
 The game ships **351 duelist decks** (`RCP000` … `RCP350`). This document describes how they are stored, how the mod replaces them
 without touching game files, and the tools to inspect and tune them. No deck list from the game is reproduced here: you extract
@@ -63,8 +63,8 @@ writes `gen/decks_db/{cartas,decks,protagonistas}.json` and a readable `DECKS.md
 
 ## The mod
 
-`plugins/src/DecksAprimorados` hooks the deck reader (`0884a694`). For every index that has a file
-`mods/DecksAprimorados/decks/RCPnnn.txt` it returns that deck; for all others it runs the original. It therefore works in duels,
+`plugins/src/BetterDecks` hooks the deck reader (`0884a694`). For every index that has a file
+`mods/BetterDecks/decks/RCPnnn.txt` it returns that deck; for all others it runs the original. It therefore works in duels,
 Free Duel, the recipe viewer and Story Mode, and turning the mod off restores the original decks. File format:
 
 ```

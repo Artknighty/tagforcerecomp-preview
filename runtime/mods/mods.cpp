@@ -70,7 +70,7 @@ static void walk(const std::wstring &base, const std::wstring &rel, std::vector<
  * os pacotes de textura (Enhanced/TexturasPC) entram no inicio: qualquer mod do usuario vence o pacote. */
 static bool is_pack_folder(const std::string &f) { return f == "EnhancedTextures" || f == "TexturasPC"; }
 /* fora da lista do lancador: pacotes de textura (Graphics > Textures) e mods com menu proprio no jogo (Cheats) ou sem uso no dia a dia */
-static bool is_launcher_hidden(const std::string &f) { return is_pack_folder(f) || f == "Cheats" || f == "CPUvsCPU" || f == "MonstrosNoCampo"; }
+static bool is_launcher_hidden(const std::string &f) { return is_pack_folder(f) || f == "Cheats" || f == "CPUvsCPU" || f == "MonstersOnField"; }
 static std::vector<std::string> read_order_file(const std::wstring &root) {
     std::vector<std::string> o; FILE *f = _wfopen((root + L"\\load_order.txt").c_str(), L"rb"); if (!f) return o;
     char line[512];
@@ -135,11 +135,25 @@ void mods_dir_move(const std::wstring &root, const std::string &folder, int dir)
 }
 
 static void build_dir_patches(void);
+/* mods renamed in 0.4.0 (English names): an old folder is moved to the new name (keeping its disabled marker, settings and files) and load_order.txt follows */
+static void migrate_renamed_mods(void) {
+    static const char *const kRenamed[][2] = {{"CaixaDeBoosters", "BoosterBox"}, {"DecksAprimorados", "BetterDecks"}, {"IAAprimorada", "BetterAI"}, {"MonstrosNoCampo", "MonstersOnField"}};
+    bool moved = false;
+    for (auto &r : kRenamed) {
+        const std::wstring from = mods_root() + L"\\" + to_wide(r[0]), to = mods_root() + L"\\" + to_wide(r[1]);
+        if (exists(from) && !exists(to) && MoveFileW(from.c_str(), to.c_str())) { moved = true; fprintf(stderr, "[mods] %s renamed to %s\n", r[0], r[1]); }
+    }
+    if (!moved) return;
+    std::vector<std::string> order = read_order_file(mods_root());
+    for (auto &s : order) for (auto &r : kRenamed) if (s == r[0]) s = r[1];
+    if (!order.empty()) write_order_file(mods_root(), order);
+}
 void mods_init(void) {
-    {   /* migracao: o mod embutido antigo desligava com [mods] caixa_booster=0 no .ini; hoje e o plugin mods/CaixaDeBoosters */
+    migrate_renamed_mods();
+    {   /* migracao: o mod embutido antigo desligava com [mods] caixa_booster=0 no .ini; hoje e o plugin mods/BoosterBox */
         const std::wstring ini = app_ini_path();
         if (GetPrivateProfileIntW(L"mods", L"caixa_booster", -1, ini.c_str()) == 0) {
-            const std::wstring d = mods_root() + L"\\CaixaDeBoosters";
+            const std::wstring d = mods_root() + L"\\BoosterBox";
             if (exists(d)) { if (FILE *f = _wfopen((d + L"\\disabled").c_str(), L"wb")) fclose(f); }
             WritePrivateProfileStringW(L"mods", L"caixa_booster", nullptr, ini.c_str());
         }
@@ -253,7 +267,7 @@ void mods_open_folder(void) {
                   "Optional: mods\\MyMod\\mod.txt with the lines name=, author=, version=, description=\r\n"
                   "On/off: Mods menu (applies after restarting the game).\r\n"
                   "Textures: mods\\MyMod\\textures\\ (PPSSPP format). Videos: mods\\MyMod\\movie\\<name>.h264\r\n"
-                  "Behavior (plugins): mods\\MyMod\\plugin.dll with the API in plugins/sdk/tfmod.h (example: plugins/src/CaixaDeBoosters).\r\n"
+                  "Behavior (plugins): mods\\MyMod\\plugin.dll with the API in plugins/sdk/tfmod.h (example: plugins/src/BoosterBox).\r\n"
                   "The game's code modules (BOOT.BIN, *.prx) cannot be replaced. Full guide: docs/MODS.md.\r\n", f);
             fclose(f);
         }

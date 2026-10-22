@@ -1,9 +1,9 @@
-"""Exporta os pesos da funcao de valor (gen/ia_valor/valor_mlp.json) para plugins/src/IAAprimorada/valor_pesos.h (arrays float): o plugin calcula a mesma MLP em C++.
-Uso: python tools/ai/ia_valor/exportar_cpp.py [json=gen/ia_valor/valor_mlp.json] [saida=plugins/src/IAAprimorada/valor_pesos.h]"""
+"""Exporta os pesos da funcao de valor (gen/ia_valor/valor_mlp.json) para plugins/src/BetterAI/valor_pesos.h (arrays float): o plugin calcula a mesma MLP em C++.
+Uso: python tools/ai/ia_valor/exportar_cpp.py [json=gen/ia_valor/valor_mlp.json] [saida=plugins/src/BetterAI/valor_pesos.h]"""
 import sys, os, json
 RAIZ = os.path.dirname(os.path.dirname(os.path.dirname(os.path.dirname(os.path.abspath(__file__)))))
 arq = sys.argv[1] if len(sys.argv) > 1 else os.path.join(RAIZ, 'gen', 'ia_valor', 'valor_mlp.json')
-saida = sys.argv[2] if len(sys.argv) > 2 else os.path.join(RAIZ, 'plugins/src', 'IAAprimorada', 'valor_pesos.h')
+saida = sys.argv[2] if len(sys.argv) > 2 else os.path.join(RAIZ, 'plugins/src', 'BetterAI', 'valor_pesos.h')
 P = json.load(open(arq))
 (w1, b1), (w2, b2), (w3, b3) = P['camadas']
 n_in, n1, n2 = len(w1[0]), len(w1), len(w2)

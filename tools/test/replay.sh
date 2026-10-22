@@ -25,7 +25,7 @@ W="$ROOT/gen/replay/$S$TAG"; rm -rf "$W"; mkdir -p "$W/gen"
 [ -n "$MODDIR" ] && export TF_MODS_DIR="$(cygpath -m "$(cd "$MODDIR" && pwd)")"   # usada no lugar (so leitura), sem copiar
 # sem MODDIR: os mods de COMPORTAMENTO ligados (plugin.dll, ex. caixa de boosters) entram assim mesmo - eles mudam o jogo, e a
 # reproducao precisa repetir what was played; os de dados ficam de fora (determinismo)
-# o modelo de IA do IAAprimorada (llm/, ~500 MB) so e copiado se for usado (TF_IA_LLM=1 ou llm=1 no config.ini do mod; o padrao e desligado)
+# o modelo de IA do BetterAI (llm/, ~500 MB) so e copiado se for usado (TF_IA_LLM=1 ou llm=1 no config.ini do mod; o padrao e desligado)
 copiar_mod() { src="${1%/}"; dst="$2/$(basename "$src")"; mkdir -p "$dst"
   for f in "$src"/*; do if [ "$(basename "$f")" = llm ] && [ "${TF_IA_LLM:-0}" = 0 ] && ! grep -qs '^llm=1' "$src/config.ini"; then continue; fi; cp -r "$f" "$dst/"; done; }
 if [ -z "$MODDIR" ]; then mkdir -p "$W/mods"; for d in "$ROOT"/gen/pkg/TagForceRecomp/mods/*/; do [ -f "$d/plugin.dll" ] && [ ! -f "$d/disabled" ] && copiar_mod "$d" "$W/mods"; done; fi

@@ -1,7 +1,7 @@
-# Better AI mod (`IAAprimorada`) and the AI toolchain
+# Better AI mod (`BetterAI`) and the AI toolchain
 
 The CPU duelists in the original game choose plays with a table of hand-written rules per card and a greedy attack simulation. This
-mod (`plugins/src/IAAprimorada`, a behavior plugin) improves those decisions without replacing the engine: it hooks the game's AI
+mod (`plugins/src/BetterAI`, a behavior plugin) improves those decisions without replacing the engine: it hooks the game's AI
 routines, adds a few decisions the original never makes, and can optionally ask a **small language model** or a **learned board
 evaluation** to choose. Everything falls back to rules, so it can never freeze the game.
 
@@ -10,7 +10,7 @@ evaluation** to choose. Everything falls back to rules, so it can never freeze t
 
 ## Install
 
-Copy the `IAAprimorada` folder into `mods/` and check it in the **Mods** menu. Turn it off there to get the original AI back.
+Copy the `BetterAI` folder into `mods/` and check it in the **Mods** menu. Turn it off there to get the original AI back.
 The optional model files (`llm/`, about 500 MB) are distributed separately from the source repository.
 
 ## What the plugin does
@@ -34,7 +34,7 @@ by the engine it does not have to do arithmetic.
 - The model is a LoRA fine-tune of a ~0.5 B-parameter instruction model (Qwen2.5-0.5B-Instruct, Apache-2.0), quantized to Q4
   (~400 MB). It runs in a hidden **`llama-server`** process ([llama.cpp](https://github.com/ggml-org/llama.cpp), MIT) that the plugin
   starts on a free local port and that is killed together with the game (Windows job object).
-- The plugin looks for `mods/IAAprimorada/llm/vulkan/` (GPU, any Vulkan GPU, ~40 ms per decision), then `llm/cpu/` (~1 s), and
+- The plugin looks for `mods/BetterAI/llm/vulkan/` (GPU, any Vulkan GPU, ~40 ms per decision), then `llm/cpu/` (~1 s), and
   falls back to the rules if neither starts, if a request takes more than 3.5 s, or if the answer is not a valid option.
 - `config.ini` in the mod folder: `llm=0/1`, `tempo_ms=3500`, `threads=4`, `url=http://127.0.0.1:8080` (use a server you already run).
   Environment: `TF_IA_LLM`, `TF_IA_LLM_TEMPO`, `TF_IA_LLM_URL`, `TF_IA_OFF=1` (disable the whole mod), `TF_IA_LADO=0/1` (only one

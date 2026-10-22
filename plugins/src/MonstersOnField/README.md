@@ -5,7 +5,7 @@ During duels, shows the art of your **face-up monsters** at a larger size, stand
 
 **Requirements:** the GPU renderer (Direct3D 11 or Vulkan) and mod API version 5 or newer.
 
-**Install:** copy the `MonstrosNoCampo` folder (`plugin.dll`, `mod.txt` and a `sprites/` folder) into `mods/` and check it in the
+**Install:** copy the `MonstersOnField` folder (`plugin.dll`, `mod.txt` and a `sprites/` folder) into `mods/` and check it in the
 **Mods** menu (applies on restart). Then use **Mods → "Monsters on the field"** to switch it on and the slider to change the size.
 
 **Sprites.** Nothing from the game is in this repository. The sprites (`sprites/<card id>.rgba`) are generated on your machine by

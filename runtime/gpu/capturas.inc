@@ -96,7 +96,7 @@ static void cap_salvar(const char *tag, const uint32_t *src, int w, int h) {   /
 /* ---- MARCAS DO JOGADOR: F7 (ou L3 + R3 no controle) = "a CPU errou", F8 = "tem algo errado na tela".
  * A tecla so PEDE a marca. Em display_present (marcas_processar, logo depois do laco de mensagens: ponto seguro, nada do quadro foi decidido ainda)
  * abre a caixa de nota, que PAUSA o jogo, e so com Enter e algum texto a marca e gravada: log "[marca-cpu|marca-graf] #n quadro N", captura inteira
- * do quadro, a nota "[marca-...-nota] #n: texto" e, conforme o tipo, o despejo dos plugins (tfmod_marca: CPUvsCPU = tabuleiro, IAAprimorada =
+ * do quadro, a nota "[marca-...-nota] #n: texto" e, conforme o tipo, o despejo dos plugins (tfmod_marca: CPUvsCPU = tabuleiro, BetterAI =
  * decisoes) ou a caixa-preta + configuracao grafica + texturas desenhadas. Esc ou nota vazia DESCARTAM a marca: nada vai para o log nem para a pasta
  * de capturas (2026-10-08: a marca era gravada mesmo com Esc). Com o jogo parado, o que se grava depois da caixa e o mesmo de antes
  * (o anel da caixa-preta so anda quando um quadro e apresentado). Relatorios: tools/analysis/marcas_cpu.py e tools/analysis/capturas_analisar.py.

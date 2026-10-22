@@ -4,6 +4,9 @@ Format: [Keep a Changelog](https://keepachangelog.com/en/1.1.0/). Versioning: [S
 
 ## [Unreleased]
 
+### Changed
+- Mod folders have English names: `BoosterBox`, `BetterDecks`, `BetterAI`, `MonstersOnField` (were `CaixaDeBoosters`, `DecksAprimorados`, `IAAprimorada`, `MonstrosNoCampo`). An older folder is renamed automatically at startup, keeping its settings and on/off state.
+
 ## [0.4.0] - 2026-10-21
 
 ### Added

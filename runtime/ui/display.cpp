@@ -515,7 +515,7 @@ static void marcas_processar(void) {
             if (!nota.empty()) marca_nota_log(n, nota, "marca-graf");
             /* marca geral: a mesma marca tambem grava o lado da CPU (mesmo numero e mesma nota; fora de duelo os plugins nao despejam nada util) */
             fprintf(stderr, "[marca-cpu] #%d quadro %llu (marca geral do jogador)\n", n, q);
-            plugins_marca(n);   /* os plugins despejam o estado do duelo (CPUvsCPU: tabuleiro; IAAprimorada: ultimas decisoes) */
+            plugins_marca(n);   /* os plugins despejam o estado do duelo (CPUvsCPU: tabuleiro; BetterAI: ultimas decisoes) */
             if (!nota.empty()) marca_nota_log(n, nota, "marca-cpu");
             char t[64]; snprintf(t, sizeof t, "Mark #%d saved", n); display_notify(t);
         }

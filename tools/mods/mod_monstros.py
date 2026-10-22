@@ -1,6 +1,6 @@
-"""Generates the sprites of the "Monsters on the field" mod (gen/mods/MonstrosNoCampo/sprites/<id>.rgba) from the large card art.
+"""Generates the sprites of the "Monsters on the field" mod (gen/mods/MonstersOnField/sprites/<id>.rgba) from the large card art.
 Usage: python tools/mods/mod_monstros.py [texture_pack] [mod_folder] [id ...]
-  defaults: gen/mods/PPSSPP_MikeyMK/textures (read only: third-party packs are never modified) and gen/mods/MonstrosNoCampo; with no ids = the monsters of the starter deck (list below).
+  defaults: gen/mods/PPSSPP_MikeyMK/textures (read only: third-party packs are never modified) and gen/mods/MonstersOnField; with no ids = the monsters of the starter deck (list below).
 Each large art (cards/large/<id>.png, 512x256 atlas: the art sits in the 312x240 block at the top-left corner) becomes an RGBA sprite with the edges
 faded in an oval (the monster is not cut out: the art background stays; a real cut-out needs segmentation or hand-drawn sprites). .rgba format:
 w (uint32 LE), h (uint32 LE), w*h pixels of 4 bytes R,G,B,A (straight alpha). No game data goes into the repository (gen/ is outside git)."""
@@ -36,7 +36,7 @@ def gerar(pacote, saida, cid):
 
 if __name__ == '__main__':
     pacote = sys.argv[1] if len(sys.argv) > 1 else os.path.join(RAIZ, 'gen', 'mods', 'PPSSPP_MikeyMK', 'textures')
-    saida = sys.argv[2] if len(sys.argv) > 2 else os.path.join(RAIZ, 'gen', 'mods', 'MonstrosNoCampo')
+    saida = sys.argv[2] if len(sys.argv) > 2 else os.path.join(RAIZ, 'gen', 'mods', 'MonstersOnField')
     ids = [int(x) for x in sys.argv[3:]] or DECK_LEO
     os.makedirs(os.path.join(saida, 'sprites'), exist_ok=True)
     n = sum(gerar(pacote, saida, i) for i in ids)

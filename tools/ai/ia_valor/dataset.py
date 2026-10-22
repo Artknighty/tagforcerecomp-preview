@@ -2,7 +2,7 @@
 Cada duelo tem um quadro do tabuleiro a cada troca de vez (mao, campo, LP dos dois lados) e o vencedor. Cada quadro vira DUAS amostras (uma de cada ponto de vista) com so o que o
 jogador SABE no jogo real (a mao do oponente nao entra: so a quantidade de cartas; cartas viradas para baixo = forca desconhecida). Rotulo = o jogador do ponto de vista venceu.
 Uso: python tools/ai/ia_valor/dataset.py [saida=gen/ia_valor/valor.npz]
-Os mesmos 'features()' sao reimplementados em C++ no plugin (plugins/src/IAAprimorada) quando o modelo for integrado: mantenha as duas versoes iguais."""
+Os mesmos 'features()' sao reimplementados em C++ no plugin (plugins/src/BetterAI) quando o modelo for integrado: mantenha as duas versoes iguais."""
 import re, os, sys, glob, json
 import numpy as np
 RAIZ = os.path.dirname(os.path.dirname(os.path.dirname(os.path.dirname(os.path.abspath(__file__)))))

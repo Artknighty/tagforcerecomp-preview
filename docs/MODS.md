@@ -140,7 +140,7 @@ result, `r31` = return address) and returns `0` = continue with the original (th
 | `add_slider(title, unit, min, max, def, get, set)` (v3) | register an integer setting; the runtime adds a **Mods** menu item that opens a dark modal slider dialog (`runtime/ui/slider_dialog.cpp`) |
 | `add_toggle(title, vk, get, set)` (v4) | register an on/off setting: a checkable **Mods** menu item and, optionally, an in-game key (Windows virtual-key code, e.g. `VK_F6`). Keys that belong to the game are refused (the item stays menu-only): the window's F-keys (F3, F5, F7, F8, F9, F11, listed in Help > Controls), F10, Esc, Enter and the keyboard keys of the PSP buttons in both layouts (arrows, W A S D, Z X C E F R Q, Space, Backspace, Tab, Shift, Ctrl) |
 | `panel(corner, title, lines, n)` (v4) | information panel in a corner of the screen (0 top-left, 1 top-right, 2 bottom-left, 3 bottom-right); call it every frame it should stay visible; it never blocks the game. Plain text works; an optional markup (documented in `tfmod.h`) gives section headers with counters (`"#Hand\t5"`), colored card rows (`"@ed{M4}Drillago\t*4\tATK\|1600\tDEF\|1100"`: frame color, attribute dot, badge, table-aligned columns, level star) and a title icon/right text (`"@eOpponent\tLP 8000"`) |
-| `sprite(id, rgba, w, h, x, y, dw, dh, alpha)` (v5) | RGBA image over the game (GPU renderers only), in 480x272 PSP pixels; call every frame it should stay; redrawn on a thread (1-3 frames of latency). Example: `plugins/src/MonstrosNoCampo` |
+| `sprite(id, rgba, w, h, x, y, dw, dh, alpha)` (v5) | RGBA image over the game (GPU renderers only), in 480x272 PSP pixels; call every frame it should stay; redrawn on a thread (1-3 frames of latency). Example: `plugins/src/MonstersOnField` |
 | `set_speed(n)` (v6) | game speed, 1 = normal, 2..8 = n times faster (frame limiter at n times the normal rate; the music is time-stretched, same pitch). The plugin owns the setting: call it again on load (Cheats starts at 1x). |
 | `quad_near(x, y, tol, wmin, wmax)` (v5) | 1 if the game drew a textured 3D quad (a card on the field...) centered near (x, y) in the frame on screen — tells whether a field slot is really visible (not hidden by a cut-in) |
 | `use_menu(menu)` (v4) | which window menu the following `add_slider`/`add_toggle` go to: `TFMOD_MENU_MODS` (default) or `TFMOD_MENU_CHEATS` (the **Cheats** menu, separate from Mods) |
@@ -158,7 +158,7 @@ passes up to 8 arguments in a0–a3 and t0–t3, and `r2` holds the original's r
 
 ### Creating a mod
 
-Copy `plugins/src/CaixaDeBoosters` (a small, well-commented example) to `plugins/src/MyMod`, edit the `.cpp` and `mod.txt` and run
+Copy `plugins/src/BoosterBox` (a small, well-commented example) to `plugins/src/MyMod`, edit the `.cpp` and `mod.txt` and run
 `sh tools/build/build_plugins.sh MyMod` (MSYS2 UCRT64; `package_release.py` and the first `build.sh` build all of them). The result goes to `gen/mods/MyMod/`
 (`plugin.dll` plus the other files of the folder). The DLL is statically linked: it only depends on Windows. To find what to hook,
 `TF_HOOK_TRACE=addr,addr` logs (frame, arguments) of each call. Careful: overlapping modules (libfield and libshop share the same
@@ -166,7 +166,7 @@ base 0x091C4600) — check `module_loaded("libshop")` inside the hook.
 
 ### Bundled behavior mods
 
-- **Booster box** (`plugins/src/CaixaDeBoosters`): in the card shop, on the pack selection screen, press **R** (Tab on the keyboard, or W
+- **Booster box** (`plugins/src/BoosterBox`): in the card shop, on the pack selection screen, press **R** (Tab on the keyboard, or W
   in the classic layout; RB on a controller): the game's own message window asks "Buy all N packs for X DP?" and YES buys every remaining pack of that booster
   at once (limited by DP). The text is placed in PSP memory with `guest_alloc` and a hook on the game's string reader delivers it when
   the window is built.
@@ -180,7 +180,7 @@ base 0x091C4600) — check `module_loaded("libshop")` inside the hook.
 - **CPU vs CPU** (`plugins/src/CPUvsCPU`): the CPU also controls your side (see [`AI.md`](AI.md)); doubles as the test arena.
 - **Card Randomizer** (`plugins/src/CardRandomizer`): every deck the game reads for a duel (yours and the opponent's) is refilled with random cards from the whole card database (pool read from the game at run time: monsters, spells, traps; Fusion monsters for the extra deck). Options in the mod's `config.ini` (`randomize_player`, `randomize_opponent`, `keep_balance`, `max_copies`, `seed`); `TF_CARDRAND_OFF=1` disables it. It wraps the deck reader (`0884a694`), so it overrides Better Decks.
 - **Player Deck Randomizer** and **Opponent Deck Randomizer** (`plugins/src/PlayerDeckRandomizer`, `plugins/src/OpponentDeckRandomizer`, shared core in `plugins/sdk/deck_randomizer_core.h`): every duel, your deck / the opponent's deck is swapped for a whole random recipe (`RCPnnn`) of the game, and that recipe's own name replaces the deck name shown at the start of the duel (slot + `0x162`). Each mod works alone or together with the other. The pool (real recipes, not the placeholder) is read from the game at run time. The hook runs on entry of the deck reader and swaps the index argument, so both mods coexist; do not combine them with Card Randomizer or Better Decks. `config.ini`: `seed`; `TF_DECKRAND_OFF=1` disables, `TF_DECKRAND_SEED=n` fixes the seed.
-- **Better AI** (`plugins/src/IAAprimorada`) and **Better Decks** (`plugins/src/DecksAprimorados`): see [`AI.md`](AI.md) and [`DECKS.md`](DECKS.md).
+- **Better AI** (`plugins/src/BetterAI`) and **Better Decks** (`plugins/src/BetterDecks`): see [`AI.md`](AI.md) and [`DECKS.md`](DECKS.md).
 
 ## Other bundled helpers
 
