@@ -2,7 +2,7 @@
  *
  * The game reads each deck with libehsys_85A292D7(rcp_index, out) (0884a694, BOOT): it fills 0x108 bytes {[0] = n_main, [1] = n_side, [2] = n_extra,
  * main at +0x0c, side at +0xac, extra at +0xca (u16 card ids)}. The hook lets the original run (so the sizes and the layout are the game's own) and
- * then overwrites the ids. The card pool is built once from the game's card database (card_prop 0884b4f8: id -> 8 bytes, layout in tools/game/cartas.py),
+ * then overwrites the ids (the opponent; the player's saved deck is replaced at the start of the duel engine). The card pool is built once from the game's card database (card_prop 0884b4f8: id -> 8 bytes, layout in tools/game/cartas.py),
  * so no game data is stored in the mod. Settings: config.ini in the mod folder. */
 #include "tfmod.h"
 #include <windows.h>
@@ -15,7 +15,7 @@
 #include <stdlib.h>
 
 static const TfModApi *A;
-static const uint32_t F_READ_DECK = 0x0884a694, F_PROP = 0x0884b4f8;
+static const uint32_t F_READ_DECK = 0x0884a694, F_PROP = 0x0884b4f8, F_PREPARE_DUEL = 0x0883f4f8;
 enum { K_MONSTER, K_SPELL, K_TRAP, K_FUSION, K_N };
 static std::vector<uint16_t> g_pool[K_N];
 static bool g_pool_ready, g_off;
@@ -88,19 +88,14 @@ static void fill(uint16_t *ids, int n, int fixed_kind, const int *kinds) {
     }
 }
 
-static int hk_read_deck(TfCpu *c) {   /* libehsys_85A292D7(rcp_index, out) */
-    if (g_off) return 0;
-    const uint32_t idx = A->reg(c, 4), out = A->reg(c, 5);
-    A->call_original(c, F_READ_DECK);
-    if (out < 0x08000000u || out > 0x0a000000u - 0x108) return 1;
+/* randomizes the deck buffer at PSP address `out` in place (same layout the deck reader fills) */
+static void randomize_buffer(TfCpu *c, uint32_t out, uint32_t seed_salt) {
     if (!g_pool_ready) build_pool(c);
-    const bool is_player = idx == 0 || idx >= 0x15f;   /* RCP000 = the player's model; 0x15f.. = saved decks */
-    if (is_player ? !g_player : !g_opponent) return 1;
-    if (g_pool[K_MONSTER].empty() || g_pool[K_SPELL].empty() || g_pool[K_TRAP].empty()) return 1;
+    if (g_pool[K_MONSTER].empty() || g_pool[K_SPELL].empty() || g_pool[K_TRAP].empty()) return;
     uint8_t *o = A->mem(out);
     const uint32_t nm = ((uint32_t *)o)[0], ns = ((uint32_t *)o)[1], ne = ((uint32_t *)o)[2];
-    if (nm > 80 || ns > 15 || ne > 30) return 1;
-    g_rng.seed(g_seed ? g_seed * 2654435761u + idx : std::random_device{}() ^ (uint32_t)GetTickCount64());
+    if (nm > 80 || ns > 15 || ne > 30) return;
+    g_rng.seed(g_seed ? g_seed * 2654435761u + seed_salt : std::random_device{}() ^ (uint32_t)GetTickCount64());
     uint16_t *main = (uint16_t *)(o + 0x0c), *side = (uint16_t *)(o + 0xac), *extra = (uint16_t *)(o + 0xca);
     int kinds_main[80], kinds_side[15];
     if (g_balance) {
@@ -110,7 +105,40 @@ static int hk_read_deck(TfCpu *c) {   /* libehsys_85A292D7(rcp_index, out) */
     fill(main, (int)nm, -1, g_balance ? kinds_main : nullptr);
     fill(side, (int)ns, -1, g_balance ? kinds_side : nullptr);
     if (!g_pool[K_FUSION].empty()) fill(extra, (int)ne, K_FUSION, nullptr);
-    A->log("Card Randomizer: RCP%03u randomized (%u main, %u side, %u extra)", idx, nm, ns, ne);
+    A->log("Card Randomizer: deck %u randomized (%u main, %u side, %u extra)", seed_salt, nm, ns, ne);
+}
+
+/* libehsys_F11F0D9A (0883f4f8): commits the duel setup before the duel is loaded (a0 = setup block, 0x18c bytes per duelist). The deck reader above only
+ * runs for the opponent (and the extra slots): duelist 0 is the player, whose saved deck the setup copies into the block (deck buffer at base + 0x1a4,
+ * 0x108 bytes, layout of the reader's output; a second copy at the start of the block) without going through the reader. The copy exists by the time
+ * the first deck is read, so the player's deck is randomized then (hk_read_deck, via g_setup_base). Doing it later (duel engine start) crashes the game:
+ * the card resources are already loaded for the old deck. The save itself is not touched. */
+static uint32_t g_setup_base;
+static int hk_prepare_duel(TfCpu *c) {
+    const uint32_t base = A->reg(c, 4);
+    g_setup_base = (!g_off && g_player && base >= 0x08000000u && base <= 0x0a000000u - 0x300) ? base : 0;
+    return 0;
+}
+static void randomize_player_slot(TfCpu *c) {
+    const uint32_t base = g_setup_base; g_setup_base = 0;
+    if (!base) return;
+    const uint32_t *h0 = (const uint32_t *)A->mem(base), *h1 = (const uint32_t *)A->mem(base + 0x1a4);
+    const bool ok0 = h0[0] >= 1 && h0[0] <= 80, ok1 = h1[0] >= 1 && h1[0] <= 80;
+    const bool same = ok0 && ok1 && !memcmp(h0, h1, 12);
+    if (ok1) randomize_buffer(c, base + 0x1a4, 0x1000);
+    if (same) memcpy(A->mem(base), A->mem(base + 0x1a4), 0x108);
+    else if (ok0) randomize_buffer(c, base, 0x1000);
+}
+
+static int hk_read_deck(TfCpu *c) {   /* libehsys_85A292D7(rcp_index, out): the opponent's deck (the player's deck is handled by randomize_player_slot) */
+    if (g_off) return 0;
+    const uint32_t idx = A->reg(c, 4), out = A->reg(c, 5);
+    A->call_original(c, F_READ_DECK);
+    randomize_player_slot(c);
+    if (out < 0x08000000u || out > 0x0a000000u - 0x108) return 1;
+    const bool is_player = idx == 0 || idx >= 0x15f;
+    if (is_player ? !g_player : !g_opponent) return 1;
+    randomize_buffer(c, out, idx);
     return 1;
 }
 
@@ -118,6 +146,7 @@ extern "C" __declspec(dllexport) int tfmod_init(const TfModApi *api) {
     A = api; g_off = getenv("TF_CARDRAND_OFF") != nullptr;
     cfg_load();
     A->hook(F_READ_DECK, hk_read_deck);
+    A->hook(F_PREPARE_DUEL, hk_prepare_duel);
     A->log("Card Randomizer: player=%d opponent=%d balance=%d max_copies=%d seed=%u%s", g_player, g_opponent, g_balance, g_max_copies, g_seed, g_off ? " (OFF by TF_CARDRAND_OFF)" : "");
     return 0;
 }
