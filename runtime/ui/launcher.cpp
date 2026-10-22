@@ -28,11 +28,11 @@
 typedef void (*InstProgress)(double frac, const wchar_t *msg, void *ctx);
 bool iso_install(const wchar_t *iso, const wchar_t *dest, InstProgress cb, void *ctx, std::wstring *err);
 
-enum { ID_PICK = 101, ID_PLAY = 102, ID_QUIT = 103, ID_STOP = 105, ID_LOGS = 106, ID_SAVES = 107, ID_MODDIR = 108, ID_COPT0 = 400, ID_OPT0 = 200, ID_QOPT0 = 300, TIMER_UI = 1 };
+enum { ID_PICK = 101, ID_PLAY = 102, ID_QUIT = 103, ID_STOP = 105, ID_LOGS = 106, ID_SAVES = 107, ID_MODDIR = 108, ID_MODALL = 109, ID_COPT0 = 400, ID_OPT0 = 200, ID_QOPT0 = 300, TIMER_UI = 1 };
 enum { PG_PLAY, PG_GRAPHICS, PG_GAME, PG_MODS, PG_CHEATS, PG_ABOUT, N_PAGES };
 enum { NAV_QUIT = N_PAGES };   /* item extra da sidebar (nao e pagina) */
 static const wchar_t *kNavName[N_PAGES] = {L"Play", L"Graphics", L"Game", L"Mods", L"Cheats", L"About"};
-static HWND g_wnd, g_bpick, g_play, g_bstop, g_blogs, g_bsaves, g_bmoddir;
+static HWND g_wnd, g_bpick, g_play, g_bstop, g_blogs, g_bsaves, g_bmoddir, g_bmodall;
 static HANDLE g_proc;                       /* jogo em andamento (processo filho); a janela continua aberta */
 static int g_page = PG_PLAY, g_navhot = -1;
 
@@ -71,6 +71,7 @@ static const COLORREF C_BG = dark::BG, C_CARD = dark::CARD, C_LINE = dark::LINE,
 static std::vector<ModEntry> g_modlist; static int g_modscroll;   /* g_modlist: so os visiveis, da menor para a maior prioridade */
 static std::wstring mods_dir() { return exe_dir() + L"mods"; }
 static void mods_reload() { g_modlist.clear(); for (auto &e : mods_list_dir(mods_dir())) if (e.visible) g_modlist.push_back(e); }
+static void mods_all(bool on) { for (auto &e : g_modlist) mods_dir_set_enabled(mods_dir(), e.folder, on); mods_reload(); }
 static bool file_exists(const std::wstring &p); static bool dir_exists(const std::wstring &p);
 /* Cheats page: cheats.ini next to the exe (cheats.cpp reads it at start; the master switch is its "enabled" key) */
 struct CheatOpt { const wchar_t *label, *hint; int count; const wchar_t *const *names; };
@@ -180,18 +181,19 @@ static void apply_page() {
     for (int i = 0; i < N_CHEAT; i++) ShowWindow(g_csel[i], g_page == PG_CHEATS ? SW_SHOW : SW_HIDE);
     for (int k = 0; k < NQ; k++) ShowWindow(g_qsel[k], g_page == PG_PLAY ? SW_SHOW : SW_HIDE);
     ShowWindow(g_bpick, g_page == PG_GAME ? SW_SHOW : SW_HIDE);
-    ShowWindow(g_bmoddir, g_page == PG_MODS ? SW_SHOW : SW_HIDE);
+    ShowWindow(g_bmoddir, g_page == PG_MODS ? SW_SHOW : SW_HIDE); ShowWindow(g_bmodall, g_page == PG_MODS && !g_modlist.empty() ? SW_SHOW : SW_HIDE);
     ShowWindow(g_blogs, g_page == PG_ABOUT ? SW_SHOW : SW_HIDE); ShowWindow(g_bsaves, g_page == PG_ABOUT ? SW_SHOW : SW_HIDE);
 }
 static void refresh() {
     bool busy = g_installing, run = game_running();
-    EnableWindow(g_play, !busy && !run && (g_installed || iso_ok())); EnableWindow(g_bpick, !busy && !run);
+    EnableWindow(g_play, !busy && !run && (g_installed || iso_ok())); EnableWindow(g_bpick, !busy && !run); EnableWindow(g_bmodall, !busy && !run);
+    { bool any = false; for (auto &e : g_modlist) any |= e.enabled; SetWindowTextW(g_bmodall, any ? L"Disable all mods" : L"Enable all mods"); }
     EnableWindow(g_bstop, run); for (int i = 0; i < N_CHEAT; i++) EnableWindow(g_csel[i], !run);
     for (int i = 0; i < N_OPT; i++) EnableWindow(g_sel[i], !run); for (int k = 0; k < NQ; k++) EnableWindow(g_qsel[k], !run);
     SetWindowTextW(g_play, run ? L"PLAYING..." : g_installed ? L"PLAY" : L"INSTALL AND PLAY"); SetWindowTextW(g_bpick, g_installed ? L"Reinstall from ISO..." : L"Select ISO...");
     apply_page();
     InvalidateRect(g_wnd, nullptr, FALSE);
-    for (HWND b : {g_bpick, g_play, g_bstop, g_blogs, g_bsaves, g_bmoddir}) InvalidateRect(b, nullptr, FALSE);
+    for (HWND b : {g_bpick, g_play, g_bstop, g_blogs, g_bsaves, g_bmoddir, g_bmodall}) InvalidateRect(b, nullptr, FALSE);
     for (int i = 0; i < N_OPT; i++) InvalidateRect(g_sel[i], nullptr, FALSE); for (int k = 0; k < NQ; k++) InvalidateRect(g_qsel[k], nullptr, FALSE);
 }
 static void show_page(int p) { if (p == g_page) return; g_page = p; if (p == PG_MODS) { mods_reload(); g_modscroll = 0; } if (p == PG_CHEATS) { cheat_load(); cheat_text(); } refresh(); }
@@ -279,7 +281,7 @@ static int nav_at(int x, int y) {
 }
 /* pagina Mods: linha k (0 = topo = maior prioridade) mostra g_modlist[n-1-k] */
 static int mod_row_h() { return S(56); }
-static RECT mod_area() { RECT cr; GetClientRect(g_wnd, &cr); return RECT{S(SIDE96) + S(28), S(100), cr.right - S(28), cr.bottom - S(BAR96) - S(10)}; }
+static RECT mod_area() { RECT cr; GetClientRect(g_wnd, &cr); return RECT{S(SIDE96) + S(28), S(100), cr.right - S(28), cr.bottom - S(BAR96) - S(10) - S(50)}; }
 static int mod_rows_visible() { RECT a = mod_area(); return std::max(1, (int)((a.bottom - a.top) / mod_row_h())); }
 static void mod_clamp_scroll() { int mx = std::max(0, (int)g_modlist.size() - mod_rows_visible()); g_modscroll = std::min(std::max(g_modscroll, 0), mx); }
 static RECT mod_row_rect(int k) { RECT a = mod_area(); int y = a.top + (k - g_modscroll) * mod_row_h(); return RECT{a.left, y, a.right, y + mod_row_h() - S(8)}; }
@@ -302,7 +304,7 @@ static void mod_click(int x, int y) {
     if (part == 0) mods_dir_set_enabled(mods_dir(), folder, !g_modlist[n - 1 - k].enabled);
     else if ((part == 1 && k > 0) || (part == 2 && k < n - 1)) mods_dir_move(mods_dir(), folder, part == 1 ? 1 : -1);
     else return;
-    mods_reload(); InvalidateRect(g_wnd, nullptr, FALSE);
+    mods_reload(); refresh();
 }
 static void draw_mods_page(HDC dc, int cx, int cw) {
     text(dc, g_fHead, C_TXT, RECT{cx, S(22), cx + cw - S(210), S(58)}, L"Mods");
@@ -502,6 +504,7 @@ static LRESULT CALLBACK proc(HWND h, UINT m, WPARAM w, LPARAM l) {
         case ID_LOGS: open_folder(exe_dir() + L"logs"); return 0;
         case ID_SAVES: open_folder(exe_dir() + L"ms0"); return 0;
         case ID_MODDIR: mods_open_folder(); return 0;
+        case ID_MODALL: if (!game_running()) { bool any = false; for (auto &e : g_modlist) any |= e.enabled; mods_all(!any); refresh(); } return 0;
         default:
             if (LOWORD(w) >= ID_COPT0 && LOWORD(w) < ID_COPT0 + N_CHEAT) {
                 if (!game_running()) { HWND b = (HWND)l; POINT pt; GetCursorPos(&pt); RECT wr; GetWindowRect(b, &wr); cheat_step(LOWORD(w) - ID_COPT0, PtInRect(&wr, pt) && pt.x < wr.left + (wr.right - wr.left) / 3 ? -1 : 1); }
@@ -540,7 +543,7 @@ static LRESULT CALLBACK proc(HWND h, UINT m, WPARAM w, LPARAM l) {
     case WM_TIMER:
         if (w == TIMER_UI) {
             { static bool was[24 + N_OPT]; static POINT lastp; int i = 0; POINT cp; GetCursorPos(&cp); bool moved = cp.x != lastp.x || cp.y != lastp.y; lastp = cp;   /* hover dos botoes: so redesenha quando muda */
-              std::vector<HWND> bs = {g_bpick, g_play, g_bstop, g_blogs, g_bsaves, g_bmoddir}; bs.insert(bs.end(), g_qsel, g_qsel + NQ); bs.insert(bs.end(), g_sel, g_sel + N_OPT); bs.insert(bs.end(), g_csel, g_csel + N_CHEAT);
+              std::vector<HWND> bs = {g_bpick, g_play, g_bstop, g_blogs, g_bsaves, g_bmoddir, g_bmodall}; bs.insert(bs.end(), g_qsel, g_qsel + NQ); bs.insert(bs.end(), g_sel, g_sel + N_OPT); bs.insert(bs.end(), g_csel, g_csel + N_CHEAT);
               for (HWND b : bs) { bool hot = is_hot(b); if (hot != was[i] || (hot && moved && i >= 7)) { was[i] = hot; InvalidateRect(b, nullptr, FALSE); } i++; } }
             { static bool wasrun; bool run = game_running(); if (run != wasrun) { wasrun = run; refresh(); } }
             if (g_installing) { RECT bar; GetClientRect(h, &bar); InvalidateRect(h, &bar, FALSE); }
@@ -604,6 +607,7 @@ std::string launcher_pick_iso(std::wstring *data) {
     g_blogs = btn(L"Open logs folder", ID_LOGS, cx, S(326), S(180), S(36));
     g_bsaves = btn(L"Open saves folder", ID_SAVES, cx + S(192), S(326), S(180), S(36));
     g_bmoddir = btn(L"Open mods folder", ID_MODDIR, cx + cw - S(170), S(22), S(170), S(34));
+    g_bmodall = btn(L"Disable all mods", ID_MODALL, cx + cw - S(200), cr.bottom - S(BAR96) - S(10) - S(36), S(200), S(36));
     { int by = cr.bottom - S(BAR96) + S(14), bh = S(42);
       g_play = btn(L"PLAY", ID_PLAY, cr.right - S(28) - S(190), by, S(190), bh);
       g_bstop = btn(L"Stop", ID_STOP, cr.right - S(28) - S(190) - S(10) - S(80), by, S(80), bh); }
