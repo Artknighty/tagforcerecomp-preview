@@ -1,0 +1,4 @@
+name=Player Deck Randomizer
+author=Tag Force Recomp
+version=1.0
+description=Your deck in every duel is a random deck picked from all the decks (recipes) of the game, and that deck's own name is shown. Can be combined with Opponent Deck Randomizer
