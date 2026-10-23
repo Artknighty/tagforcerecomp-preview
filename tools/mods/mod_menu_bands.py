@@ -166,10 +166,14 @@ def analytic_zone():
     u = np.where(ys < LOWER_Y, u, u_dd)
     ring = np.clip(np.floor(u), 0, 5).astype(int)
     grey = RING_GREY[ring]
+    # the highlight ring (1) is 167 along the top edge, 157 on the diagonal and 175 on the lower edge in the original
+    hi = np.where(u_top < u_dd, 167.0, 157.0 + 18.0 * phi)
+    grey = np.where(ring == 1, hi, grey)
     d_out = np.where(in_wer, dist_er + RHO, RHO - dist_er)       # distance of a transparent point to the shape
-    rim = (~inside) & (d_out < RIM_W) & (ys > 1.0) & (xs > XE0 - 1)
+    rim = (~inside) & (d_out < RIM_W) & (ys > 1.0) & (xs > XE0 - 1) & (xs < xD)   # the original has no rim along the lower edge
     col = np.where(inside, grey, RIM_GREY)
-    al = np.where(inside, 1.0, np.where(rim, RIM_ALPHA, 0.0)).astype(np.float32)
+    taper = np.clip((xD - xs) / 4.0, 0, 1)          # the rim fades out into the bend
+    al = np.where(inside, 1.0, np.where(rim, RIM_ALPHA * taper, 0.0)).astype(np.float32)
     pm = col * al
     pm = pm.reshape((y1 - y0) * K, SS, (x1 - x0) * K, SS).mean((1, 3))
     al = al.reshape((y1 - y0) * K, SS, (x1 - x0) * K, SS).mean((1, 3))
@@ -188,11 +192,6 @@ def make_bands():
     x0, x1, y0, y1 = ZONE
     patch = analytic_zone()
     crisp = base[y0 * K:y1 * K, x0 * K:x1 * K].astype(np.float32)
-    # axis-aligned highlight rows stay crisp where they are straight (top edge left of the corner, lower edge right of it)
-    for (ya, yb, xa, xb) in ((0, 2, 0, 76), (36, 38, 104, 256)):
-        ya_, yb_ = max(ya, y0), min(yb, y1)
-        xa_, xb_ = max(xa, x0), min(xb, x1)
-        patch[(ya_ - y0) * K:(yb_ - y0) * K, (xa_ - x0) * K:(xb_ - x0) * K] = crisp[(ya_ - y0) * K:(yb_ - y0) * K, (xa_ - x0) * K:(xb_ - x0) * K]
     out[y0 * K:y1 * K, x0 * K:x1 * K] = np.clip(patch + 0.5, 0, 255).astype(np.uint8)
     # panel outlines: smooth rounded strokes over the opaque body
     grey, cov, n = outline_layer(None)
