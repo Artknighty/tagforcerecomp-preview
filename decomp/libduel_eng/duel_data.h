@@ -55,7 +55,18 @@ inline FieldCardSlot &fieldCardSlot(SwapCtx &x, uint32_t player, int32_t slot) {
     return x.at<FieldCardSlot>(address);
 }
 
+/* Engine globals read by the small state predicates. Their gameplay meaning is not mapped yet, so they are named by address. */
+constexpr uint32_t kDuelGlobal7D4C8 = 0x09F7D4C8, kDuelGlobal7D4D0 = 0x09F7D4D0;
+constexpr uint32_t kDuelGlobal7D460 = 0x09F7D460, kDuelGlobal7D46C = 0x09F7D46C;
+constexpr uint32_t kDuelGlobal7D4A8 = 0x09F7D4A8;
+constexpr uint32_t kPlayerStateFlagsOffset = 0x11C;   /* word in the player record; bit 1 is read by PlayerStateBit1 */
+/* A growing list: [count at +0, items from +4, 8 bytes each]; the cursor is a separate counter. */
+constexpr uint32_t kCursorCounter = 0x09F7E008, kCursorList = 0x09F7E00C;
+constexpr uint32_t kMonsterZoneBytes = 5 * kFieldCardSlotStride;   /* the five monster slots of one player */
+constexpr uint32_t kPlayer1FieldCardSlots = kFieldCardSlots + kPlayerRecordStride;
+
 namespace fn {
+constexpr uint32_t CopyBytes = offsetOf(0x09F62E50);
 constexpr uint32_t ReadCardSlotFlag9 = offsetOf(0x09F49CA0);
 constexpr uint32_t CardHasAttribute = offsetOf(0x09F49E18);
 constexpr uint32_t IsFieldCardCategoryInEffectSet = offsetOf(0x09F49CD8);
