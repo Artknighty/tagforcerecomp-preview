@@ -1614,6 +1614,14 @@ static void draw_prim(GeList &l, uint32_t data) {
             }
         }
     }
+    /* Menu pieces drawn side by side (e.g. the pill behind "MAIN MENU": two caps and a stretched centre) come out of the transform with
+     * edges a hair off the pixel grid (33.91 instead of 34.00). On the PSP that covers the same pixels, but on the GPU at 4x/8x it leaves a
+     * visible step at each seam. Axis-aligned flat quads get edges within 1/8 px of a whole pixel snapped to it (same pixel coverage at 1x). */
+    if (g_gpu_on && !t.through && type == 4 && count == 4 && vv[0].z == vv[1].z && vv[0].z == vv[2].z && vv[0].z == vv[3].z &&
+        vv[0].x == vv[2].x && vv[1].x == vv[3].x && vv[0].y == vv[1].y && vv[2].y == vv[3].y) {
+        auto snap = [](float v) { float r = roundf(v); return fabsf(v - r) <= 0.125f ? r : v; };
+        for (int i = 0; i < 4; i++) { vv[i].x = snap(vv[i].x); vv[i].y = snap(vv[i].y); }
+    }
     PrimJob job = {type, count, vv.data(), flat, t.through != 0};
     if (type == 4 && count == 4 && !t.through && textured) {   /* carta/quad 3D texturizado: o mod que mostra monstros pergunta se a casa do campo esta na tela (modbox_quad_near) */
         extern void modbox_quad(uint32_t, float, float, float, float);
