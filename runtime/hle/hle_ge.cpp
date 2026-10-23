@@ -1354,6 +1354,15 @@ static bool gpu_shadow_pass_impl(const PrimJob &j, GFbRec *f) {
     g_gv.clear(); g_hidden.clear(); g_rec_all = interp_enabled(); t_tri_sink = gpu_tri_sink;
     g_sprite_rects.clear(); { static const bool off = getenv("TF_NO_UVCLAMP") != nullptr; g_sprite_collect = !off && tex && j.type == 6 && j.through; }   /* TF_NO_UVCLAMP=1: sem o recorte de UV dos sprites (comparacao A/B) */
     const Vtx *vv = j.vv; uint32_t n = j.count;
+    /* Axis-aligned textured quads that use their texture once (menu pieces such as the caps and the centre of the MAIN MENU pill) are
+     * clamped to their own UV rectangle like the 2D sprites: with a bigger internal resolution and an HD texture the linear filter would
+     * otherwise blend the edge column with the opposite edge (wrap) and leave a faint line at the seam between neighbouring pieces. */
+    if (tex && j.type == 4 && n == 4 && !j.through && vv[0].x == vv[2].x && vv[1].x == vv[3].x && vv[0].y == vv[1].y && vv[2].y == vv[3].y) {
+        static const bool off = getenv("TF_NO_UVCLAMP") != nullptr;
+        float u0 = vv[0].u, u1 = vv[0].u, v0 = vv[0].v, v1 = vv[0].v;
+        for (int i = 1; i < 4; i++) { u0 = std::min(u0, vv[i].u); u1 = std::max(u1, vv[i].u); v0 = std::min(v0, vv[i].v); v1 = std::max(v1, vv[i].v); }
+        if (!off && !(tex & GPU_FBTEX) && u0 >= 0 && v0 >= 0 && u1 <= (float)R.tw && v1 <= (float)R.th && u1 > u0 && v1 > v0) { gs.uvclamp = 1; gs.cu0 = u0; gs.cv0 = v0; gs.cu1 = u1; gs.cv1 = v1; }
+    }
     switch (j.type) {
     case 6: for (uint32_t i = 0; i + 1 < n; i += 2) gpu_sprite(vv[i], vv[i + 1], j.through); break;
     case 3: for (uint32_t i = 0; i + 2 < n; i += 3) draw_tri_clip(vv[i], vv[i + 1], vv[i + 2], j.flat); break;
