@@ -1636,7 +1636,7 @@ static void draw_prim(GeList &l, uint32_t data) {
     if (t.through && type == 6 && textured && R.tpsm == 4 && count >= 2 && hdfont_enabled()) {
         float miny = vv[0].y, maxy = vv[0].y, minx = vv[0].x;
         for (uint32_t i = 1; i < count; i++) { miny = std::min(miny, vv[i].y); maxy = std::max(maxy, vv[i].y); minx = std::min(minx, vv[i].x); }
-        if (miny >= 27.5f && miny <= 30.5f && maxy <= 50.f && minx <= 10.f) for (uint32_t i = 0; i < count; i++) vv[i].y -= 2.f;
+        if (miny >= 27.5f && miny <= 30.5f && maxy <= 50.f && minx <= 10.f) for (uint32_t i = 0; i < count; i++) vv[i].y -= 1.25f;
     }
     PrimJob job = {type, count, vv.data(), flat, t.through != 0};
     if (type == 4 && count == 4 && !t.through && textured) {   /* carta/quad 3D texturizado: o mod que mostra monstros pergunta se a casa do campo esta na tela (modbox_quad_near) */
