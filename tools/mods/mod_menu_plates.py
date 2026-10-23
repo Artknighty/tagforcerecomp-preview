@@ -21,6 +21,8 @@ from mod_menu_frames import depth_in   # noqa: E402
 
 ROOT = os.path.normpath(os.path.join(os.path.dirname(os.path.abspath(__file__)), '..', '..'))
 DUMP = os.path.join(ROOT, 'gen', 'dump_tex', 'dk', '905aa050.png')
+if not os.path.exists(DUMP):
+    DUMP = os.path.join(ROOT, 'gen', 'dump_tex', 'pre', '905aa050.png')
 MODS = [os.path.join(ROOT, 'mods', 'EnhancedTextures'), os.path.join(ROOT, 'gen', 'mods', 'EnhancedTextures')]
 BASE = 'mikeymk/extras/0000000041bc211d905aa050.png'
 OUTDIR = 'menu_plates_hd'
@@ -34,6 +36,9 @@ RINGS = 3
 RED = (0, 72, 147, 22)
 BLUE = (0, 96, 147, 22)
 CREAM = (121, 169, 131, 22)
+PORTRAIT_RED = (0, 0, 70, 70)       # portrait frames with their backdrop gradient (same look as the duel intro frame)
+PORTRAIT_BLUE = (72, 0, 70, 70)
+PORTRAIT_RADIUS = 2.8
 
 
 def rgb(a, x, y):
@@ -145,6 +150,29 @@ def draw_plate(a, box, kind):
     return out, (X0, Y0, Wt, Ht)
 
 
+def draw_portrait(a, box):
+    """Portrait frame: 3 rings (dark outline, light bevel, gold) around a smooth vertical backdrop gradient, 1 px shadow."""
+    x0, y0, w, h = box
+    Wt, Ht = w + 1, h + 1
+    ys, xs = np.meshgrid(y0 + (np.arange(Ht * N) + 0.5) / N, x0 + (np.arange(Wt * N) + 0.5) / N, indexing='ij')
+    out = np.zeros((Ht * N, Wt * N, 4), np.float32)
+    sd, _ = depth_in(xs, ys, x0 + 1, y0 + 1, x0 + 1 + w, y0 + 1 + h, PORTRAIT_RADIUS)
+    d, _ = depth_in(xs, ys, x0, y0, x0 + w, y0 + h, PORTRAIT_RADIUS)
+    over(out, (0, 0, 0), ((sd > 0) & (d <= 0)) * 0.5)
+    rows = np.arange(y0 + RINGS, y0 + h - RINGS)
+    xm = x0 + w // 2
+    cols = np.stack([rgb(a, xm, r) for r in rows])
+    cols = np.stack([np.convolve(np.pad(cols[:, c], 2, mode='edge'), np.ones(5) / 5, mode='valid') for c in range(3)], 1)
+    interior = np.stack([np.interp(ys - 0.5, rows, cols[:, c]) for c in range(3)], -1)
+    rings = [rgb(a, x0 + i, y0 + h // 2) for i in range(RINGS)]
+    k = np.floor(d).astype(int)
+    col = interior.copy()
+    for i in range(RINGS):
+        col = np.where((k == i)[..., None], rings[i], col)
+    over(out, col, (d > 0).astype(np.float32))
+    return out.reshape(Ht * K, S, Wt * K, S, 4).mean((1, 3)), (x0, y0, Wt, Ht)
+
+
 def main():
     a = np.asarray(Image.open(DUMP).convert('RGBA'))
     base = None
@@ -159,6 +187,9 @@ def main():
     im[..., :3] *= im[..., 3:4]
     for box, kind in ((RED, 'bar'), (BLUE, 'bar'), (CREAM, 'cream')):
         tile, (X0, Y0, Wt, Ht) = draw_plate(a, box, kind)
+        im[Y0 * K:(Y0 + Ht) * K, X0 * K:(X0 + Wt) * K] = tile
+    for box in (PORTRAIT_RED, PORTRAIT_BLUE):
+        tile, (X0, Y0, Wt, Ht) = draw_portrait(a, box)
         im[Y0 * K:(Y0 + Ht) * K, X0 * K:(X0 + Wt) * K] = tile
     al = im[..., 3:4]
     col = np.where(al > 1e-4, im[..., :3] / np.maximum(al, 1e-4), 0)
