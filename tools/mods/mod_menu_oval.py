@@ -32,6 +32,23 @@ def sstep(e0, e1, x):
     return t * t * (3 - 2 * t)
 
 
+def tall_rim(d, ny, u, px, inside, shadow):
+    """Rim of the 32x32 pill pieces (8x grid): thick lavender-white top, mid-grey sides, dim grey bottom band, black body."""
+    top, bot = np.maximum(-ny, 0), np.maximum(ny, 0)
+    w = 12.0 + 7.0 * top + 3.0 * bot                       # rim thickness by direction
+    t = np.clip(u / w, 0, 1)                               # 0 at the outer edge, 1 at the inner edge of the rim
+    c_top = 0.74 - 0.20 * t                                # bright at the edge, softer inside
+    c_side = 0.40 - 0.18 * t
+    c_bot = 0.20 - 0.06 * t
+    c = c_top * top + c_bot * bot + c_side * (1 - top - bot)
+    rim = 1 - sstep(w - px, w + px, u)
+    grey = c * rim
+    rgb = np.dstack([grey * (1 - 0.05 * top), grey * (1 - 0.04 * top), grey * (1 + 0.04 * top)])
+    alpha = np.clip(inside * 0.996 + shadow, 0, 1)
+    rgb = np.clip(rgb, 0, 1) * (inside > 0)[..., None]
+    return np.dstack([rgb, alpha])
+
+
 def piece(kind, shape='short', transparent=False):
     S, CY, R, ARC_L, ARC_R, RS = GEO[shape]
     n = 256 * S
@@ -52,9 +69,11 @@ def piece(kind, shape='short', transparent=False):
     if transparent:                                 # the translucent shade layer: plain stadium, alpha 65/255, no rim
         a = inside_ = sstep(px, -px, d) * 0.255
         return np.dstack([np.zeros_like(a), np.zeros_like(a), np.zeros_like(a), a])
-    u = u / RS
     inside = sstep(px, -px, d)
     shadow = (1 - sstep(0, 3.2, d)) * 0.62 * (1 - inside)
+    if shape == 'tall':
+        return tall_rim(d, ny, u, px, inside, shadow)
+    u = u / RS
     # rim layers (color in 0..1 grey, weight)
     top, bot = np.maximum(-ny, 0), np.maximum(ny, 0)
     wt = 9.5 * top ** 2.2 + 1.2                     # highlight thickness: thick on top, thin around the caps
