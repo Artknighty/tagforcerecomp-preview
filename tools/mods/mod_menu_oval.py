@@ -32,14 +32,15 @@ def sstep(e0, e1, x):
     return t * t * (3 - 2 * t)
 
 
-def tall_rim(d, ny, u, px, inside, shadow):
+def tall_rim(d, ny, u, px, inside, shadow, dx):
     """Rim of the 32x32 pill pieces (8x grid): thick lavender-white top, mid-grey sides, dim grey bottom band, black body."""
-    top, bot = np.maximum(-ny, 0), np.maximum(ny, 0)
-    w = 12.0 + 7.0 * top + 3.0 * bot                       # rim thickness by direction
+    straight = 1 - sstep(0, 34, dx)                        # the thick top highlight / bottom band only run along the straight part
+    top, bot = sstep(0.5, 1.0, -ny) * straight, sstep(0.5, 1.0, ny) * straight
+    w = 8.0 + 11.0 * top + 7.0 * bot                       # rim thickness: thin round the caps
     t = np.clip(u / w, 0, 1)                               # 0 at the outer edge, 1 at the inner edge of the rim
     c_top = 0.74 - 0.20 * t                                # bright at the edge, softer inside
-    c_side = 0.40 - 0.18 * t
-    c_bot = 0.20 - 0.06 * t
+    c_side = 0.46 - 0.20 * t
+    c_bot = 0.34 - 0.12 * t
     c = c_top * top + c_bot * bot + c_side * (1 - top - bot)
     rim = 1 - sstep(w - px, w + px, u)
     grey = c * rim
@@ -72,7 +73,7 @@ def piece(kind, shape='short', transparent=False):
     inside = sstep(px, -px, d)
     shadow = (1 - sstep(0, 3.2, d)) * 0.62 * (1 - inside)
     if shape == 'tall':
-        return tall_rim(d, ny, u, px, inside, shadow)
+        return tall_rim(d, ny, u, px, inside, shadow, dx)
     u = u / RS
     # rim layers (color in 0..1 grey, weight)
     top, bot = np.maximum(-ny, 0), np.maximum(ny, 0)
