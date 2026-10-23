@@ -16,6 +16,7 @@ std::vector<Swap> &registry() { static std::vector<Swap> r; return r; }
 struct Active { Swap s; const GenModule *mod; };
 std::map<uint32_t, Active> g_active;      /* by guest address */
 bool g_verify;
+std::vector<std::string> g_verify_only;   /* TF_DECOMP_VERIFY_ONLY=prefix,prefix: verify only swaps whose name starts with one of these (the others run without the check) */
 int g_in_original;   /* >0 while verify runs the original: no swap fires inside it, so the original runs entirely as generated */
 void runOriginal(CPU *c) { g_in_original++; hook_call_original(c, g_hook_cur); g_in_original--; }
 
@@ -57,6 +58,12 @@ void verify(SwapCtx &x, const Swap &s) {
     }
 }
 
+static bool verifyWanted(const char *name) {
+    if (g_verify_only.empty()) return true;
+    for (const std::string &p : g_verify_only) if (!strncmp(name, p.c_str(), p.size())) return true;
+    return false;
+}
+
 /* the same addresses are reused by other Modules loaded at the same base at other times, so only fire for this one */
 bool swap_hook(CPU *c) {
     const auto it = g_active.find(g_hook_cur);
@@ -68,7 +75,7 @@ bool swap_hook(CPU *c) {
     SwapCtx x{c, it->second.mod, it->second.mod->base};
     /* a swap behaves like the function it replaces: the registers the callee must preserve (s0-s7, gp, sp, fp, ra) come back unchanged */
     uint32_t saved[12]; for (int i = 0; i < 8; i++) saved[i] = c->r[16 + i]; for (int i = 0; i < 4; i++) saved[8 + i] = c->r[28 + i];
-    if (g_verify && (s.pure || s.regions)) verify(x, s); else s.fn(x);
+    if (g_verify && (s.pure || s.regions) && verifyWanted(s.name)) verify(x, s); else s.fn(x);
     for (int i = 0; i < 8; i++) c->r[16 + i] = saved[i]; for (int i = 0; i < 4; i++) c->r[28 + i] = saved[8 + i];
     return true;
 }
@@ -133,6 +140,7 @@ void decomp_init(void) {
     std::vector<std::string> skip;
     if (const char *k = getenv("TF_DECOMP_SKIP")) for (const char *p = k; *p;) { const char *q = strchr(p, ','); std::string n(p, q ? (size_t)(q - p) : strlen(p)); if (!n.empty()) skip.push_back(n); if (!q) break; p = q + 1; }
     g_verify = getenv("TF_DECOMP_VERIFY") != nullptr;
+    if (const char *k = getenv("TF_DECOMP_VERIFY_ONLY")) for (const char *p = k; *p;) { const char *q = strchr(p, ','); std::string n(p, q ? (size_t)(q - p) : strlen(p)); if (!n.empty()) g_verify_only.push_back(n); if (!q) break; p = q + 1; }
     unsigned nm; const GenModule *gm = gen_modules(&nm);
     int n = 0;
     for (const Swap &s : registry()) {

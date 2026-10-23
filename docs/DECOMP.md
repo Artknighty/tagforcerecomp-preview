@@ -41,7 +41,7 @@ The status table distinguishes a fully completed Module from coverage of recorde
 A swap is a hook on the function entry. A `SwapReg` maps the PSP registers to a hand-written C++ function in `decomp/<module>/`. It only fires while its Module is loaded, because several Modules share the same base address at different times.
 
 - `TF_DECOMP=off` disables all swaps; `TF_DECOMP=a,b` enables only the named ones; default is all registered.
-- `TF_DECOMP_VERIFY=1` runs eligible swaps (`pure` or with declared writable regions) and logs `[decomp] MISMATCH` if the original and replacement differ.
+- `TF_DECOMP_VERIFY=1` runs eligible swaps (`pure` or with declared writable regions) and logs `[decomp] MISMATCH` if the original and replacement differ. `TF_DECOMP_VERIFY_ONLY=prefix,prefix` limits the check to swaps whose name starts with a prefix (verifying everything can disturb menu routes in `tools/test/tf.py`), e.g. `TF_DECOMP_VERIFY=1 TF_DECOMP_VERIFY_ONLY=libduel_eng.`.
 - The single build is `gen/pkg/TagForceRecomp/TagForceRecomp.exe`, with registered swaps enabled by default. Build an isolated test executable without touching it: `OUT=gen/pkg/TagForceRecomp/test.exe sh tools/build.sh`, then `RUN_EXE=gen/pkg/TagForceRecomp/test.exe sh tools/test/replay.sh <session>`.
 
 ## Swaps done

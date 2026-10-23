@@ -31,6 +31,14 @@
 | `CanSelectFieldZone` | `FUN_09f4e2c4` | Requires an empty zone, no occupied target override there, and approval from `IsDuelTargetAllowed`. |
 | `FirstSelectableMonsterZone` | `FUN_09f4e500` | Returns the first monster zone from the game's priority table that can be selected, or `-1`. |
 | `CountAvailableMonsterZones` | `FUN_09f4e3b0` | Counts selectable monster zones, capped by card `0x16DF`'s total-field-card limit when active. |
+| `CopyGuestWord` | `FUN_09f49e44` | Copies one 32-bit word between guest addresses (33 callers). |
+| `GuestWordsEqual` | `FUN_09f49e64` | True when two guest words are equal. |
+| `PlayerStateBit1` | `FUN_09f55cdc` | Bit 1 of the word at +0x11C of a player's record. |
+| `IsGlobal7D4A8State6` | `FUN_09eaa4f4` | True when engine global `0x09F7D4A8` is 6 (meaning not mapped yet). |
+| `IsGlobal7D4C8SetAndState11` | `FUN_09e9c844` | True when `0x09F7D4C8` is non-zero and `0x09F7D4D0` is 11 (104 callers). |
+| `IsRecordBitDiffersAndState5` | `FUN_09e76edc` | Compares bit 0 of a record's byte +2 with `0x09F7D460`, then tests `0x09F7D46C == 5`. |
+| `CurrentListItemAddress` / `IsCursorAtListEnd` | `FUN_09f62cd4` / `FUN_09f62d18` | Cursor helpers over the list at `0x09F7E00C` with counter `0x09F7E008`. |
+| `SaveMonsterZones` / `RestoreMonsterZones` | `FUN_09e75994` / `FUN_09e759d8` | Copy both players' five monster slots (100 bytes each) to and from a buffer. |
 
 `duel_data.h` names the known parts of a field-card slot and leaves the rest as `unknownNN`. Effect entries are 8-byte linked-list nodes at `0x09F7C458`, indexed by 16-bit ids; 0 terminates the list. Extend the structures only when the generated code and observed duel state support the field's meaning.
 
@@ -45,3 +53,7 @@ All 25 registered swaps were exercised by this duel. The field/effect queries an
 The swaps compile into every build (`decomp/libduel_eng/*.cpp`, glob in `tools/build.sh`), including the single build `gen/pkg/TagForceRecomp/TagForceRecomp.exe`; `sh tools/build.sh` also refreshes `TagForceRecomp_bg.exe` next to it, the executable replays use.
 
 The module is not complete: all functions without a C++ swap still run as generated code.
+
+## Latest verification (2026-10-23)
+
+A complete CPU-vs-CPU Free Duel (`python tools/test/tf.py duelo --auto --fim --lento`) with `TF_DECOMP_VERIFY=1 TF_DECOMP_VERIFY_ONLY=libduel_eng.` ran to the end with no mismatch and no crash. `CopyGuestWord`, `GuestWordsEqual`, `PlayerStateBit1`, `IsGlobal7D4A8State6`, `SaveMonsterZones` and `RestoreMonsterZones` were exercised. `IsGlobal7D4C8SetAndState11`, `IsRecordBitDiffersAndState5`, `CurrentListItemAddress` and `IsCursorAtListEnd` were not reached by that duel and stay unverified. Comparing end results of swaps-on and swaps-off duels is not valid in this setup: two swaps-off runs with the same seed ended differently.
