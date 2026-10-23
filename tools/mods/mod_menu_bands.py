@@ -111,69 +111,72 @@ def outline_layer(shape_alpha):
 
 
 RING_GREY = np.array([116, 170, 140, 116, 97, 82], np.float32)     # grey of ring 0 (outer edge) .. 5 (flat interior)
-SNAP = np.array([82, 97, 116, 140, 170], np.float32)
-LINE_COLS = (72, 78)                                               # columns of the vertical bevel line (+ halo): interpolated over
+# ring thresholds (distance from the edge, texels) measured on the original: top edge, diagonal, lower edge
+T_TOP = np.array([1, 2, 4, 8, 12], np.float32)
+T_DIAG = np.array([1.2, 2.1, 4.75, 9.15, 13.5], np.float32)
+T_LOW = np.array([1, 2, 5, 9, 12], np.float32)
+XE0, SLOPE, RHO = 78.6, 0.535, 5.0     # diagonal edge x = XE0 + SLOPE * y, from the top corner to the lower edge at y = 36
+LOWER_Y = 36.0
+SS = 2                                  # supersampling on top of K
+RIM_GREY, RIM_ALPHA, RIM_W = 182.0, 0.55, 0.45
 
 
-def ring_index(grey, opaque):
-    """Ring number of every pixel from its grey level; the grey 116 is both the outer ring (0) and ring 3, told apart by whether
-    its connected area touches the outside of the shape."""
-    H, W = grey.shape
-    snapped = SNAP[np.argmin(np.abs(grey[..., None] - SNAP), -1)]
-    table = {82: 5, 97: 4, 140: 2, 170: 1}
-    idx = np.zeros((H, W), np.float32)
-    for v, r in table.items():
-        idx[snapped == v] = r
-    is116 = (snapped == 116) & opaque
-    seen = np.zeros((H, W), bool)
-    for y in range(H):
-        for x in range(W):
-            if not is116[y, x] or seen[y, x]:
-                continue
-            comp, stack, outer = [], [(y, x)], False
-            seen[y, x] = True
-            while stack:
-                cy, cx = stack.pop()
-                comp.append((cy, cx))
-                if cy == 0 or not opaque[cy - 1, cx] or (cx + 1 < W and not opaque[cy, cx + 1]):
-                    outer = True
-                for dy, dx in ((1, 0), (-1, 0), (0, 1), (0, -1)):
-                    ny, nx = cy + dy, cx + dx
-                    if 0 <= ny < H and 0 <= nx < W and is116[ny, nx] and not seen[ny, nx]:
-                        seen[ny, nx] = True
-                        stack.append((ny, nx))
-            for cy, cx in comp:
-                idx[cy, cx] = 0 if outer else 3
-    return idx
+def ring_coord(d, T):
+    """Continuous ring coordinate: crosses the integer j + 1 exactly at the threshold T[j]; 0 at the edge, 5 inside."""
+    xp = np.concatenate([[0], T, [T[-1] + 1e3]])
+    fp = np.array([0, 1, 2, 3, 4, 5, 5], np.float32)
+    return np.interp(d, xp, fp)
 
 
-def smooth_zone(a):
-    """Rings of the diagonal zone as iso-contours of the smoothed ring-index field (straight, crisp ring edges)."""
+def analytic_zone():
+    """The diagonal zone drawn analytically: rings are straight offsets of the top edge, the diagonal and the lower edge; the
+    concave bend between the diagonal and the lower edge is a fillet of radius RHO; the join with the top edge is rounded."""
     x0, x1, y0, y1 = ZONE
-    grey = a[..., 0].astype(np.float32)
-    opaque = a[..., 3] >= 250
-    g2 = grey.copy()
-    g2[2:62, LINE_COLS[0]:LINE_COLS[1]] = g2[2:62, LINE_COLS[1]:LINE_COLS[1] + 1]     # BFS without the line
-    F = ring_index(g2, opaque)
-    for y in range(2, 62):                                                             # the line: interpolate the field over it
-        l, r = F[y, LINE_COLS[0] - 1], F[y, LINE_COLS[1]]
-        F[y, LINE_COLS[0]:LINE_COLS[1]] = np.linspace(l, r, LINE_COLS[1] - LINE_COLS[0] + 2)[1:-1]
-    m = opaque.astype(np.float32)
-    sub = (slice(y0, y1), slice(x0, x1))
-    num = blur(F * m, SIGMA)[sub]
-    den = np.maximum(blur(m, SIGMA)[sub], 1e-3)
-    field = upsample(num / den)
-    alpha = np.clip((upsample(blur(m, SIGMA)[sub]) - 0.5) * K * 0.9 + 0.5, 0, 1)
-    ring = np.clip(np.floor(field + 0.5), 0, 5).astype(int)
-    g = RING_GREY[ring]
-    rim = (a[..., 3] > 0) & (a[..., 3] < 250)
-    rim_ind = upsample(blur(rim.astype(np.float32), 0.8)[sub])
-    rim_a = np.clip(rim_ind * 3 - 0.2, 0, 1) * (1 - alpha) * 0.55
-    tot = alpha + rim_a * (1 - alpha)
-    gg = np.where(tot > 1e-4, (g * alpha + 182.0 * rim_a * (1 - alpha)) / np.maximum(tot, 1e-4), 0)
+    n = K * SS
+    ys, xs = np.meshgrid(y0 + (np.arange((y1 - y0) * n) + 0.5) / n, x0 + (np.arange((x1 - x0) * n) + 0.5) / n, indexing='ij')
+    nn = np.hypot(SLOPE, 1.0)
+    yD = LOWER_Y - RHO
+    xD = XE0 + SLOPE * yD + RHO * nn
+    u1 = (-SLOPE / nn, -1.0 / nn)
+    t1 = np.clip((xs - xD) * u1[0] + (ys - yD) * u1[1], 0, None)
+    d1 = np.hypot(xs - (xD + t1 * u1[0]), ys - (yD + t1 * u1[1]))
+    d2 = np.hypot(xs - (xD + np.clip(xs - xD, 0, None)), ys - yD)
+    dist_er = np.minimum(d1, d2)
+    dd = dist_er - RHO                            # distance inside the shape from the diagonal / lower edge
+    diag_x = XE0 + SLOPE * ys
+    in_w = (ys < LOWER_Y) & (xs > diag_x)         # the transparent wedge above the lower edge and right of the diagonal
+    in_wer = (ys < yD) & (xs > diag_x + RHO * nn)
+    transparent = in_wer | (in_w & (dist_er < RHO))   # the wedge with its tip rounded (fillet of radius RHO)
+    inside = ~transparent
+    psi = np.arctan2(ys - yD, xs - xD)
+    psi = np.where(psi < -np.pi / 2, psi + 2 * np.pi, psi)
+    psi1, psi2 = np.arctan2(SLOPE, -1.0), np.pi / 2
+    phi = np.clip((psi1 - psi) / (psi1 - psi2), 0, 1)
+    T = (1 - phi)[..., None] * T_DIAG + phi[..., None] * T_LOW
+    u_dd = np.zeros(dd.shape, np.float32)
+    for j in range(5):                            # piecewise-linear ring coordinate with per-pixel thresholds
+        lo = T[..., j - 1] if j else np.zeros_like(dd)
+        hi = T[..., j]
+        u_dd += np.clip((dd - lo) / np.maximum(hi - lo, 1e-3), 0, 1)
+    u_top = ring_coord(ys, T_TOP)
+    k = 0.6
+    h = np.clip(k - np.abs(u_dd - u_top), 0, None) / k
+    smin = np.minimum(u_dd, u_top) - h * h * k / 4          # polynomial smooth minimum: rounds the join of the two edges
+    u = np.where(np.minimum(u_dd, u_top) >= 5, 5.0, smin)
+    u = np.where(ys < LOWER_Y, u, u_dd)
+    ring = np.clip(np.floor(u), 0, 5).astype(int)
+    grey = RING_GREY[ring]
+    d_out = np.where(in_wer, dist_er + RHO, RHO - dist_er)       # distance of a transparent point to the shape
+    rim = (~inside) & (d_out < RIM_W) & (ys > 1.0) & (xs > XE0 - 1)
+    col = np.where(inside, grey, RIM_GREY)
+    al = np.where(inside, 1.0, np.where(rim, RIM_ALPHA, 0.0)).astype(np.float32)
+    pm = col * al
+    pm = pm.reshape((y1 - y0) * K, SS, (x1 - x0) * K, SS).mean((1, 3))
+    al = al.reshape((y1 - y0) * K, SS, (x1 - x0) * K, SS).mean((1, 3))
+    g = np.where(al > 1e-4, pm / np.maximum(al, 1e-4), 0)
     patch = np.zeros(g.shape + (4,), np.float32)
-    patch[..., 0] = patch[..., 1] = patch[..., 2] = gg
-    patch[..., 3] = tot * 255
+    patch[..., 0] = patch[..., 1] = patch[..., 2] = g
+    patch[..., 3] = al * 255
     return patch
 
 
@@ -183,7 +186,7 @@ def make_bands():
     base = nearest(np.dstack([a[..., 0], a[..., 1], a[..., 2], np.where(op, 255, 0)]).astype(np.uint8))
     out = base.copy()
     x0, x1, y0, y1 = ZONE
-    patch = smooth_zone(a)
+    patch = analytic_zone()
     crisp = base[y0 * K:y1 * K, x0 * K:x1 * K].astype(np.float32)
     # axis-aligned highlight rows stay crisp where they are straight (top edge left of the corner, lower edge right of it)
     for (ya, yb, xa, xb) in ((0, 2, 0, 76), (36, 38, 104, 256)):
