@@ -34,17 +34,18 @@ def sstep(e0, e1, x):
 
 def tall_rim(d, ny, u, px, inside, shadow, dx):
     """Rim of the 32x32 pill pieces (8x grid): thick lavender-white top, mid-grey sides, dim grey bottom band, black body."""
-    straight = 1 - sstep(0, 34, dx)                        # the thick top highlight / bottom band only run along the straight part
-    top, bot = sstep(0.5, 1.0, -ny) * straight, sstep(0.5, 1.0, ny) * straight
-    w = 8.0 + 11.0 * top + 7.0 * bot                       # rim thickness: thin round the caps
+    straight = 1 - sstep(0, 90, dx)                        # the wider top highlight / bottom band only run along the straight part
+    top, bot = sstep(0.0, 1.0, -ny) * straight, sstep(0.0, 1.0, ny) * straight
+    w = 8.0 + 3.0 * top + 8.0 * bot                        # rim thickness: thin round the caps and along the top, 2 texels for the bottom band
     t = np.clip(u / w, 0, 1)                               # 0 at the outer edge, 1 at the inner edge of the rim
-    c_top = 0.74 - 0.20 * t                                # bright at the edge, softer inside
-    c_side = 0.46 - 0.20 * t
-    c_bot = 0.34 - 0.12 * t
+    c_top = 0.72 - 0.12 * t
+    c_side = 0.46 - 0.12 * t
+    c_bot = 0.29 - 0.03 * t                                # the original band is flat, 73/66 of 255
     c = c_top * top + c_bot * bot + c_side * (1 - top - bot)
     rim = 1 - sstep(w - px, w + px, u)
     grey = c * rim
     rgb = np.dstack([grey * (1 - 0.05 * top), grey * (1 - 0.04 * top), grey * (1 + 0.04 * top)])
+    shadow = (1 - sstep(4, 14, d)) * 0.5 * (1 - inside)     # dark outline: about 1 texel at half strength, then fading
     alpha = np.clip(inside * 0.996 + shadow, 0, 1)
     rgb = np.clip(rgb, 0, 1) * (inside > 0)[..., None]
     return np.dstack([rgb, alpha])
