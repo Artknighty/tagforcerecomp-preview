@@ -14,11 +14,17 @@ import numpy as np
 from PIL import Image
 
 ROOT = os.path.normpath(os.path.join(os.path.dirname(os.path.abspath(__file__)), '..', '..'))
-S = 2                       # output = 256 grid * 2
-CY, R = 112.0, 88.0         # body centre line and radius (grid units)
-ARC_L, ARC_R = 128.0, 135.0
+# geometry in the pack's 256 grid: (output scale, body centre y, radius, left cap arc centre x, right cap arc centre x, rim scale)
+GEO = {
+    'short': (2, 112.0, 88.0, 128.0, 135.0, 1.0),
+    'tall': (1, 127.5, 112.0, 192.0, 63.0, 1.25),   # 32x32 in the game (8x); the pill behind the menu titles, e.g. MAIN MENU
+}
 ORIG = 'mikeymk/ui/oval/oval_short_%s.png'
 NEW = 'oval_hd/oval_short_%s.png'
+NEW_TALL = 'oval_hd/oval_%s.png'
+# game texture hashes of the tall pieces (the same ones the duel result screen uses; that screen has its own palette-specific rows)
+TALL_HASH = {'tall_left': '85169591', 'tall_center': '1320facf', 'tall_right': '87f4af60',
+             'transparent_tall_left': '59cfec77', 'transparent_tall_center': 'b441d53d', 'transparent_tall_right': '9d15ec20'}
 
 
 def sstep(e0, e1, x):
@@ -26,7 +32,8 @@ def sstep(e0, e1, x):
     return t * t * (3 - 2 * t)
 
 
-def piece(kind):
+def piece(kind, shape='short', transparent=False):
+    S, CY, R, ARC_L, ARC_R, RS = GEO[shape]
     n = 256 * S
     ys, xs = np.mgrid[0:n, 0:n].astype(np.float32)
     x, y = (xs + 0.5) / S, (ys + 0.5) / S
@@ -42,6 +49,10 @@ def piece(kind):
     ny = np.where(dist > 1e-3, dy / np.maximum(dist, 1e-3), 0)   # outward normal y: top = -1
     u = -d                                          # depth inside the body
     px = 1.0 / S                                    # antialiasing width
+    if transparent:                                 # the translucent shade layer: plain stadium, alpha 65/255, no rim
+        a = inside_ = sstep(px, -px, d) * 0.255
+        return np.dstack([np.zeros_like(a), np.zeros_like(a), np.zeros_like(a), a])
+    u = u / RS
     inside = sstep(px, -px, d)
     shadow = (1 - sstep(0, 3.2, d)) * 0.62 * (1 - inside)
     # rim layers (color in 0..1 grey, weight)
@@ -70,6 +81,7 @@ def piece(kind):
 
 
 def register(mod):
+    """Repoints the short pieces (every row) and the tall pieces (only the palette-less rows: the duel result screen keeps its own)."""
     for name in ('textures/textures.ini', 'origem.tsv'):
         p = os.path.join(mod, name)
         if not os.path.exists(p):
@@ -77,19 +89,37 @@ def register(mod):
         s = open(p, encoding='utf-8', newline='').read()
         for k in ('left', 'center', 'right'):
             s = s.replace(ORIG % k, NEW % k)
-        open(p, 'w', encoding='utf-8', newline='').write(s)
+        lines = s.split('\n')
+        for i, l in enumerate(lines):
+            cr = '\r' if l.endswith('\r') else ''
+            for k, h in TALL_HASH.items():
+                if name.endswith('.ini'):
+                    if l.startswith('0000000000000000' + h + ' = '):
+                        lines[i] = l.split(' = ')[0] + ' = ' + NEW_TALL % k + cr
+                else:
+                    t = l.rstrip('\r').split('\t')
+                    if len(t) >= 4 and t[0] == h and t[1] == '00000000':
+                        t[2], t[3] = 'MenuOvalHD', NEW_TALL % k
+                        lines[i] = '\t'.join(t) + cr
+        open(p, 'w', encoding='utf-8', newline='').write('\n'.join(lines))
         print('registered in', p)
+
+
+def save(arr, dst):
+    os.makedirs(os.path.dirname(dst), exist_ok=True)
+    Image.fromarray((arr * 255 + 0.5).astype(np.uint8), 'RGBA').save(dst)
+    print('wrote', dst)
 
 
 def main():
     for mod in (os.path.join(ROOT, 'mods', 'EnhancedTextures'), os.path.join(ROOT, 'gen', 'mods', 'EnhancedTextures')):
         if not os.path.isdir(mod):
             continue
+        tex = os.path.join(mod, 'textures')
         for k in ('left', 'center', 'right'):
-            dst = os.path.join(mod, 'textures', NEW % k)
-            os.makedirs(os.path.dirname(dst), exist_ok=True)
-            Image.fromarray((piece(k) * 255 + 0.5).astype(np.uint8), 'RGBA').save(dst)
-            print('wrote', dst)
+            save(piece(k), os.path.join(tex, NEW % k))
+            save(piece(k, 'tall'), os.path.join(tex, NEW_TALL % ('tall_' + k)))
+            save(piece(k, 'tall', transparent=True), os.path.join(tex, NEW_TALL % ('transparent_tall_' + k)))
         if '--register' in sys.argv:
             register(mod)
 
