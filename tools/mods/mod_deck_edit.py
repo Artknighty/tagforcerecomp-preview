@@ -42,8 +42,8 @@ TEXTS = {
     '92c07948': [dict(TAB, text='Trunk')],
     '4400d119': [
         dict(TAB, text='Card types in possession', x0=5, y1=19, fill=(3, 6), base=14.0),
-        dict(text='START', x0=163, x1=181, y0=3, y1=8, fill=(2, 172), col=(255, 255, 255), cap=4.6, base=7.6, outline=False),
-        dict(text='?', x0=153, x1=161, y0=13, y1=20, fill=(12, 153), col=(0, 0, 0), cap=6.4, base=19.5, outline=False),
+        dict(text='START', cx=172.5, x0=164, x1=184, y0=3, y1=8, fill=(2, 172), col=(255, 255, 255), cap=4.6, base=7.6, outline=False),
+        dict(text='?', cx=157, x0=153, x1=161, y0=13, y1=20, fill=(12, 153), col=(0, 0, 0), cap=6.4, base=19.5, outline=False),
     ],
 }
 
@@ -90,6 +90,8 @@ def typeset(out, item, x1, fill, face='Bold Condensed'):
     if layer.width > avail:                          # squeeze to the free width (the original lettering is condensed as well)
         layer = layer.resize((int(avail), layer.height), Image.LANCZOS)
     px = int((x0 + 0.5) * K)
+    if 'cx' in item:                                 # centred on a column (buttons)
+        px = int(item['cx'] * K - layer.width / 2)
     py = int(item['base'] * K - (hb[3] - bb[1] + 2))
     img = Image.fromarray(out)
     if item['outline']:
@@ -113,6 +115,11 @@ def lettered(h, t):
         e[it['y0']:it['y1'], it['x0']:x1] = fill
         items.append((it, x1, fill))
     out = redraw(e, h)
+    if h == '4400d119':
+        out[:] = types_plate(t)
+        btn = types_buttons(t)
+        out[:, 152 * K:] = btn[:, 152 * K:]
+        out[:, 151 * K:152 * K] = np.where(out[:, 151 * K:152 * K, 3:4] > 0, out[:, 151 * K:152 * K], btn[:, 151 * K:152 * K])
     for it, x1, fill in items:
         out = typeset(out, it, x1, fill if it['outline'] else (0, 0, 0))
     return out
@@ -224,6 +231,30 @@ def personal_plate(t):
     icon = depixel.render_smooth(t[4:19, 4:15], K, sigma=SIGMA)
     out[4 * K:19 * K, 4 * K:15 * K] = icon
     return out
+
+
+def types_plate(t):
+    """'Card types in possession' plate from geometry (x < 152): gold bevelled frame, dark field, white rounded number field."""
+    gold = [px(t, 11, 1), px(t, 11, 2), px(t, 11, 3)]
+    dark, white = px(t, 8, 60), (255, 255, 255, 255)
+
+    def inside(X, Y):
+        col = np.empty(X.shape + (4,), np.float32)
+        col[:] = dark
+        col[rr_depth(X, Y, (107, 5, 143.5, 17), 2.2) > 0] = white
+        return col
+    return beveled(256, 32, (1, 0, 150, 22), (3.2, 3.2, 3.2, 3.2), gold, inside, (1, 1))
+
+
+def types_buttons(t):
+    """START pill and '?' box next to the plate, from geometry (lettering is typeset afterwards)."""
+    def flat(col):
+        return lambda X, Y: np.broadcast_to(np.array(col, np.float32), X.shape + (4,)).copy()
+    pill = beveled(256, 32, (161, 1, 184, 11), (3.6,) * 4, [px(t, 2, 172)], flat(px(t, 8, 170)), (1, 1))
+    box = beveled(256, 32, (152, 12, 162, 21), (2.4,) * 4, [], flat(px(t, 16, 152)), (1, 1))
+    img = Image.fromarray(pill)
+    img.alpha_composite(Image.fromarray(box))
+    return np.asarray(img).copy()
 
 
 def cursor_frame(out):
