@@ -45,6 +45,11 @@ def _labels(t):
                         if q[3] > p[3] and (q[:3] == p[:3]).all() and p[3] < 200:
                             keep[y, x] = False
     t[~keep] = 0
+    tr = (t[..., 3] > 0) & (t[..., 3] < 255)
+    t[tr & (t[..., :3].max(2) > 8)] = 0                     # translucent coloured texels are anti-aliasing of the artist: dropped
+    sh = tr & (t[..., :3].max(2) <= 8)                       # translucent black = drop shadow: two strengths only
+    t[sh & (t[..., 3] <= 100), 3] = 64
+    t[sh & (t[..., 3] > 100), 3] = 128
     # single texels whose colour no 4-neighbour shares are corner dots of the original art: take the commonest colour around them
     src = t.copy()
     for y in range(h):
@@ -69,12 +74,20 @@ def _tent(n_in, n_out):
     return m
 
 
-def render(t, k=K, ss=3):
+def _gauss_w(n_in, n_out, sig):
+    """(n_out, n_in) gaussian weights between texel centres (sigma in texels), normalised over the valid texels (edge-clamped)."""
+    x = (np.arange(n_out) + 0.5) / n_out * n_in
+    c = np.arange(n_in) + 0.5
+    m = np.exp(-((x[:, None] - c[None, :]) ** 2) / (2 * sig * sig)).astype(np.float32)
+    return m / m.sum(1, keepdims=True)
+
+
+def render(t, k=K, ss=3, sigma=None):
     """Redraw an (h, w, 4) uint8 texel block as an (h*k, w*k, 4) uint8 RGBA image."""
     ids, pal = _labels(t)
     h, w = ids.shape
     Y, X = h * k * ss, w * k * ss
-    wy, wx = _tent(h, Y), _tent(w, X)
+    wy, wx = (_gauss_w(h, Y, sigma), _gauss_w(w, X, sigma)) if sigma else (_tent(h, Y), _tent(w, X))
     best = np.full((Y, X), -1.0, np.float32)
     lab = np.zeros((Y, X), np.int32)
     for li in range(len(pal)):
@@ -91,9 +104,9 @@ def render(t, k=K, ss=3):
     return np.clip(np.concatenate([rgb, al], axis=2) + 0.5, 0, 255).astype(np.uint8)
 
 
-def paste_region(out, src_tex, u0, u1, v0, v1, k=K):
+def paste_region(out, src_tex, u0, u1, v0, v1, k=K, sigma=None):
     """Redraw texels [u0,u1) x [v0,v1) of the sheet and overwrite that area of `out` (the upscaled sheet array)."""
-    out[v0 * k:v1 * k, u0 * k:u1 * k] = render(src_tex[v0:v1, u0:u1], k)
+    out[v0 * k:v1 * k, u0 * k:u1 * k] = render(src_tex[v0:v1, u0:u1], k, sigma=sigma)
 
 
 def flat_col(out, u, v0, v1, k=K):

@@ -24,6 +24,7 @@ ROOT = os.path.normpath(os.path.join(os.path.dirname(os.path.abspath(__file__)),
 MODS = [os.path.join(ROOT, 'mods', 'EnhancedTextures'), os.path.join(ROOT, 'gen', 'mods', 'EnhancedTextures')]
 OUT = 'duelist_list_hd'
 K = dp.K
+SIGMA = 0.65   # smoothing of the stair-stepped chamfers of the frame (texels)
 
 # data hash -> (EnhancedTextures image the unused parts come from, new file)
 SHEETS = {
@@ -35,9 +36,9 @@ SHEETS = {
 def frame_sheet(out, t):
     for r in range(4):                                  # four colour rows, 32 texels apart
         o = 32 * r
-        dp.paste_region(out, t, 0, 64, o, o + 18)       # tab caps and stretch columns
-        dp.paste_region(out, t, 64, 96, o, o + 18)      # cream rounded panel (left part of the frame)
-        dp.paste_region(out, t, 96, 112, o, o + 32)     # right part of the frame with the scroll gutter
+        dp.paste_region(out, t, 0, 64, o, o + 18, sigma=SIGMA)       # tab caps and stretch columns
+        dp.paste_region(out, t, 64, 96, o, o + 18, sigma=SIGMA)      # cream rounded panel (left part of the frame)
+        dp.paste_region(out, t, 96, 112, o, o + 32, sigma=SIGMA)     # right part of the frame with the scroll gutter
         for u in (4, 28):
             dp.flat_col(out, u, o, o + 18)              # tab middle: stretched horizontally
         dp.flat_col(out, 70, o, o + 6)                  # frame top / bottom / centre strips
@@ -49,7 +50,7 @@ def frame_sheet(out, t):
 
 # the scroll track of the original is a dark translucent tube made of mixed-alpha texels; this clean texel map has the same layout
 TRACK_COLORS = {'.': (0, 0, 0, 0), 'B': (127, 127, 127, 128), 'H': (1, 1, 1, 255), 'N': (0, 0, 0, 128), 'O': (255, 255, 255, 128)}
-TRACK = ['..BBBB..'] + ['.BHNNNO.'] * 18 + ['..OOOO..']
+TRACK = ['..BBBB..', '.BHHHHO.'] + ['.BHNNNO.'] * 17 + ['..OOOO..']
 
 
 THUMB_COLORS = {'.': (0, 0, 0, 0), 'T': (170, 83, 1, 255), 'W': (199, 110, 5, 255), '2': (255, 169, 32, 255), 'Z': (226, 138, 8, 255), 'R': (0, 0, 0, 64)}
