@@ -689,6 +689,7 @@ static inline void emit_tri(const Vtx &a, const Vtx &b, const Vtx &c, bool flat)
  * com vertices atras da camera viram coordenadas absurdas e somem (ex.: fundo da arena do duelo). */
 static void draw_tri_clip(const Vtx &a, const Vtx &b, const Vtx &c, bool flat) {
     if (!a.clip) { emit_tri(a, b, c, flat); return; }
+    if (a.z > 65535.f && b.z > 65535.f && c.z > 65535.f) return;   /* wholly beyond the far plane: the GE clips it away (the duel win screen has a huge quad at z=1.8e7 that would otherwise paint the whole screen orange) */
     const float EPS = 1e-4f;
     auto dist = [&](const Vtx &v) { return v.cw - EPS; };
     float da = dist(a), db = dist(b), dc = dist(c);
@@ -1551,7 +1552,11 @@ static void draw_prim(GeList &l, uint32_t data) {
     (void)l;
     g_off_nrm = on; g_off_wt = ow;
     static const bool nodraw_env = getenv("GE_NODRAW") != nullptr;   /* medicao: pula a rasterizacao */
-    const bool nodraw = nodraw_env || g_ctl_nodraw;   /* g_ctl_nodraw: comando "nodraw 1" do TF_CTL (duelos de teste ~10x mais rapidos; capturas saem pretas) */
+    static const char *gps = getenv("GE_PRIM_STOP");   /* GE_PRIM_STOP=quadro:n: nesse quadro so rasteriza os n primeiros PRIMs (a captura mostra o estado parcial) */
+    bool stop_here = false;
+    if (gps) { extern uint64_t display_frames(void); static uint64_t sf = ~0ull; static int sn = 0; unsigned long long fq = 0; int lim = 0;
+        if (sscanf(gps, "%llu:%d", &fq, &lim) == 2 && display_frames() + 4 >= fq && display_frames() <= fq + 1) { if (sf != display_frames()) { sf = display_frames(); sn = 0; } stop_here = sn++ >= lim; } }
+    const bool nodraw = nodraw_env || stop_here || g_ctl_nodraw;   /* g_ctl_nodraw: comando "nodraw 1" do TF_CTL (duelos de teste ~10x mais rapidos; capturas saem pretas) */
     if (nodraw) { if (t.idx) G.iaddr += count * (t.idx == 1 ? 1 : t.idx == 2 ? 2 : 4); else G.vaddr += count * vs; return; }
     uint32_t va = G.vaddr, ia = G.iaddr;
     bool textured = CMD(0x1e) & 1;
@@ -1568,6 +1573,7 @@ static void draw_prim(GeList &l, uint32_t data) {
                               tex_addr(), CMD(0xc3), CMD(0xb8), CMD(0xa8) & 0xffff, CMD(0xc9), CMD(0xc6), CMD(0xc7), CMD(0xc5), CMD(0xc2), CMD(0xc8), CMD(0xa1), CMD(0xa9), CMD(0xb9));
         fprintf(stderr, " ztest=%u/%u zmask=%u cull=%u/%u tmap=%03x light=%u atest=%u/%06x", CMD(0x23) & 1, CMD(0xde) & 7, CMD(0xe7) & 1, CMD(0x1d) & 1, CMD(0x9b) & 1,
                 CMD(0xc0) & 0x3ff, CMD(0x17) & 1, CMD(0x22) & 1, CMD(0xdb));
+        if (CMD(0x21) & 1) fprintf(stderr, " fix=%06x/%06x", CMD(0xe0) & 0xffffff, CMD(0xe1) & 0xffffff);
         if (CMD(0x24) & 1) fprintf(stderr, " stencil=%06x/op%06x", CMD(0xdc) & 0xffffff, CMD(0xdd) & 0xffffff);
         if (CMD(0xe8) & 0xffffff || CMD(0xe9) & 0xff) fprintf(stderr, " pmask=%06x/%02x", CMD(0xe8) & 0xffffff, CMD(0xe9) & 0xff);
         if (count >= 2 && !t.idx) { Vtx a = fetch(ge_ptr(va), t, oc, ot, op, ow), b = fetch(ge_ptr(va + vs * (count - 1)), t, oc, ot, op, ow);
