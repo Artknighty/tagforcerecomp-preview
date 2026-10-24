@@ -351,7 +351,7 @@ static void ring_free_all(void) { for (auto &t : g_ringT) rel(t); for (auto &r :
 static bool d3d_ring_push(int id, int slot, int nslots) {
     if (id < 0 || id >= kMaxFb || !g_fb[id].used || slot < 0 || slot >= nslots) return false;
     d3d_flush(); GFb &f = g_fb[id]; resolve_fb(f);
-    const int n = (f.res + 1) / 2, w = f.w / n, h = f.h / n;
+    const int n = nslots > 120 ? std::max(f.res, 1) : (f.res + 1) / 2, w = f.w / n, h = f.h / n;   /* long rings (> 120 slots) keep 480x272 frames: same VRAM as 90 frames at 960 */
     if ((int)g_ringT.size() != nslots || w != g_ringW || h != g_ringH) {   /* resolucao trocada (raro): refaz o anel */
         ring_free_all(); g_ringT.assign(nslots, nullptr); g_ringR.assign(nslots, nullptr); g_ringOk.assign(nslots, 0); g_ringW = w; g_ringH = h;
     }

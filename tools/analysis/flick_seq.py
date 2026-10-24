@@ -6,14 +6,14 @@ camera/hand motion does not drown the result.
 
   python tools/analysis/flick_seq.py <captures folder | seq folder> [--png out_dir] [--top 6]
 
-Prints, per sequence, the in-between frames ranked by flagged blocks (16x16 px of the 960x544 image), the bounding box of the
+Prints, per sequence, the in-between frames ranked by flagged blocks (1/60 of the image width per side: 16 px at 960, 8 px at 480), the bounding box of the
 flagged area and whether the pattern repeats; --png writes prev | mid | next | mask strips for the worst frames.
 """
 import glob, os, sys
 import numpy as np
 from PIL import Image
 
-B = 16
+B = 16   # block size in px; set per sequence from the image width (16 at 960, 8 at 480)
 
 
 def ld(f):
@@ -30,6 +30,8 @@ def analyse(seq, png=None, top=6):
     fs = sorted(glob.glob(os.path.join(seq, '*.png')))
     kinds = [os.path.basename(f).split('_')[1] for f in fs]
     R = [i for i, k in enumerate(kinds) if k == 'R']
+    global B
+    B = max(4, Image.open(fs[0]).size[0] // 60) if fs else 16
     rows = []
     for a, b in zip(R, R[1:]):
         A, Bf = ld(fs[a]), ld(fs[b])

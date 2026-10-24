@@ -149,7 +149,7 @@ static bool marca_nota_modal(bool graf, std::string *nota, bool piscada = false)
 
 
 /* ---- CAIXA-PRETA dos quadros APRESENTADOS: cada quadro que sai na janela, real (R) ou intermediario do 60 FPS (M), e reduzido NA PROPRIA GPU (media
- * n x n, ~960 px de largura) para um anel de TF_SEQ_RING imagens na VRAM (padrao 90 = ~1,5 s; 0 desliga), com a hora da saida. Custo ~0: nada de CPU,
+ * n x n, ~960 px de largura) para um anel de TF_SEQ_RING imagens na VRAM (padrao 360 = 3 s a 120 FPS, quadros de 480x272; ate 120 ficam em ~960 px; 0 desliga), com a hora da saida. Custo ~0: nada de CPU,
  * nada vem para a RAM. Numa marca F8 confirmada o anel e lido UMA vez: sao os quadros ANTES do F8 (o que o jogador acabou de ver; a caixa de nota
  * pausa o jogo e nada e apresentado enquanto ela esta aberta) e vao para <sessao>_capturas/seq_<n>/NN_<R|M>_<ms>.png + indice.tsv, gravados numa
  * thread (o jogo nao espera). Nos replays,
@@ -160,7 +160,7 @@ struct SeqMeta { char tag; bool susp; double ms; uint64_t frame; };
 static std::vector<SeqMeta> g_seqm; static uint64_t g_seq_pos; static int g_seq_n = -1, g_seq_id;
 static double seq_now_ms(void) { LARGE_INTEGER c, f; QueryPerformanceCounter(&c); QueryPerformanceFrequency(&f); return (double)c.QuadPart * 1000.0 / (double)f.QuadPart; }
 static int seq_ring_n(void) {
-    if (g_seq_n < 0) { const char *e = getenv("TF_SEQ_RING"); g_seq_n = e ? std::max(0, std::min(600, atoi(e))) : 90; g_seqm.assign((size_t)g_seq_n, SeqMeta{}); }
+    if (g_seq_n < 0) { const char *e = getenv("TF_SEQ_RING"); g_seq_n = e ? std::max(0, std::min(600, atoi(e))) : 360; g_seqm.assign((size_t)g_seq_n, SeqMeta{}); }
     return g_seq_n;
 }
 /* GRAVACAO CONTINUA (TF_SEQ_AUTO=<arquivo.bin>, para replays): TODO quadro apresentado (R e M) vira uma miniatura 160x90 RGB nesse arquivo (o anel de
@@ -219,7 +219,7 @@ static void seq_gravar(const char *motivo) {
         FILE *ix = _wfopen((dir + L"indice.tsv").c_str(), L"wb");
         if (ix) fprintf(ix, "#indice%ctipo%cms%carquivo%c60fps_suspenso%cquadro%c", 9, 9, 9, 9, 9, 10);
         for (size_t i = 0; i < qs->size(); i++) {
-            const Q &q = (*qs)[i]; char fn[64]; snprintf(fn, sizeof fn, "%02u_%c_%07.2f.png", (unsigned)i, q.tag, q.ms);
+            const Q &q = (*qs)[i]; char fn[64]; snprintf(fn, sizeof fn, "%03u_%c_%07.2f.png", (unsigned)i, q.tag, q.ms);
             const std::string un = to_utf8(dir + to_wide(fn)); img_save_png(un.c_str(), q.w, q.h, q.px.data());
             if (ix) fprintf(ix, "%u%c%c%c%.2f%c%s%c%d%c%llu%c", (unsigned)i, 9, q.tag, 9, q.ms, 9, fn, 9, q.susp ? 1 : 0, 9, (unsigned long long)q.frame, 10);
         }

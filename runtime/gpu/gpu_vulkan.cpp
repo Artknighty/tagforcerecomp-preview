@@ -780,7 +780,7 @@ static std::vector<Img> g_ring; static std::vector<char> g_ringOk; static int g_
 static void ring_free_all(void) { for (auto &i : g_ring) free_img(i); g_ring.clear(); g_ringOk.clear(); free_buf(g_ringRb); g_ringW = g_ringH = 0; }
 static bool vk_ring_push(int id, int slot, int nslots) {
     if (id < 0 || id >= kMaxFb || !g_fb[id].used || slot < 0 || slot >= nslots) return false;
-    FbRec &f = g_fb[id]; const int n = (f.res + 1) / 2, w = f.w / n, h = f.h / n;
+    FbRec &f = g_fb[id]; const int n = nslots > 120 ? std::max(f.res, 1) : (f.res + 1) / 2, w = f.w / n, h = f.h / n;   /* long rings (> 120 slots) keep 480x272 frames: same VRAM as 90 frames at 960 */
     record_pend(); end_render();
     if ((int)g_ring.size() != nslots || w != g_ringW || h != g_ringH) {   /* resolucao trocada (raro): refaz o anel */
         if (!g_ring.empty()) { wait_all(); ring_free_all(); }
