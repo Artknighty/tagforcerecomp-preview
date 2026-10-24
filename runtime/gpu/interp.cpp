@@ -293,8 +293,25 @@ bool interp_lists(const Rec &pv, Rec &cur, int target, int depth, std::vector<Fr
         }
         return ok >= 2 && ok * 2 >= avail;
     };
+    /* A draw that did not move at all (same kind, same UV, every vertex within 0.5 px) keeps its partner: claimed BEFORE the greedy search below. Otherwise
+     * a new draw without a real partner (a card entering the field) took, through the wide pass, the identical-looking card next to it, that one took the
+     * next, and so on down the row of equal cards until the last one paired with its own mirrored twin (the face-down card in defense position drawn as
+     * a back/face pair): the middle frames showed the card flipped, squashed or missing (session 20261024_152319, mark 2). TF_INTERP_NOEXACT=1 disables */
+    static const bool no_exact = getenv("TF_INTERP_NOEXACT") != nullptr;
+    std::vector<int> pre(cn, -1);
+    if (!no_exact) for (size_t j = 0; j < cn; j++) {
+        const Draw &c = cur.d[j]; if (c.n != 6 || c.s.tex == 0) continue;
+        const size_t k0 = j > 8 ? j - 8 : 0, k1 = std::min(pn, j + 9);
+        for (size_t k = k0; k < k1; k++) {
+            if (used[k] || !same_kind(pv.d[k], c)) continue;
+            const GpuVtx *a = &pv.v[pv.d[k].off], *b = &cur.v[c.off]; bool ok = true;
+            for (int q = 0; q < 6 && ok; q++) ok = fabsf(b[q].x - a[q].x) <= 0.5f && fabsf(b[q].y - a[q].y) <= 0.5f && fabsf(b[q].u - a[q].u) <= 0.5f && fabsf(b[q].v - a[q].v) <= 0.5f;
+            if (ok) { pre[j] = (int)k; used[k] = 1; break; }
+        }
+    }
     for (size_t j = 0; j < cn; j++) {
         const Draw &c = cur.d[j]; int best = -1; float bestc = 1e30f;
+        if (pre[j] >= 0) { match[j] = pre[j]; hint = (size_t)pre[j] + 1; nm++; continue; }
         size_t lo = hint > 6 ? hint - 6 : 0, hi = std::min(pn, hint + 14);
         /* janela em torno do ultimo par; sem par nela, uma 2a passada olha o resto da lista. Um efeito que entra no meio da lista (a espiral do corte
          * de invocacao: ~20 desenhos novos antes do resto) desloca os indices alem da janela e deixava TODO o resto sem par (cena "trocou": o corte

@@ -56,6 +56,22 @@ def analyse(seq, png=None, top=6):
             tiles = [np.asarray(Image.open(fs[i]).convert('RGB'))[y0:y1, x0:x1] for i in (a, m, b)]
             msk = np.repeat((mk[y0:y1, x0:x1] * 255).astype(np.uint8)[:, :, None], 3, axis=2)
             Image.fromarray(np.concatenate(tiles + [msk], axis=1)).save(os.path.join(png, '%s_f%02d.png' % (os.path.basename(seq), m)))
+    # a REAL frame that differs from the real frames before and after it, which agree with each other (a layer that dims or vanishes for
+    # one game frame and comes back): whole-screen "blinks" that no in-between frame can explain
+    real = []
+    for p, q, r in zip(R, R[1:], R[2:]):
+        A, Q, C = ld(fs[p]), ld(fs[q]), ld(fs[r])
+        agree = np.abs(A - C).max(axis=2) < 24
+        diff = np.minimum(np.abs(Q - A).max(axis=2), np.abs(Q - C).max(axis=2))
+        n = int((blocks(agree & (diff > 24)) > 0.25).sum())
+        if n >= 12:
+            real.append((n, q, p, r))
+    for n, q, p, r in sorted(real, reverse=True)[:top]:
+        print('  REAL frame %2d (%s)  blocks=%3d differ from both neighbours (they agree)' % (q, os.path.basename(fs[q]), n))
+        if png:
+            os.makedirs(png, exist_ok=True)
+            tiles = [np.asarray(Image.open(fs[i]).convert('RGB').resize((480, 272))) for i in (p, q, r)]
+            Image.fromarray(np.concatenate(tiles, axis=1)).save(os.path.join(png, '%s_real%02d.png' % (os.path.basename(seq), q)))
     return rows
 
 
