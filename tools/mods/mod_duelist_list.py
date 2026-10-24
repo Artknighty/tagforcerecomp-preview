@@ -33,19 +33,96 @@ SHEETS = {
 }
 
 
+def _depth(w, h, x0, y0, x1, y1, radii, ss):
+    """Distance inside a rounded rectangle (texels, negative outside) on a w x h texel grid sampled ss x ss per output pixel.
+    radii = (top-left, top-right, bottom-right, bottom-left)."""
+    px = (np.arange(w * K * ss) + 0.5) / (K * ss)
+    py = (np.arange(h * K * ss) + 0.5) / (K * ss)
+    X, Y = np.meshgrid(px, py)
+    cx, cy, hx, hy = (x0 + x1) / 2, (y0 + y1) / 2, (x1 - x0) / 2, (y1 - y0) / 2
+    r = np.where(X < cx, np.where(Y < cy, radii[0], radii[3]), np.where(Y < cy, radii[1], radii[2]))
+    qx, qy = np.abs(X - cx) - (hx - r), np.abs(Y - cy) - (hy - r)
+    d = np.minimum(np.maximum(qx, qy), 0) + np.hypot(np.maximum(qx, 0), np.maximum(qy, 0)) - r
+    return X, Y, -d
+
+
+def _flatten(rgba, ss):
+    """Premultiplied box downsample of an (h*K*ss, w*K*ss, 4) float RGBA array to uint8."""
+    a = rgba[..., 3:4] / 255
+    pm = np.concatenate([rgba[..., :3] * a, rgba[..., 3:4]], axis=2)
+    H, W = pm.shape[0] // ss, pm.shape[1] // ss
+    pm = pm.reshape(H, ss, W, ss, 4).mean(axis=(1, 3))
+    al = pm[..., 3:4]
+    rgb = np.where(al > 0, pm[..., :3] / np.maximum(al / 255, 1e-6), 0)
+    return np.clip(np.concatenate([rgb, al], axis=2) + 0.5, 0, 255).astype(np.uint8)
+
+
+def beveled(w, h, rect, radii, bands, interior, shadow=(0, 0), ss=4):
+    """A box drawn from geometry: rounded rectangle `rect` = (x0, y0, x1, y1) in texels on a w x h grid, 1-texel bands from the edge inwards
+    (colours in `bands`), `interior(X, Y)` for the rest, and a black 50 % drop shadow shifted by `shadow` texels."""
+    X, Y, dep = _depth(w, h, *rect, radii, ss)
+    out = np.zeros(dep.shape + (4,), np.float32)
+    if shadow != (0, 0):
+        _, _, ds = _depth(w, h, rect[0] + shadow[0], rect[1] + shadow[1], rect[2] + shadow[0], rect[3] + shadow[1], radii, ss)
+        out[ds > 0] = (0, 0, 0, 128)
+    inner = interior(X, Y)
+    out[dep > 0] = inner[dep > 0]
+    for i, col in reversed(list(enumerate(bands))):
+        out[(dep > 0) & (dep < i + 1)] = col
+    return _flatten(out, ss)
+
+
+def px(t, v, u):
+    return tuple(float(c) for c in t[v, u])
+
+
+def panel(t, o):
+    """Frame of the list (virtual 21 x 13 texels: 6 + 1 + 14 wide, 6 + 1 + 6 tall): outline / light / dark bands, cream inside and the scroll gutter."""
+    cream, light, gut = px(t, o + 8, 68), px(t, o + 8, 99), px(t, o + 8, 102)
+    bands = [px(t, o + 8, 64), px(t, o + 8, 65), px(t, o + 8, 66)]
+    def inside(X, Y):
+        col = np.empty(X.shape + (4,), np.float32); col[:] = cream
+        col[(X >= 8) & (X < 9) & (Y >= 3) & (Y < 9)] = light
+        col[(X >= 9) & (X < 17) & (Y >= 3) & (Y < 9)] = gut
+        return col
+    return beveled(21, 13, (0, 0, 20, 12), (0, 0, 3, 3), bands, inside, (1, 1))   # top corners square: the tabs sit there
+
+
+def tab(t, o, inactive):
+    """Tab (virtual 17 x 18 texels: 8 + 1 + 8 wide): rounded top, bands left / top / right, three flat stripes along the foot."""
+    bands = [px(t, o + 8, 0), px(t, o + 8, 1), px(t, o + 8, 2)]
+    fill, s1, s2, s3 = px(t, o + 8, 3), px(t, o + 15, 3), px(t, o + 16, 3), px(t, o + 17, 3)
+    def inside(X, Y):
+        col = np.empty(X.shape + (4,), np.float32); col[:] = fill
+        col[(Y >= 15) & (Y < 16)] = s1; col[(Y >= 16) & (Y < 17)] = s2; col[(Y >= 17)] = s3
+        return col
+    top = 2 if inactive else 0
+    return beveled(17, 18, (0, top, 16, 40), (2.5, 2.5, 0, 0), bands, inside, (1, 0))
+
+
+def put(out, img, vx, vy, w, h, u, v):
+    out[v * K:(v + h) * K, u * K:(u + w) * K] = img[vy * K:(vy + h) * K, vx * K:(vx + w) * K]
+
+
 def frame_sheet(out, t):
     for r in range(4):                                  # four colour rows, 32 texels apart
         o = 32 * r
-        dp.paste_region(out, t, 0, 64, o, o + 18, sigma=SIGMA)       # tab caps and stretch columns
-        dp.paste_region(out, t, 64, 96, o, o + 18, sigma=SIGMA)      # cream rounded panel (left part of the frame)
-        dp.paste_region(out, t, 96, 112, o, o + 32, sigma=SIGMA)     # right part of the frame with the scroll gutter
-        for u in (4, 28):
-            dp.flat_col(out, u, o, o + 18)              # tab middle: stretched horizontally
-        dp.flat_col(out, 70, o, o + 6)                  # frame top / bottom / centre strips
+        pa = panel(t, o)
+        for (vx, vy, w, h, u, v) in ((0, 0, 6, 6, 64, o), (6, 0, 1, 6, 70, o), (0, 6, 6, 1, 64, o + 6), (6, 6, 1, 1, 70, o + 6),
+                                     (0, 7, 6, 6, 64, o + 11), (6, 7, 1, 6, 70, o + 11),
+                                     (7, 0, 14, 6, 98, o), (7, 6, 14, 1, 98, o + 6), (7, 7, 14, 6, 98, o + 26)):
+            put(out, pa, vx, vy, w, h, u, v)
+        dp.flat_col(out, 70, o, o + 6)                  # strips the game stretches: top / bottom / centre, left / right edges
         dp.flat_col(out, 70, o + 11, o + 17)
         dp.flat_col(out, 70, o + 6, o + 7)
-        dp.flat_row(out, 64, 71, o + 6)                 # frame left edge / centre rows: stretched vertically
+        dp.flat_row(out, 64, 71, o + 6)
         dp.flat_row(out, 98, 112, o + 6)
+        for inactive, left, rights in ((False, 0, (32,)), (True, 24, (40, 56))):
+            tb = tab(t, o, inactive)
+            put(out, tb, 0, 0, 8, 18, left, o)
+            dp.flat_col(out, left + 4, o, o + 18)       # tab middle: stretched horizontally
+            for u in rights:
+                put(out, tb, 9, 0, 8, 18, u, o)
 
 
 # the scroll track of the original is a dark translucent tube made of mixed-alpha texels; this clean texel map has the same layout
