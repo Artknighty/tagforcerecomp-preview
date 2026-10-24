@@ -7,6 +7,7 @@
 #include <math.h>
 #include <algorithm>
 #include <vector>
+#include <string>
 #include "ffmpeg_dec.h"
 
 void audio_out_init(void);
@@ -185,7 +186,32 @@ struct Atrac {
     bool used; uint32_t buf, size, total, pos, spf, chans; int loopnum; int32_t loop_start, loop_end;
     bool plus; uint32_t data_off, data_size, block, extra_off, extra_len, skip;
     AtracDec *dec; std::vector<int16_t> pcm; size_t pcm_rd; int64_t pcm_pos; uint32_t nblk;   /* pcm[pcm_rd] = amostra pcm_pos */
+    const std::vector<int16_t> *ovr;   /* musica trocada por um mod (plugin API 7 set_bgm): PCM estereo pronto, sem decodificador */
 };
+/* Plugin API 7 set_bgm: o proximo AT3+ de musica (em laco) que o jogo abrir toca este WAV (s16 estereo 44,1 kHz) no lugar.
+ * nullptr desfaz. O WAV e lido na primeira troca e guardado enquanto o caminho nao mudar. */
+static std::wstring g_bgm_path; static std::vector<int16_t> g_bgm_pcm; static bool g_bgm_loaded;
+void hle_set_bgm(const wchar_t *path) { g_bgm_path = path ? path : L""; g_bgm_loaded = false; }
+static const std::vector<int16_t> *bgm_override(void) {
+    if (g_bgm_path.empty()) return nullptr;
+    if (!g_bgm_loaded) {
+        g_bgm_loaded = true; g_bgm_pcm.clear();
+        FILE *f = _wfopen(g_bgm_path.c_str(), L"rb"); if (!f) { fprintf(stderr, "[bgm] nao abriu o WAV\n"); return nullptr; }
+        std::vector<uint8_t> b; fseek(f, 0, SEEK_END); b.resize((size_t)ftell(f)); fseek(f, 0, SEEK_SET);
+        if (fread(b.data(), 1, b.size(), f) != b.size()) b.clear();
+        fclose(f);
+        size_t off = 12; bool ok = false;   /* RIFF/WAVE: fmt = PCM 1, 2 canais, 16 bits; data */
+        while (b.size() >= 12 && off + 8 <= b.size()) {
+            uint32_t csz = *(uint32_t *)&b[off + 4]; const uint8_t *c = &b[off + 8];
+            if (csz > b.size() - off - 8) csz = (uint32_t)(b.size() - off - 8);
+            if (!memcmp(&b[off], "fmt ", 4) && csz >= 16) ok = *(uint16_t *)c == 1 && *(uint16_t *)(c + 2) == 2 && *(uint16_t *)(c + 14) == 16;
+            else if (!memcmp(&b[off], "data", 4)) { if (ok) g_bgm_pcm.assign((const int16_t *)c, (const int16_t *)(c + csz / 4 * 4)); break; }
+            off += 8 + ((csz + 1) & ~1u);
+        }
+        fprintf(stderr, "[bgm] %zu quadros carregados\n", g_bgm_pcm.size() / 2);
+    }
+    return g_bgm_pcm.empty() ? nullptr : &g_bgm_pcm;
+}
 static Atrac g_atrac[6];
 static Atrac *atrac(uint32_t id) { return id < 6 && g_atrac[id].used ? &g_atrac[id] : nullptr; }
 static void atrac_parse(Atrac &a) {
@@ -226,6 +252,12 @@ static void atrac_free(Atrac &a) { atracdec_close(a.dec); a.dec = nullptr; a.pcm
  * continuacao do que ja foi decodificado (laco, ResetPlayPosition). Ao reposicionar decodifica um bloco antes do alvo e
  * o descarta: o MDCT precisa do bloco anterior para a sobreposicao. */
 static void atrac_fetch(Atrac &a, uint32_t pos, uint32_t n, int16_t *out) {
+    if (a.ovr) {
+        size_t frames = a.ovr->size() / 2, k = pos < frames ? std::min<size_t>(n, frames - pos) : 0;
+        if (k) memcpy(out, a.ovr->data() + (size_t)pos * 2, k * 4);
+        if (k < n) memset(out + k * 2, 0, (size_t)(n - k) * 4);
+        return;
+    }
     if (!a.dec) { memset(out, 0, n * 4); return; }
     size_t avail = (a.pcm.size() - a.pcm_rd) / 2;
     if ((int64_t)pos < a.pcm_pos || (int64_t)pos > a.pcm_pos + (int64_t)avail + a.spf) {
@@ -258,7 +290,11 @@ static void atrac_fetch(Atrac &a, uint32_t pos, uint32_t n, int16_t *out) {
 HLE(sceAtracSetDataAndGetID) {   /* (buf, size) */
     for (uint32_t i = 0; i < 6; i++) if (!g_atrac[i].used) {
         Atrac &a = g_atrac[i]; atrac_free(a); a = Atrac{}; a.used = true; a.buf = ARG(0); a.size = ARG(1); atrac_parse(a);
-        if (a.block && a.data_off)
+        if (a.plus && a.loop_start >= 0 && a.total > 10u * 44100u) if (const std::vector<int16_t> *o = bgm_override()) {
+            a.ovr = o; a.total = (uint32_t)(o->size() / 2); a.loop_start = 0; a.loop_end = (int32_t)a.total - 1; a.skip = 0;
+            fprintf(stderr, "[bgm] id %u: musica trocada pelo mod (%u quadros)\n", i, a.total);
+        }
+        if (a.block && a.data_off && !a.ovr)
             a.dec = atracdec_open(a.plus, (int)a.chans, (int)a.block, a.extra_len ? mem_ptr(a.buf + a.extra_off) : nullptr, (int)a.extra_len);
         a.pcm_pos = 1ll << 40;   /* forca reposicionar na primeira leitura */
         static const bool tr = getenv("ATRAC_TRACE") != nullptr;

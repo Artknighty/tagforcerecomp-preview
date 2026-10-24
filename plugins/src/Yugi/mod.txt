@@ -1,0 +1,4 @@
+name=Yugi
+author=Tag Force Recomp
+version=0.1
+description=Adds Yugi Muto as a Free Duel opponent (an empty character slot gets a name, a class and a deck). Edit deck.txt and config.ini. Turning the mod off restores the original game.

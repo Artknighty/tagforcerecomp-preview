@@ -20,6 +20,7 @@
 uint32_t display_buttons(void);
 uint64_t display_frames(void);
 void display_set_speed(int n);
+void hle_set_bgm(const wchar_t *path);
 bool host_module_loaded(const char *name);
 int cheats_init(const TfModApi *api);   /* cheats.cpp */
 
@@ -98,6 +99,7 @@ static bool plugin_start(Plugin *p, int (*init)(const TfModApi *)) {
     a.add_toggle = api_add_toggle; a.panel = api_panel; a.use_menu = api_use_menu;   /* versao 4 */
     a.sprite = api_sprite; a.quad_near = api_quad_near;   /* versao 5 */
     a.set_speed = display_set_speed;   /* versao 6 */
+    a.set_bgm = hle_set_bgm;           /* versao 7 */
     g_init = p; const int r = init(&a); g_init = nullptr;
     if (r != 0) {   /* falhou: tira os ganchos e os ajustes que ele tenha posto (as funcoes deles somem com a DLL: o menu chamaria get() de codigo descarregado) */
         hook_remove_owner(p);
