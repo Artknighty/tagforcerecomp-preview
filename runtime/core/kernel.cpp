@@ -1,5 +1,6 @@
-/* Kernel do PSP em HLE: memoria, threads cooperativas (fibers), semaforos, event flags, tempo virtual. */
+/* Kernel do PSP em HLE: memoria, threads cooperativas (corrotinas do host, coro.h), semaforos, event flags, tempo virtual. */
 #include "hle.h"
+#include "coro.h"
 #include <windows.h>
 #include <stdio.h>
 #include <stdlib.h>
@@ -8,6 +9,7 @@
 #include <vector>
 #include <string>
 #include <algorithm>
+#include <memory>
 
 #define USER_BASE 0x08800000u
 #define USER_END  0x0a000000u
@@ -66,11 +68,13 @@ static uint32_t max_free() {
     return std::max(best, USER_END - s);
 }
 
+void savestate_service(void);
+
 /* ------------------------------------------------------------------ threads */
 enum St { DORMANT, READY, RUNNING, WAITING, DEAD };
 enum Wait { W_NONE, W_DELAY, W_SLEEP, W_SEMA, W_EVF, W_VBLANK, W_THREADEND, W_MBX };
 struct Thread {
-    uint32_t uid; std::string name; CPU cpu; void *fiber = nullptr;
+    uint32_t uid; std::string name; CPU cpu; Coro co;   /* co: the host stack the recompiled code of this thread runs on (coro.h) */
     uint32_t entry = 0, prio = 0x20, stack = 0, stack_size = 0, attr = 0, arglen = 0, argp = 0, gp = 0;
     St st = DORMANT; Wait wk = W_NONE; uint32_t wobj = 0; uint32_t need = 0, mode = 0, out_ptr = 0;
     bool has_to = false; uint64_t wake_at = 0; uint32_t result = 0; uint32_t exit_status = 0; bool wake_pending = false;
@@ -79,7 +83,7 @@ struct Thread {
 static std::map<uint32_t, Thread *> g_threads;
 static std::vector<Thread *> g_all;
 static Thread *g_cur = nullptr;
-static void *g_sched_fiber = nullptr;
+static void *g_sched_sp = nullptr;   /* saved context of the scheduler (k_run runs on the main host stack) */
 static uint64_t g_now = 0, g_next_vblank = VBLANK_US, g_seq = 0;
 static std::deque<Thread *> g_vblank_waiters;
 void display_present(void);
@@ -91,7 +95,7 @@ static Thread *find_thread(uint32_t uid) { auto it = g_threads.find(uid); return
 static void make_ready(Thread *t, uint32_t result) {
     t->st = READY; t->wk = W_NONE; t->has_to = false; t->result = result; t->seq = ++g_seq;
 }
-static void to_sched() { SwitchToFiber(g_sched_fiber); }
+static void to_sched() { tf_coro_switch(&g_cur->co.sp, g_sched_sp); }
 
 void k_block_current(uint64_t timeout_us, bool has_timeout) {
     Thread *t = g_cur;
@@ -124,13 +128,13 @@ static void preempt_check(bool yield_equal = false) {
     }
 }
 
-static VOID CALLBACK fiber_entry(void *p) {
+static void thread_entry(void *p) {
     Thread *t = (Thread *)p;
     psp_call(&t->cpu, t->entry);
     /* retorno normal da funcao da thread == sceKernelExitThread(v0) */
     t->exit_status = t->cpu.r[2]; t->st = DORMANT;
     for (auto *o : g_all) if (o->st == WAITING && o->wk == W_THREADEND && o->wobj == t->uid) make_ready(o, t->exit_status);
-    to_sched();
+    to_sched();   /* never comes back: a restart of the thread (start_thread) builds a new first frame */
 }
 
 static uint32_t make_thread(const char *name, uint32_t entry, uint32_t prio, uint32_t stack_size, uint32_t attr) {
@@ -154,9 +158,8 @@ static void start_thread(Thread *t, uint32_t arglen, uint32_t argp, uint32_t gp)
     memset(&t->cpu.r, 0, sizeof t->cpu.r);
     t->cpu.r[4] = arglen; t->cpu.r[5] = copied; t->cpu.r[29] = sp; t->cpu.r[28] = gp; t->cpu.r[26] = t->tls; t->cpu.r[31] = EXIT_STUB;
     t->gp = gp;
-    if (t->fiber) DeleteFiber(t->fiber);
     t->suspended = false;
-    t->fiber = CreateFiberEx(0, 8u << 20, 0, fiber_entry, t);   /* pilha do host: 8 MiB reservados */
+    if (!coro_create(t->co, thread_entry, t)) { fprintf(stderr, "[kernel] no host stack for thread %s\n", t->name.c_str()); host_fatal(7); }
     make_ready(t, 0);
 }
 
@@ -168,8 +171,8 @@ uint32_t k_start_root(uint32_t entry, uint32_t gp, uint32_t arglen, uint32_t arg
 
 /* Executa ate nao restar thread viva. Devolve 0. */
 int k_run(void) {
-    g_sched_fiber = ConvertThreadToFiber(nullptr);
     for (;;) {
+        savestate_service();   /* a state save/load asked for by the player (savestate.cpp): between two thread slices every PSP thread is parked at a system call */
         Thread *best = nullptr;
         for (auto *t : g_all) if (t->st == READY && !t->suspended && (!best || t->prio < best->prio || (t->prio == best->prio && t->seq < best->seq))) best = t;
         if (!best) {
@@ -187,7 +190,7 @@ int k_run(void) {
             continue;
         }
         g_cur = best; best->st = RUNNING;
-        SwitchToFiber(best->fiber);
+        tf_coro_switch(&g_sched_sp, best->co.sp);
         if (g_cur && g_cur->st == RUNNING) g_cur->st = READY;
         g_cur = nullptr;
     }
@@ -249,10 +252,10 @@ HLE(sceKernelGetThreadId) { RET(k_current_uid()); }
 HLE(sceKernelGetThreadCurrentPriority) { RET(g_cur ? g_cur->prio : 0); }
 HLE(sceKernelChangeThreadPriority) { Thread *t = ARG(0) ? find_thread(ARG(0)) : g_cur; if (!t) { RET(KERR_UNKNOWN_UID); return; } t->prio = ARG(1); RET(0); preempt_check(); }
 HLE(sceKernelChangeCurrentThreadAttr) { RET(0); }
-HLE(sceKernelDeleteThread) {   /* o objeto Thread fica (pode haver ponteiros nas filas de espera), mas pilha, TLS e a fiber do host sao liberados */
+HLE(sceKernelDeleteThread) {   /* o objeto Thread fica (pode haver ponteiros nas filas de espera), mas pilha, TLS e a pilha do host sao liberados */
     Thread *t = find_thread(ARG(0)); if (!t) { RET(0); return; }   /* como antes (o PSP devolveria erro; o jogo funcionou assim) */
     t->st = DEAD; k_free(t->stack); k_free(t->tls); t->stack = t->tls = 0;
-    if (t->fiber && t != g_cur) { DeleteFiber(t->fiber); t->fiber = nullptr; }
+    if (t != g_cur) coro_release(t->co);   /* the address range stays (a saved state may bring the thread back) */
     g_threads.erase(t->uid); g_all.erase(std::find(g_all.begin(), g_all.end(), t)); RET(0);
 }
 HLE(sceKernelExitThread) {
@@ -409,12 +412,13 @@ HLE(sceKernelCreateFpl) {   /* (name, part, attr, blocksize, nblocks, opt) */
 HLE(sceKernelDeleteFpl) { auto it = g_fpl.find(ARG(0)); if (it != g_fpl.end()) { k_free(it->second.base); g_fpl.erase(it); } RET(0); }
 HLE(sceKernelAllocateFpl) {   /* (uid, void **data, timeout*) */
     auto it = g_fpl.find(ARG(0)); if (it == g_fpl.end()) { RET(KERR_UNKNOWN_UID); return; }
-    Fpl &f = it->second;
     for (;;) {
+        Fpl &f = it->second;
         for (uint32_t i = 0; i < f.n; i++) if (!f.used[i]) { f.used[i] = true; wr32(ARG(1), f.base + i * f.bsize); RET(0); return; }
         bool has; uint32_t to = timeout_of(ARG(2), has);
         g_cur->wk = W_MBX; g_cur->wobj = ARG(0); enqueue_waiter(f.q, g_cur); k_block_current(to, has);
         if (g_cur->result) { RET(g_cur->result); return; }
+        it = g_fpl.find(ARG(0)); if (it == g_fpl.end()) { RET(KERR_UNKNOWN_UID); return; }   /* looked up again: a loaded state (savestate.cpp) rebuilds the maps */
     }
 }
 HLE(sceKernelFreeFpl) {
@@ -494,3 +498,51 @@ void k_dump_threads(void) {
 
 
 CPU *k_current_cpu(void) { return g_cur ? &g_cur->cpu : nullptr; }
+
+/* ------------------------------------------------------------------ state save / load (savestate.cpp)
+ * Called between two thread slices (k_run), when every PSP thread is parked inside a system call and its whole host context is its Coro: the
+ * Thread object plus the bytes of its host stack from the saved stack pointer to the top. A restore puts both back at the same addresses (the
+ * stacks never move) and rebuilds the kernel tables. Thread objects are never freed (the wait queues may point to them), so a thread that was deleted
+ * after the save comes back as the same object. */
+struct KernelSnap {
+    std::vector<Block> blocks; uint32_t next_uid;
+    std::vector<Thread *> all; std::vector<Thread> copies; std::vector<std::vector<uint8_t>> stacks;
+    uint64_t now, next_vblank, seq;
+    std::map<uint32_t, SubIntr> subintr;
+    std::map<uint32_t, Sema> sema; std::map<uint32_t, Evf> evf; std::map<uint32_t, Fpl> fpl;
+    std::map<uint32_t, uint32_t> vpl_size, vpl_blocks; std::map<uint32_t, Mbx> mbx;
+    std::vector<ModInfo> mods; CPU intr; bool intr_init;
+};
+std::shared_ptr<void> k_state_save(void) {
+    auto s = std::make_shared<KernelSnap>();
+    s->blocks = g_blocks; s->next_uid = g_next_uid; s->now = g_now; s->next_vblank = g_next_vblank; s->seq = g_seq;
+    s->subintr = g_vblank_subintr; s->sema = g_sema; s->evf = g_evf; s->fpl = g_fpl; s->vpl_size = g_vpl_size; s->vpl_blocks = g_vpl_blocks; s->mbx = g_mbx;
+    s->mods = g_mods; s->intr = g_intr; s->intr_init = g_intr_init;
+    s->all = g_all;
+    for (Thread *t : g_all) {
+        s->copies.push_back(*t);
+        std::vector<uint8_t> st;
+        if (t->co.base && t->co.committed && t->co.sp && t->st != DORMANT && t->st != DEAD) st.assign((const uint8_t *)t->co.sp, (const uint8_t *)t->co.top());
+        s->stacks.push_back(std::move(st));
+    }
+    return s;
+}
+bool k_state_load(const std::shared_ptr<void> &p) {
+    const KernelSnap &s = *(const KernelSnap *)p.get();
+    for (Thread *t : g_all) if (std::find(s.all.begin(), s.all.end(), t) == s.all.end()) { t->st = DEAD; coro_release(t->co); }   /* created after the save */
+    for (size_t i = 0; i < s.all.size(); i++) {
+        Thread *t = s.all[i]; const Coro cur = t->co;
+        *t = s.copies[i];
+        if (!s.copies[i].co.base) t->co = cur; else t->co.committed = cur.committed;   /* the real state of the memory, not the saved one */
+        if (!s.stacks[i].empty()) {
+            if (!coro_recommit(t->co)) return false;
+            memcpy(t->co.sp, s.stacks[i].data(), s.stacks[i].size());
+        }
+    }
+    g_all = s.all; g_threads.clear(); for (Thread *t : g_all) g_threads[t->uid] = t;
+    g_cur = nullptr; g_in_intr = false;
+    g_blocks = s.blocks; g_next_uid = s.next_uid; g_now = s.now; g_next_vblank = s.next_vblank; g_seq = s.seq;
+    g_vblank_subintr = s.subintr; g_sema = s.sema; g_evf = s.evf; g_fpl = s.fpl; g_vpl_size = s.vpl_size; g_vpl_blocks = s.vpl_blocks; g_mbx = s.mbx;
+    g_mods = s.mods; g_intr = s.intr; g_intr_init = s.intr_init;
+    return true;
+}

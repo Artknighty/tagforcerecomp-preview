@@ -5,11 +5,13 @@
  *   shot ARQ.bmp    roda 1 quadro e grava a imagem
  *   peek ADDR LEN   le LEN bytes da RAM do PSP (ADDR hex) e responde em hex
  *   poke ADDR HEX   escreve bytes na RAM do PSP
+ *   save N / load N guarda / restaura o save state do slot N (1..4; savestate.cpp); roda 2 quadros e responde "saved N" / "loaded N" ou o erro
  *   ping            responde o quadro atual
  *   quit            encerra o jogo
  * Resposta (resp.txt): "id ok <quadro> [dados]" ou "id erro <motivo>". */
 #include "ctl.h"
 #include "hle.h"
+#include "savestate.h"
 #include <windows.h>
 #include <stdio.h>
 #include <stdlib.h>
@@ -17,7 +19,7 @@
 #include <string>
 
 static const char *dir(void) { static const char *d = getenv("TF_CTL"); return d && *d ? d : nullptr; }
-static uint32_t g_mask; static int64_t g_run; static std::string g_pend_id, g_shot; static bool g_shot_pending;
+static uint32_t g_mask; static int64_t g_run; static std::string g_pend_id, g_shot; static bool g_shot_pending, g_pend_state;
 
 volatile bool g_ctl_texdump_arm = false;
 volatile bool g_ctl_nodraw;
@@ -42,7 +44,7 @@ bool ctl_frame(uint64_t frame) {
     if (!dir()) return false;
     if (g_shot_pending) g_shot_pending = false;   /* o quadro anterior gravou a captura */
     if (g_run > 0) { g_run--; if (g_run > 0) return false; }
-    if (!g_pend_id.empty()) { reply(g_pend_id, frame, ""); g_pend_id.clear(); }
+    if (!g_pend_id.empty()) { reply(g_pend_id, frame, g_pend_state ? savestate_last_result() : ""); g_pend_id.clear(); g_pend_state = false; }
     std::string cmdf = std::string(dir()) + "/cmd.txt";
     for (;;) {
         FILE *f = fopen(cmdf.c_str(), "rb");
@@ -62,6 +64,10 @@ bool ctl_frame(uint64_t frame) {
             while (*args == ' ') args++;
             std::string p = args; while (!p.empty() && (p.back() == '\n' || p.back() == '\r' || p.back() == ' ')) p.pop_back();
             g_shot = p; g_shot_pending = true; g_run = 1; g_pend_id = id; return false;
+        }
+        if (!strcmp(cmd, "save") || !strcmp(cmd, "load")) {   /* done by the scheduler between two thread slices; the reply comes two frames later */
+            const int n = atoi(args); if (n < 1 || n > SAVESTATE_SLOTS) { reply_err(id, "uso: save|load 1..4"); continue; }
+            savestate_request(n - 1, cmd[0] == 'l'); g_run = 2; g_pend_id = id; g_pend_state = true; return false;
         }
         if (!strcmp(cmd, "peek")) {
             unsigned long a = 0, l = 0; if (sscanf(args, "%lx %lu", &a, &l) != 2 || l > 65536) { reply_err(id, "uso: peek ADDR LEN"); continue; }

@@ -281,3 +281,22 @@ void hooks_dev_init(void) {
 }
 
 bool host_module_loaded(const char *name) { for (auto *m : g_modules) if (m->name && !strcmp(m->name, name)) return true; return false; }
+
+/* ---- state save / load (savestate.cpp): the table of loaded modules and what is being hooked right now. The translated code itself is compiled once at
+ * start and never changes; "loading a module" only fills these tables (and the memory image, which the state keeps). */
+#include <memory>
+struct HostSnap {
+    std::vector<const GenModule *> modules; std::map<uint32_t, ImportEntry> imports; std::map<uint32_t, HleFn> bound;
+    uint32_t skip_addr, run_addr; size_t skip_from, run_idx; void *hook_owner; uint32_t hook_cur;
+};
+std::shared_ptr<void> host_state_save(void) {
+    auto s = std::make_shared<HostSnap>();
+    s->modules = g_modules; s->imports = g_imports; s->bound = g_bound;
+    s->skip_addr = g_skip_addr; s->skip_from = g_skip_from; s->run_addr = g_run_addr; s->run_idx = g_run_idx; s->hook_owner = g_hook_owner; s->hook_cur = g_hook_cur;
+    return s;
+}
+void host_state_load(const std::shared_ptr<void> &p) {
+    const HostSnap &s = *(const HostSnap *)p.get();
+    g_modules = s.modules; g_imports = s.imports; g_bound = s.bound; g_fn_cache.clear();
+    g_skip_addr = s.skip_addr; g_skip_from = s.skip_from; g_run_addr = s.run_addr; g_run_idx = s.run_idx; g_hook_owner = s.hook_owner; g_hook_cur = s.hook_cur;
+}

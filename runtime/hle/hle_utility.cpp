@@ -6,6 +6,8 @@
 #include <windows.h>
 #include <stdlib.h>
 #include <io.h>
+#include <memory>
+#include <array>
 
 struct Dialog { int status = 0; uint32_t params = 0; };
 static Dialog g_save, g_msg, g_osk, g_net;
@@ -116,3 +118,7 @@ HLE(sceUtilityNetconfInitStart) { g_net.params = ARG(0); g_net.status = 1; RET(0
 HLE(sceUtilityNetconfGetStatus) { RET(g_net.status); if (g_net.status == 1) g_net.status = 2; }
 HLE(sceUtilityNetconfUpdate) { step(g_net, nullptr); RET(0); }
 HLE(sceUtilityNetconfShutdownStart) { g_net.status = 0; RET(0); }
+
+/* ---- state save / load (savestate.cpp) */
+std::shared_ptr<void> utility_state_save(void) { return std::make_shared<std::array<Dialog, 4>>(std::array<Dialog, 4>{g_save, g_msg, g_osk, g_net}); }
+void utility_state_load(const std::shared_ptr<void> &p) { const auto &a = *(const std::array<Dialog, 4> *)p.get(); g_save = a[0]; g_msg = a[1]; g_osk = a[2]; g_net = a[3]; }

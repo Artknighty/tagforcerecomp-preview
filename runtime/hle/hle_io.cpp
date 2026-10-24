@@ -15,7 +15,9 @@ struct File {
     FILE *fp = nullptr; std::vector<DirEnt> ents; size_t di = 0;
     bool has_async = false; int64_t async_res = 0; uint32_t async_cb = 0;
     bool closed = false;   /* sceIoCloseAsync: o descritor so sai da tabela quando o resultado e colhido (Wait/PollAsync) */
+    uint64_t serial = 0; std::string path; uint32_t flags = 0;   /* which open() made it, and how (a loaded state reopens the host files; savestate.cpp) */
 };
+static uint64_t g_serial;
 static std::map<uint32_t, File> g_files;
 static uint32_t g_next_fd = 3;
 static std::string g_cwd = "disc0:/";
@@ -66,6 +68,7 @@ static int64_t do_open_(const std::string &path, uint32_t flags) {
         if (!f.fp) return ERR_NOENT;
         f.kind = File::HOST;
     } else return ERR_NOENT;
+    f.serial = ++g_serial; f.flags = flags; if (f.kind == File::HOST) f.path = host_path(rest);
     uint32_t fd = g_next_fd++; g_files[fd] = f;
     if (io_trace()) fprintf(stderr, "[io] open %s -> fd %u (lba %u, %u bytes)\n", path.c_str(), fd, f.lba, f.size);
     return fd;
@@ -144,6 +147,7 @@ static int64_t do_dopen(const std::string &path) {
         do { f.ents.push_back({fd.cFileName, (fd.dwFileAttributes & FILE_ATTRIBUTE_DIRECTORY) != 0, fd.nFileSizeLow}); } while (FindNextFileA(h, &fd));
         FindClose(h);
     } else return ERR_NOENT;
+    f.serial = ++g_serial;
     uint32_t id = g_next_fd++; g_files[id] = f; return id;
 }
 
@@ -211,3 +215,33 @@ HLE(sceIoPollAsync) { wait_async(c); }
 HLE(sceIoSetAsyncCallback) { RET(0); }
 HLE(sceIoChangeAsyncPriority) { RET(0); }
 HLE(sceIoCancel) { RET(0); }
+
+/* ---- state save / load (savestate.cpp): the file table with the position of each host file. A file closed since the save is reopened, one opened
+ * since is closed. Data the game wrote to ms0 after the save stays on disk (only the game's memory goes back). */
+#include <memory>
+struct IoSnap { std::map<uint32_t, File> files; std::map<uint32_t, int64_t> hostpos; uint32_t next_fd; std::string cwd; };
+std::shared_ptr<void> io_state_save(void) {
+    auto s = std::make_shared<IoSnap>();
+    s->files = g_files; s->next_fd = g_next_fd; s->cwd = g_cwd;
+    for (auto &kv : g_files) if (kv.second.kind == File::HOST && kv.second.fp) s->hostpos[kv.first] = _ftelli64(kv.second.fp);
+    return s;
+}
+void io_state_load(const std::shared_ptr<void> &p) {
+    const IoSnap &s = *(const IoSnap *)p.get();
+    auto kept = [&](const File &cur, uint32_t fd) { auto it = s.files.find(fd); return it != s.files.end() && it->second.serial == cur.serial && it->second.fp == cur.fp; };
+    for (auto &kv : g_files) if (kv.second.fp && !kept(kv.second, kv.first)) { fclose(kv.second.fp); kv.second.fp = nullptr; }
+    std::map<uint32_t, File> nf;
+    for (auto &kv : s.files) {
+        File f = kv.second;
+        if (f.fp) {
+            auto cur = g_files.find(kv.first);
+            if (cur != g_files.end() && cur->second.serial == f.serial && cur->second.fp == f.fp) f.fp = cur->second.fp;   /* still open */
+            else if (f.kind == File::HOST) f.fp = fopen(f.path.c_str(), (f.flags & 0x0002) ? "r+b" : "rb");
+            else if (f.kind == File::MOD) { uint64_t msize; if (!mods_open(f.lba, &f.fp, &f.base, &msize)) f.fp = nullptr; }
+            else f.fp = nullptr;
+            if (f.fp && f.kind == File::HOST) { auto h = s.hostpos.find(kv.first); if (h != s.hostpos.end()) _fseeki64(f.fp, h->second, SEEK_SET); }
+        }
+        nf[kv.first] = f;
+    }
+    g_files = nf; g_next_fd = s.next_fd; g_cwd = s.cwd;
+}

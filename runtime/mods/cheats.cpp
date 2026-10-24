@@ -29,10 +29,14 @@
  *        +0x0EC4 + character*8:    duel record against that duelist (u16 wins, u16 losses, u16 draws, u16 pad); not touched
  *        +0x155C + card_index*4:   card entry (byte0 bit0 flag, bits 1-2 status 0 unseen / 1 new / 2 seen, byte1 bit7 flag + bits 0-6 copies)
  *        +0x8FF4 + pack*0x2A:      pack (byte0 shop value, byte1 bits 0-1 state: 0 locked, 1 seen, 2 available), packs 0..47
+ *   5. Save state / Load state (F1 / F12, four slots; runtime/core/savestate.cpp): the whole machine goes back to the saved point in a few milliseconds.
+ *      For tests and practice. A state lives in memory only (gone when the game closes) and is refused while a movie plays. The cheat just asks; the
+ *      runtime does it between two thread slices.
  *   BOOT 08833fc4 ehsys_end_of_frame (every logical frame): panel, L + R + UP/DOWN and the pending unlock. */
 #include "../../plugins/sdk/tfmod.h"
 #include "../../decomp/common/duelists.h"
 #include "util.h"
+#include "savestate.h"
 #include <windows.h>
 #include <algorithm>
 #include <map>
@@ -320,6 +324,14 @@ static void unlock_quadro(TfCpu *c) {
     g_unlock_pending = false; unlock_all(c);
 }
 
+/* ------------------------------------------------------------------ 5. Save states */
+static int g_state_slot = 1;   /* 1..SAVESTATE_SLOTS: the slot F1 / F12 and the menu items use */
+static int state_slot_get(void) { return g_state_slot; }
+static void state_slot_set(int v) { g_state_slot = std::max(1, std::min(SAVESTATE_SLOTS, v)); }
+static int state_get(void) { return 0; }   /* one-shot menu items: always shown unchecked */
+static void state_save_set(int v) { if (v) savestate_request(g_state_slot - 1, false); }
+static void state_load_set(int v) { if (v) savestate_request(g_state_slot - 1, true); }
+
 /* ------------------------------------------------------------------ */
 static int hk_quadro(TfCpu *c) { mult_quadro(); speed_quadro(); ver_cartas_quadro(c); unlock_quadro(c); return 0; }
 
@@ -333,6 +345,9 @@ int cheats_init(const TfModApi *api) {   /* called by plugins_load; non-zero = n
     A->add_slider(L"&DP multiplier in duels", L"x", 1, MULT_MAX, 1, mult_get, mult_set);
     A->add_slider(L"&Fast-forward (game speed)", L"x", 1, SPEED_MAX, 1, speed_get, speed_set);
     A->add_toggle(L"&Unlock everything (cards, packs, duelists)", VK_F2, unlock_get, unlock_set);
+    A->add_slider(L"Save state s&lot", L"", 1, SAVESTATE_SLOTS, 1, state_slot_get, state_slot_set);
+    A->add_toggle(L"Save sta&te", VK_F1, state_get, state_save_set);
+    A->add_toggle(L"Load state", VK_F12, state_get, state_load_set);
     g_speed = g_speed_start; if (g_speed > 1) A->set_speed(g_speed);
     A->hook(F_QUADRO, hk_quadro);
     A->hook(F_RECOMPENSA, hk_recompensa);

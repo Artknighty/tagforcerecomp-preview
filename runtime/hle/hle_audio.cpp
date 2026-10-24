@@ -8,6 +8,7 @@
 #include <algorithm>
 #include <vector>
 #include <string>
+#include <memory>
 #include "ffmpeg_dec.h"
 
 void audio_out_init(void);
@@ -361,4 +362,28 @@ HLE(sceAtracDecodeData) {   /* (id, out, *samples, *finish, *remainFrame) */
     }
     if (ARG(2)) wr32(ARG(2), n); if (ARG(3)) wr32(ARG(3), end ? 1 : 0); if (ARG(4)) wr32(ARG(4), 0xffffffffu);
     RET(n == 0 && end ? 0x80630024u : 0);
+}
+
+/* ---- state save / load (savestate.cpp). The channel cursors are positions in the audio device's ring (real time), so they stay as they are; the
+ * ATRAC decoders are reopened (their decoded-ahead buffer is dropped and the next read repositions them). */
+struct AudioSnap { AudioCh ch[8]; uint32_t next_ch; SasVoice sas[32]; uint32_t grain; Atrac atrac[6]; };
+std::shared_ptr<void> audio_state_save(void) {
+    auto s = std::make_shared<AudioSnap>();
+    for (int i = 0; i < 8; i++) s->ch[i] = g_ch[i];
+    s->next_ch = g_next_ch; s->grain = g_grain;
+    for (int i = 0; i < 32; i++) s->sas[i] = g_sas[i];
+    for (int i = 0; i < 6; i++) { s->atrac[i] = g_atrac[i]; s->atrac[i].dec = nullptr; }
+    return s;
+}
+void audio_state_load(const std::shared_ptr<void> &p) {
+    const AudioSnap &s = *(const AudioSnap *)p.get();
+    for (int i = 0; i < 8; i++) { const uint64_t cur = g_ch[i].cursor; g_ch[i] = s.ch[i]; g_ch[i].cursor = cur; }
+    g_next_ch = s.next_ch; g_grain = s.grain;
+    for (int i = 0; i < 32; i++) g_sas[i] = s.sas[i];
+    for (int i = 0; i < 6; i++) {
+        atrac_free(g_atrac[i]);
+        Atrac a = s.atrac[i]; a.dec = nullptr; a.pcm.clear(); a.pcm_rd = 0; a.pcm_pos = 1ll << 40; a.nblk = 0;   /* pcm_pos: forces a reposition on the first read */
+        if (a.used && !a.ovr && a.block && a.data_off) a.dec = atracdec_open(a.plus, (int)a.chans, (int)a.block, a.extra_len ? mem_ptr(a.buf + a.extra_off) : nullptr, (int)a.extra_len);
+        g_atrac[i] = a;
+    }
 }

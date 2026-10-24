@@ -37,6 +37,7 @@ static struct Hd {
 static void hd_open(void);
 static uint32_t g_hd_devidos;   /* quadros que o decodificador original ja entregou e o HD ainda nao (ver hd_advance) */
 static bool g_created;   /* sceMpegCreate ja foi chamado (o jogo cria o mpeg ANTES de abrir o arquivo) */
+bool mpeg_active(void) { return g_created; }   /* a movie is being played: its decoder state is not part of a saved state (savestate.cpp) */
 void mpeg_movie_opened(uint32_t lba) {   /* chamado em todo sceIoOpen de arquivo do disco; o achado vale ate o proximo sceMpegCreate */
     std::vector<std::wstring> files; mods_movie_hd_files(files);
     for (auto &f : files) {

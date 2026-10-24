@@ -183,3 +183,8 @@ HLE(sceKernelUnloadModule) {
     g_loaded.erase(std::remove_if(g_loaded.begin(), g_loaded.end(), [&](const Loaded &x) { return x.uid == uid; }), g_loaded.end()); RET(0);
 }
 HLE(sceKernelGetModuleIdList) { RET(0); }
+
+/* ---- state save / load (savestate.cpp) */
+#include <memory>
+std::shared_ptr<void> modules_state_save(void) { return std::make_shared<std::vector<Loaded>>(g_loaded); }
+void modules_state_load(const std::shared_ptr<void> &p) { g_loaded = *(const std::vector<Loaded> *)p.get(); }
