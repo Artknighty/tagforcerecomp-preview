@@ -117,3 +117,56 @@ def flat_col(out, u, v0, v1, k=K):
 def flat_row(out, u0, u1, v, k=K):
     """Texel row the game stretches vertically: every pixel row equals its centre row."""
     out[v * k:(v + 1) * k, u0 * k:u1 * k] = out[v * k + k // 2:v * k + k // 2 + 1, u0 * k:u1 * k]
+
+
+def _classes(ids, pal, tau):
+    """Merge palette entries that touch each other with a colour step below `tau` (gradients, dithering) into one class."""
+    par = list(range(len(pal)))
+
+    def find(a):
+        while par[a] != a:
+            par[a] = par[par[a]]
+            a = par[a]
+        return a
+    p = pal.astype(np.float32)
+    h, w = ids.shape
+    for dy, dx in ((0, 1), (1, 0)):
+        a, b = ids[:h - dy, :w - dx].ravel(), ids[dy:, dx:].ravel()
+        for x, y in set(zip(a.tolist(), b.tolist())):
+            if x != y and np.linalg.norm(p[x] - p[y]) < tau:
+                par[find(x)] = find(y)
+    roots = {r: i for i, r in enumerate(sorted({find(i) for i in range(len(pal))}))}
+    return np.array([roots[find(i)] for i in range(len(pal))])[ids], len(roots)
+
+
+def render_smooth(t, k=K, ss=3, sigma=0.65, csigma=0.8, tau=40):
+    """Like render(), but colours inside a shape are smooth: shapes come from the label field (crisp outlines, rounded corners),
+    colours from a normalised gaussian of the texels of the same class (similar neighbouring colours = one class), so gradients stay
+    gradients and flat areas keep the exact colour of the artist."""
+    ids, pal = _labels(t)
+    cid, nc = _classes(ids, pal, tau)
+    h, w = ids.shape
+    Y, X = h * k * ss, w * k * ss
+    wy, wx = _gauss_w(h, Y, sigma), _gauss_w(w, X, sigma)
+    cy, cx = _gauss_w(h, Y, csigma), _gauss_w(w, X, csigma)
+    best = np.full((Y, X), -1.0, np.float32)
+    lab = np.zeros((Y, X), np.int32)
+    for c in range(nc):
+        f = wy @ (cid == c).astype(np.float32) @ wx.T
+        up = f > best
+        best[up] = f[up]
+        lab[up] = c
+    rgba = np.zeros((Y, X, 4), np.float32)
+    for c in range(nc):
+        m = (cid == c).astype(np.float32)
+        den = np.maximum(cy @ m @ cx.T, 1e-6)
+        sel = lab == c
+        for ch in range(4):
+            v = pal.astype(np.float32)[ids][..., ch] * m
+            rgba[..., ch][sel] = ((cy @ v @ cx.T) / den)[sel]
+    a = rgba[..., 3:4] / 255
+    pm = np.concatenate([rgba[..., :3] * a, rgba[..., 3:4]], axis=2)
+    pm = pm.reshape(h * k, ss, w * k, ss, 4).mean(axis=(1, 3))
+    al = pm[..., 3:4]
+    rgb = np.where(al > 0, pm[..., :3] / np.maximum(al / 255, 1e-6), 0)
+    return np.clip(np.concatenate([rgb, al], axis=2) + 0.5, 0, 255).astype(np.uint8)
