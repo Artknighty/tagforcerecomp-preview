@@ -317,6 +317,8 @@ def redraw(t, h=None):
         out = depixel.render(t, K, sigma=SIGMA)
     else:
         out = depixel.render_smooth(t, K, sigma=SOFT.get(h, SIGMA), **FINE.get(h, {}))
+    if h == 'c630f1be':
+        out[:, 124 * K:] = 0                         # two stray opaque columns at the sheet's right edge: the game draws them as a lone vertical line beside the Deck tab
     h, w = t.shape[:2]
     if (t == t[:, :1]).all():                       # every column equal: the game stretches it horizontally
         out[:] = out[:, w * K // 2:w * K // 2 + 1]
