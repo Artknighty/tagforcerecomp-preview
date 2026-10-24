@@ -34,7 +34,7 @@ void display_set_frame(uint32_t addr, uint32_t stride, uint32_t fmt) { g_fb_addr
 uint64_t display_frames(void) { return g_frames; }
 HWND display_hwnd(void) { return g_wnd; }
 /* aviso curto no titulo da janela (ex.: "Game saved"): o PSP mostraria a tela de gravacao do sistema */
-static uint64_t g_notify_until;
+static uint64_t g_notify_until; static std::wstring g_notify_text;
 /* titulo da janela; execucoes de teste (scripts de tools/ definem TF_LOG_DIR) ficam marcadas, para nao serem confundidas com o jogo do
  * jogador (ex.: o teste de New Game abre sem save e mostra o seletor de idioma) */
 #include "capturas.inc"
@@ -43,6 +43,7 @@ void display_notify(const char *msg) {
     if (!g_wnd) return;
     char t[200]; snprintf(t, sizeof t, "%s  -  %s", win_title(), msg); SetWindowTextA(g_wnd, t);
     g_notify_until = g_frames + 180;
+    wchar_t w[200]; MultiByteToWideChar(CP_ACP, 0, msg, -1, w, 200); g_notify_text = w;   /* also drawn on screen (the title bar is invisible in fullscreen) */
 }
 
 /* Janela: redimensionavel (imagem mantem a proporcao 480x272, com faixas pretas), barra de menu (menu.cpp), tela cheia
@@ -802,6 +803,7 @@ void display_present(void) {
           for (int y = 0; y < hh; y++) { const uint32_t *r = hi + (size_t)y * hs; uint32_t *o = &g_hi[(size_t)y * hw]; for (int x = 0; x < hw; x++) { uint32_t p = r[x]; o[x] = ((p & 255) << 16) | (p & 0xff00) | ((p >> 16) & 255); } }
           g_src = g_hi.data(); g_sw = hw; g_sh = hh;
       } }
+    if (g_notify_until && g_frames < g_notify_until) modbox_panel(g_frames, 1, g_notify_text.c_str(), {});   /* on-screen notice (GPU overlay) */
     bool ov_new = false;   /* o overlay (F3, caixas dos mods) mudou nesta chamada: a imagem precisa ser apresentada de novo */
     if (gpu) {   /* overlay num quadro 480x272 proprio (caixa translucida + texto), composto pela GPU */
         /* a imagem do overlay (1920x1088, 8 MB) so vai para a GPU quando muda: o texto do fps muda a cada 30 quadros e a caixa dos mods
