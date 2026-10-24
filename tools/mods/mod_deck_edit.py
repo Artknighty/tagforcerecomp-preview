@@ -280,9 +280,9 @@ def tab_head(t):
     def inside(X, Y):
         col = np.empty(X.shape + (4,), np.float32)
         col[:] = fill
-        col[rr_depth(X, Y, (f0 - 0.5, 4.0, f1 + 1.5, 14.0), 2.4) > 0] = (255, 255, 255, 255)
+        col[rr_depth(X, Y, (f0, 3.0, f1 + 1, 15.0), 2.6) > 0] = (255, 255, 255, 255)
         return col
-    body = beveled(W, H, (0, 0, bx1, 15), (3.6, 3.6, 0, 0), [outer, light, dark], inside, (0, 0))
+    body = beveled(W, H, (0, 0, bx1, 18), (3.6, 3.6, 0, 0), [outer, light, dark], inside, (0, 0))
     c = np.zeros((H, W, 4), np.uint8)
     c[15:, 0] = outer
     c[15:, 1] = light
