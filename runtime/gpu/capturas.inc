@@ -111,9 +111,11 @@ void audio_out_skip(bool on);
 extern volatile int g_diag_paused;
 static int g_marcag_n, g_burst_n; static uint64_t g_burst_next;
 static bool g_marcag_pedida, g_nota_aberta;
+static bool g_marcag_piscada;   /* P: flicker mark; the note box may be left empty (the flicker is then searched automatically) */
 static int g_marcag_rapida;   /* marca rapida do controle (sem caixa de nota, nota fixa): 0 = nao, 1 = L3 grafico, 2 = R3 performance, 3 = Start+Select audio */
 static void marca_cpu(void) { if (!g_nota_aberta) g_marcag_pedida = true; }   /* F7 / L3+R3: agora a mesma marca geral do F8 */
 static void marca_graf(void) { if (!g_nota_aberta) g_marcag_pedida = true; }
+static void marca_piscada(void) { if (!g_nota_aberta) { g_marcag_pedida = true; g_marcag_piscada = true; } }
 static void marca_rapida(int tipo) { if (!g_nota_aberta) { g_marcag_pedida = true; g_marcag_rapida = tipo; } }   /* marca sem pausar o jogo */
 static void marca_nota_log(int n, const std::string &u0, const char *pref) {
     /* a nota pode ter varias linhas: no log vira uma linha so, com " / " no lugar de cada quebra (os relatorios leem o log por linha) */
@@ -127,12 +129,12 @@ static void marca_nota_log(int n, const std::string &u0, const char *pref) {
 }
 static bool nota_vazia(const std::string &s) { for (char c : s) if ((unsigned char)c > ' ') return false; return true; }
 /* caixa de nota, na thread do jogo (parado ate Enter/Esc); true = gravar a marca, com o texto em *nota */
-static bool marca_nota_modal(bool graf, std::string *nota) {
+static bool marca_nota_modal(bool graf, std::string *nota, bool piscada = false) {
     nota->clear();
     if (getenv("TF_MARCA_SEM_NOTA")) return true;
     if (const char *a = getenv("TF_MARCA_NOTA_AUTO")) { *nota = a; return !nota_vazia(*nota); }
     g_nota_aberta = true; g_diag_paused++; audio_out_skip(true); const ULONGLONG t0 = GetTickCount64();
-    (void)graf; text_input_begin_multiline(L"What is wrong? Enter = new line, Ctrl+Enter = save, Esc or empty = discard", L"", 2000);
+    (void)graf; text_input_begin_multiline(piscada ? L"Where is the flicker? (optional) Enter = new line, Ctrl+Enter = save (empty = searched automatically), Esc = discard" : L"What is wrong? Enter = new line, Ctrl+Enter = save, Esc or empty = discard", L"", 2000);
     std::wstring t; int st = 1;
     for (;;) {
         MSG m; while (PeekMessageW(&m, nullptr, 0, 0, PM_REMOVE)) { TranslateMessage(&m); DispatchMessageW(&m); }
@@ -142,7 +144,7 @@ static bool marca_nota_modal(bool graf, std::string *nota) {
     audio_out_skip(false); if (g_diag_paused > 0) g_diag_paused--; g_nota_aberta = false;
     g_pausa_ms += (double)(GetTickCount64() - t0);   /* o jogo ficou parado esperando o texto: nao e lentidao */
     if (st != 2) return false;
-    *nota = to_utf8(t); return !nota_vazia(*nota);
+    *nota = to_utf8(t); return piscada || !nota_vazia(*nota);
 }
 
 

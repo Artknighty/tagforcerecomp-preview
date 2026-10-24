@@ -3,6 +3,8 @@
 #include "gfx.h"
 #include "util.h"
 #include <vector>
+#include <deque>
+#include <string>
 #include <array>
 #include <memory>
 #include <unordered_map>
@@ -263,6 +265,8 @@ struct PreC { bool valid = false, solid = false, velset = false; float ex = 0, e
 static std::vector<PreC> g_pcache;
 static std::vector<int8_t> g_bcache; static uint64_t g_bcache_vb = ~0ull; static size_t g_bcache_nv, g_bcache_pv;
 static double g_pf_calc, g_pf_rtt, g_pf_draw; static int g_pf_n;
+struct RingFrame { uint64_t vb = 0; std::string text; };
+static std::deque<RingFrame> g_ring;
 bool interp_lists(const Rec &pv, Rec &cur, int target, int depth, std::vector<Frozen> &tmp) {
     const double tcalc0 = gpu_now_us();
     std::vector<GpuVtx> &g_out = g_outs[depth];
@@ -271,6 +275,24 @@ bool interp_lists(const Rec &pv, Rec &cur, int target, int depth, std::vector<Fr
      * pode mudar, ex.: o botao destacado do menu) */
     const size_t pn = pv.d.size(), cn = cur.d.size();
     std::vector<int> match(cn, -1); std::vector<char> used(pn, 0); size_t hint = 0, nm = 0;   std::vector<char> uvchg(cn, 0);   /* uvchg: sprite 3D (boneco do mapa) que trocou de quadro de animacao (outro recorte da mesma textura) mas e do mesmo tamanho e esta perto: par com UV novo */
+    /* a sliding text line: this glyph pair moved by the same offset as a nearby pair with the same texture rectangle (see the glyph rule below) */
+    static const bool no_slide = getenv("TF_INTERP_NOSLIDE") != nullptr;
+    auto slide_pair = [&](size_t j, size_t k) -> bool {
+        if (no_slide) return false;
+        const GpuVtx &b0 = cur.v[cur.d[j].off], &a0 = pv.v[pv.d[k].off];
+        /* most of the glyphs around it (not just one: a text swap lines up by chance on a few repeated letters, a slide moves the whole line) */
+        int avail = 0, ok = 0;
+        for (int dn = -3; dn <= 3; dn++) {
+            const int jn = (int)j + dn, kn = (int)k + dn;
+            if (!dn || jn < 0 || jn >= (int)cn || (cur.d[jn].n != 6 && cur.d[jn].n != 12) || cur.v[cur.d[jn].off].z >= 1.f) continue;
+            avail++;
+            if (kn < 0 || kn >= (int)pn || !same_kind(pv.d[kn], cur.d[jn])) continue;
+            const GpuVtx &nb = cur.v[cur.d[jn].off], &na = pv.v[pv.d[kn].off];
+            if (fabsf(nb.u - na.u) > 2.f || fabsf(nb.v - na.v) > 2.f) continue;
+            if (fabsf((nb.x - na.x) - (b0.x - a0.x)) <= 2.f && fabsf((nb.y - na.y) - (b0.y - a0.y)) <= 2.f) ok++;
+        }
+        return ok >= 2 && ok * 2 >= avail;
+    };
     for (size_t j = 0; j < cn; j++) {
         const Draw &c = cur.d[j]; int best = -1; float bestc = 1e30f;
         size_t lo = hint > 6 ? hint - 6 : 0, hi = std::min(pn, hint + 14);
@@ -278,7 +300,11 @@ bool interp_lists(const Rec &pv, Rec &cur, int target, int depth, std::vector<Fr
          * de invocacao: ~20 desenhos novos antes do resto) desloca os indices alem da janela e deixava TODO o resto sem par (cena "trocou": o corte
          * 3D ficava a 30 FPS; sessao 20261023_213431, quadros 3779-3793). TF_INTERP_NOWIDE=1 desliga (A/B) */
         static const bool no_wide = getenv("TF_INTERP_NOWIDE") != nullptr;
-        for (int pass = 0; pass < (no_wide ? 1 : 2) && best < 0; pass++)
+        /* a poor pair inside the window (a sprite that would travel > 12 px) does not stop the search: the real partner can be outside it when the
+         * draw order changed (the hand: the raised card moves to the end of the list, the window then held only OTHER cards' identical frames and each
+         * card slid to the next slot in the middle frames; session 20261024_141125, F8 'P' marks). TF_INTERP_NOWIDEPOOR=1 disables */
+        static const bool no_widepoor = getenv("TF_INTERP_NOWIDEPOOR") != nullptr;
+        for (int pass = 0; pass < (no_wide ? 1 : 2) && (best < 0 || (pass == 1 && !no_widepoor && c.n <= 12 && bestc > 12.f * g_T_mul)); pass++)
         for (size_t k = pass ? 0 : lo, kend = pass ? pn : hi; k < kend; k++) {
             if (pass && k >= lo && k < hi) continue;
             if (used[k] || !same_kind(pv.d[k], c)) continue;
@@ -287,6 +313,18 @@ bool interp_lists(const Rec &pv, Rec &cur, int target, int depth, std::vector<Fr
             for (uint32_t q = 0; q < c.n && uvok; q += step) { cost += fabsf(b[q].x - a[q].x) + fabsf(b[q].y - a[q].y); if (fabsf(b[q].u - a[q].u) > 2.f || fabsf(b[q].v - a[q].v) > 2.f) uvok = false; }
             if (!uvok) continue;   /* outro recorte da textura: nao e o mesmo objeto */
             cost /= (float)((c.n + step - 1) / step);
+            /* identical sprites of different sizes far apart (opponent's small hand card vs the player's big one, same card-back texture, drawn
+             * in a different order than the previous frame): the pair made the middle frame squash and slide a card across the table (flicker
+             * of the leftmost hand card, session 20261024_130045/131952, found by the [iaudit] log). A real zoom keeps the displacement small
+             * relative to the sprite. TF_INTERP_NOSIZEGUARD=1 disables */
+            static const bool no_sizeguard = getenv("TF_INTERP_NOSIZEGUARD") != nullptr;
+            if (!no_sizeguard && c.n == 6 && c.s.tex != 0) {
+                float cx0 = 1e9f, cx1 = -1e9f, cy0 = 1e9f, cy1 = -1e9f, px0 = 1e9f, px1 = -1e9f, py0 = 1e9f, py1 = -1e9f;
+                for (int q = 0; q < 6; q++) { cx0 = std::min(cx0, b[q].x); cx1 = std::max(cx1, b[q].x); cy0 = std::min(cy0, b[q].y); cy1 = std::max(cy1, b[q].y); px0 = std::min(px0, a[q].x); px1 = std::max(px1, a[q].x); py0 = std::min(py0, a[q].y); py1 = std::max(py1, a[q].y); }
+                const float cw = cx1 - cx0, ch = cy1 - cy0, pw = px1 - px0, ph = py1 - py0, big = std::max(std::max(cw, ch), std::max(pw, ph));
+                const bool resized = fabsf(cw - pw) > 0.3f * std::max(cw, pw) + 2 || fabsf(ch - ph) > 0.3f * std::max(ch, ph) + 2;
+                if (resized && cost > 0.75f * big) continue;
+            }
             /* letra de texto 2D (um desenho de 1 quadrado, ou 2 com a sombra, no atlas da fonte): quando a mensagem do dialogo troca, o MESMO
              * recorte aparece em outra palavra e o pareamento por UV o fazia deslizar ate la ("Nic to eet you" por ~50 ms no 120 FPS; sessao
              * 20261018_121134). Texto nao anda mais que alguns px por quadro: acima disso e troca de conteudo, sem par (aparece como no quadro
@@ -294,7 +332,13 @@ bool interp_lists(const Rec &pv, Rec &cur, int target, int depth, std::vector<Fr
             if (!v1b(8) && (c.n == 6 || c.n == 12) && cur.v[c.off].z < 1.f) {
                 float gx0 = 1e9f, gx1 = -1e9f, gy0 = 1e9f, gy1 = -1e9f;
                 for (uint32_t q = 0; q < c.n; q++) { const GpuVtx &w = cur.v[c.off + q]; gx0 = std::min(gx0, w.x); gx1 = std::max(gx1, w.x); gy0 = std::min(gy0, w.y); gy1 = std::max(gy1, w.y); }
-                if (gx1 - gx0 <= 40.f && gy1 - gy0 <= 40.f && cost > 4.f * g_T_mul) continue;
+                if (gx1 - gx0 <= 40.f && gy1 - gy0 <= 40.f && cost > 4.f * g_T_mul) {
+                    /* a whole line of text sliding in (Free Duel opponent panel: name, deck, portrait labels fly in at ~70 px per game frame, the
+                     * glyphs were left unpaired = 30 FPS): a big move is real when the NEIGHBOURING glyph (next or previous draw) has the same texture
+                     * rectangle and moved by the same offset. A content swap does not line up like that. TF_INTERP_NOSLIDE=1 disables */
+                    const bool slide = slide_pair(j, k);
+                    if (!slide) continue;
+                }
             }
             /* objetos identicos em fila (pacotes da pilha da loja, cartas da mao): o vizinho pode estar mais perto na tela que o proprio objeto
              * quando ele anda (um pacote subindo), e o par saia deslocado em cadeia. O jogo desenha na mesma ordem quase sempre: o candidato
@@ -316,7 +360,7 @@ bool interp_lists(const Rec &pv, Rec &cur, int target, int depth, std::vector<Fr
             float mdx = 0, x0 = 1e9f, x1 = -1e9f; uint32_t cnt = 0;
             for (uint32_t q = 0; q < c.n; q += step) { mdx += fabsf(b[q].x - a[q].x); x0 = std::min(x0, b[q].x); x1 = std::max(x1, b[q].x); cnt++; }
             mdx /= (float)cnt;
-            if (mdx > 1.5f && x1 - x0 < 80.f && mdx >= 0.5f * (x1 - x0)) {
+            if (mdx > 1.5f && x1 - x0 < 80.f && mdx >= 0.5f * (x1 - x0) && !((c.n == 6 || c.n == 12) && slide_pair(j, (size_t)best))) {
                 for (size_t k = lo; k < hi; k++) {
                     if ((int)k == best || !same_kind(pv.d[k], c)) continue;
                     const GpuVtx *o = &pv.v[pv.d[k].off]; float pos = 0; bool uvdiff = false;
@@ -341,6 +385,52 @@ bool interp_lists(const Rec &pv, Rec &cur, int target, int depth, std::vector<Fr
             }
         }
         if (best >= 0) { match[j] = best; used[best] = 1; hint = best + 1; nm++; }
+    }
+    /* Always on (TF_INTERP_NOAUDIT=1 disables): sanity check of every accepted pair, no images needed. A sprite quad whose size or texture rectangle
+     * changes a lot between the two real frames is the signature of a wrong pairing (the middle frame shows a squashed or swapped card). */
+    static const bool utrace = getenv("TF_INTERP_TRACE") != nullptr;
+    if (utrace && depth == 0) {   /* debug: every draw that found no partner (it shows up in the middle frame only as the new one, i.e. at 30 FPS) */
+        int nu = 0;
+        for (size_t j = 0; j < cn; j++) if (match[j] < 0) nu++;
+        fprintf(stderr, "[iunm] vb=%llu unmatched %d of %zu\n", (unsigned long long)g_cur_vb, nu, cn);
+        for (size_t j = 0, shown = 0; j < cn && shown < 40; j++) {
+            if (match[j] >= 0) continue; const Draw &c = cur.d[j]; shown++;
+            float x0 = 1e9f, x1 = -1e9f, y0 = 1e9f, y1 = -1e9f; for (uint32_t q = 0; q < c.n; q++) { const GpuVtx &w = cur.v[c.off + q]; x0 = std::min(x0, w.x); x1 = std::max(x1, w.x); y0 = std::min(y0, w.y); y1 = std::max(y1, w.y); }
+            fprintf(stderr, "[iunm]   %zu n=%u tex=%x %dx%d box %.0f,%.0f %.0fx%.0f\n", j, c.n, c.s.tex, c.s.tw, c.s.th, x0, y0, x1 - x0, y1 - y0);
+        }
+    }
+    static const bool audit = getenv("TF_INTERP_NOAUDIT") == nullptr;
+    if (audit && depth == 0) {
+        int bad = 0;
+        for (size_t j = 0; j < cn; j++) {
+            if (match[j] < 0 || cur.d[j].n != 6 || cur.d[j].s.tex == 0) continue;
+            const Draw &c = cur.d[j], &p = pv.d[match[j]];
+            float cx0 = 1e9f, cx1 = -1e9f, cy0 = 1e9f, cy1 = -1e9f, px0 = 1e9f, px1 = -1e9f, py0 = 1e9f, py1 = -1e9f;
+            for (int q = 0; q < 6; q++) { const GpuVtx &a = cur.v[c.off + q], &b = pv.v[p.off + q]; cx0 = std::min(cx0, a.x); cx1 = std::max(cx1, a.x); cy0 = std::min(cy0, a.y); cy1 = std::max(cy1, a.y); px0 = std::min(px0, b.x); px1 = std::max(px1, b.x); py0 = std::min(py0, b.y); py1 = std::max(py1, b.y); }
+            const float cw = cx1 - cx0, pw = px1 - px0, ch = cy1 - cy0, ph = py1 - py0;
+            const GpuVtx &cv = cur.v[c.off], &pvv = pv.v[p.off];
+            const bool size = fabsf(cw - pw) > 0.3f * std::max(cw, pw) + 2 || fabsf(ch - ph) > 0.3f * std::max(ch, ph) + 2;
+            const bool uv = fabsf(cv.u - pvv.u) > 2 || fabsf(cv.v - pvv.v) > 2;
+            if (!size && !uv) continue;
+            bad++;
+            if (bad <= 6) fprintf(stderr, "[iaudit] vb=%llu cur %zu tex=%x %dx%d %s%s w %.0f->%.0f h %.0f->%.0f uv %.0f,%.0f->%.0f,%.0f at %.0f,%.0f\n", (unsigned long long)g_cur_vb, j, c.s.tex, c.s.tw, c.s.th, size ? "SIZE " : "", uv ? "UV" : "", pw, cw, ph, ch, pvv.u, pvv.v, cv.u, cv.v, cx0, cy0);
+        }
+        if (bad) fprintf(stderr, "[iaudit] vb=%llu flagged=%d of %zu draws\n", (unsigned long long)g_cur_vb, bad, cn);
+        /* black box for the F8 mark: the pairing of the last frames (every small sprite: what it was paired with, or UNMATCHED), so the
+         * cause of a flicker can be read from the session log without a replay (interp_audit_flush) */
+        if (g_ring.empty() || g_ring.back().vb != g_cur_vb) {
+            if (g_ring.size() >= 8) g_ring.pop_front();
+            g_ring.push_back(RingFrame()); g_ring.back().vb = g_cur_vb;
+            std::string &o = g_ring.back().text; char buf[220];
+            for (size_t j = 0; j < cn; j++) {
+                const Draw &c = cur.d[j]; if ((c.n != 6 && c.n != 12) || c.s.tex == 0) continue;
+                float x0 = 1e9f, x1 = -1e9f, y0 = 1e9f, y1 = -1e9f; for (uint32_t q = 0; q < c.n; q++) { const GpuVtx &w = cur.v[c.off + q]; x0 = std::min(x0, w.x); x1 = std::max(x1, w.x); y0 = std::min(y0, w.y); y1 = std::max(y1, w.y); }
+                if (x1 - x0 > 140 || y1 - y0 > 140 || x1 < 0 || x0 > 480) continue;
+                if (match[j] < 0) { snprintf(buf, sizeof buf, "  %zu tex=%x %dx%d u=%.0f,%.0f box %.0f,%.0f %.0fx%.0f UNMATCHED\n", j, c.s.tex, c.s.tw, c.s.th, cur.v[c.off].u, cur.v[c.off].v, x0, y0, x1 - x0, y1 - y0); o += buf; continue; }
+                const Draw &p = pv.d[match[j]]; float px0 = 1e9f, px1 = -1e9f, py0 = 1e9f, py1 = -1e9f; for (uint32_t q = 0; q < p.n; q++) { const GpuVtx &w = pv.v[p.off + q]; px0 = std::min(px0, w.x); px1 = std::max(px1, w.x); py0 = std::min(py0, w.y); py1 = std::max(py1, w.y); }
+                snprintf(buf, sizeof buf, "  %zu tex=%x %dx%d u=%.0f,%.0f box %.0f,%.0f %.0fx%.0f <- prev %d box %.0f,%.0f %.0fx%.0f\n", j, c.s.tex, c.s.tw, c.s.th, cur.v[c.off].u, cur.v[c.off].v, x0, y0, x1 - x0, y1 - y0, match[j], px0, py0, px1 - px0, py1 - py0); o += buf;
+            }
+        }
     }
     if (depth == 0 && g_dump_vb >= 0) { if (dump_vb_now(g_cur_vb)) {
         for (size_t j = 0; j < cn; j++) { const Draw &c = cur.d[j]; const GpuVtx &v0 = cur.v[c.off];
@@ -536,8 +626,10 @@ bool interp_lists(const Rec &pv, Rec &cur, int target, int depth, std::vector<Fr
             if (ok && prev_disp < 1.f && md > (v1b(6) ? 12.f : 20.f) * g_T_mul && !(scroll && fabsf((b[0].x - a[0].x) - scx) <= 1.5f && fabsf((b[0].y - a[0].y) - scy) <= 1.5f)) ok = false;
             /* faixa 2D da interface (um retangulo, n=6, ate 48 px de altura) que anda em passos de slot de 12+ px (o corpo da barra do item do menu desce 16 px por
              * passo enquanto a ponta ao lado fica parada): o meio do passo (8 px) desalinhava as duas pecas e a barra aparecia torta por 1-2 subquadros, estagio
-             * que o original nao tem; aparece no lugar novo, como no original. Rolagem rigida do cenario fica de fora. TF_INTERP_BISECT bit 1024 desliga */
-            if (ok && !v1b(10) && c.n == 6 && b[0].rw == 1.f && b[1].rw == 1.f && b[2].rw == 1.f && b[0].z < 2.f && md > 12.f * g_T_mul && !scroll) {
+             * que o original nao tem; aparece no lugar novo, como no original. Rolagem rigida do cenario fica de fora. TF_INTERP_BISECT bit 1024 desliga
+             * A strip that was ALREADY moving the same way (same velocity as in the previous pair) is a slide (Free Duel opponent panel flying in at ~36 px per game frame,
+             * name/deck boxes and their text were pinned = 30 FPS), not a slot step: it is interpolated. TF_INTERP_NOSLIDE=1 disables */
+            if (ok && !v1b(10) && c.n == 6 && b[0].rw == 1.f && b[1].rw == 1.f && b[2].rw == 1.f && b[0].z < 2.f && md > 12.f * g_T_mul && !scroll && !(!no_slide && (pvel ? hypotf(ex - pvx, ey - pvy) <= 0.3f * hypotf(ex, ey) + 2.f : fabsf(prev_disp - md) <= 0.15f * md + 1.f))) {
                 float gy0 = 1e9f, gy1 = -1e9f; for (uint32_t q = 0; q < 6; q++) { gy0 = std::min(gy0, cur.v[c.off + q].y); gy1 = std::max(gy1, cur.v[c.off + q].y); }
                 if (gy1 - gy0 <= 48.f) ok = false;
             }
@@ -563,10 +655,26 @@ bool interp_lists(const Rec &pv, Rec &cur, int target, int depth, std::vector<Fr
     for (size_t j = 0; j < cn; j++) {
         if (match[j] >= 0 || cur.d[j].s.clear) continue;
         static const bool scroll_unmatched = getenv("TF_INTERP_SCROLL") != nullptr;   /* EXPERIMENTAL: piorou a medida de pixels inventados na loja (47 mil -> 58 mil) */
+        /* a glyph of a sliding text line that has no previous partner (it was still outside the screen in the previous frame): it
+         * follows the displacement of its matched neighbours instead of appearing, at the new place, next to its own sliding word
+         * (a ghost "Nova" + "va"). TF_INTERP_NOSLIDE=1 disables */
+        float sdx = 0, sdy = 0;
+        { static const bool no_slide2 = getenv("TF_INTERP_NOSLIDE") != nullptr;
+          const Draw &cj = cur.d[j];
+          if (!no_slide2 && (cj.n == 6 || cj.n == 12) && cur.v[cj.off].z < 1.f) {
+              float ddx[6], ddy[6]; int nd = 0;
+              for (int dn = -3; dn <= 3; dn++) {
+                  const int jn = (int)j + dn; if (!dn || jn < 0 || jn >= (int)cn || match[jn] < 0 || cur.d[jn].n != cj.n) continue;
+                  const GpuVtx &nb = cur.v[cur.d[jn].off], &na = pv.v[pv.d[match[jn]].off];
+                  if (fabsf(nb.x - na.x) + fabsf(nb.y - na.y) > 4.f) { ddx[nd] = nb.x - na.x; ddy[nd] = nb.y - na.y; nd++; } }
+              for (int i = 0; i < nd && sdx == 0.f && sdy == 0.f; i++) {   /* two matched neighbours moved the same way */
+                  int same = 0; for (int q = 0; q < nd; q++) if (fabsf(ddx[q] - ddx[i]) <= 2.f && fabsf(ddy[q] - ddy[i]) <= 2.f) same++;
+                  if (same >= 2) { sdx = ddx[i]; sdy = ddy[i]; } } } }
         bool world = scroll_unmatched && scroll && cur.v[cur.d[j].off].z >= 1000.f;   /* desenho 3D sem par (recortado na borda: o numero de vertices mudou): anda a metade da rolagem, como o resto do cenario */
         for (uint32_t q = 0; q < cur.d[j].n; q++) {
             const GpuVtx &b = cur.v[cur.d[j].off + q]; GpuVtx &o = g_out[cur.d[j].off + q];
             if (world) { o.x = b.x - (1.f - g_t) * scx; o.y = b.y - (1.f - g_t) * scy; }
+            else if (sdx != 0.f || sdy != 0.f) { o.x = b.x - (1.f - g_t) * sdx; o.y = b.y - (1.f - g_t) * sdy; continue; }
             follow(b, o);
         }
     }
@@ -757,4 +865,7 @@ bool interp_extra(float t, int res) {
     return true;
 }
 void interp_extra_done(void) { g_old.clear(); g_have_old = false; for (const Frozen &f : g_rtt_held) g_fpool.push_back(f); g_rtt_held.clear(); g_rtt_cache.clear(); g_rtt_cache_on = false; }   /* devolve as copias congeladas de g_old ao pool */
+void interp_audit_flush(unsigned mark) {   /* F8: the pairing ring kept by the audit in interp_lists */
+    for (const RingFrame &r : g_ring) fprintf(stderr, "[iring] mark %u vb=%llu\n%s", mark, (unsigned long long)r.vb, r.text.c_str());
+}
 void interp_use_scratch(int k) { scratch_use(k); }   /* (scratch_use fica no namespace anonimo, junto do g_scratch) */

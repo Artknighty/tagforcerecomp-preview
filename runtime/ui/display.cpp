@@ -197,6 +197,7 @@ static const Hotkey kHotkeys[] = {
     {VK_F5,  L"F5",  L"",              L"switch textures Original / Enhanced",             request_texture_pack_switch},   /* compara com o visual do PSP original */
     {VK_F7,  L"F7",  L"",              L"same as F8",                                      marca_cpu},                     /* atalho antigo, mesma marca geral */
     {VK_F8,  L"F8",  L"",              L"report a problem: graphics, CPU, anything (note + captures + duel state); for something specific. Controller quick marks (no note): L3 = graphics glitch, R3 = performance problem, Start + Select = audio problem", marca_graf},   /* marca geral: nota + quadros + estado do duelo */
+    {'P',    L"P",   L"",              L"report a flicker: same mark as F8, the note box opens already tagged as flicker (say where, or leave it empty to have it searched automatically)", marca_piscada},
     {VK_F9,  L"F9",  L"",              L"turn the diagnostic captures on / off",           cap_toggle},
     {VK_F11, L"F11", L" or Alt+Enter", L"fullscreen",                                      toggle_fullscreen},
 };
@@ -530,7 +531,7 @@ static void marcas_processar(void) {
     if (text_input_busy()) return;   /* a caixa de texto do jogo (nome do jogador) esta aberta: a marca espera ela fechar */
     const unsigned long long q = g_frames;
     if (g_marcag_pedida) {
-        g_marcag_pedida = false; std::string nota; const int tipo_r = g_marcag_rapida; const bool rapida = tipo_r != 0; g_marcag_rapida = 0;
+        g_marcag_pedida = false; const bool pisc = g_marcag_piscada; g_marcag_piscada = false; std::string nota; const int tipo_r = g_marcag_rapida; const bool rapida = tipo_r != 0; g_marcag_rapida = 0;
         if (tipo_r == 1) nota = "[controle L3] erro grafico (piscada/flicker/defeito visual)";
         else if (tipo_r == 2) nota = "[controle R3] problema de performance (travada/quadros lentos)";
         else if (tipo_r == 3) nota = "[controle Start+Select] problema de audio (estalo/corte/atraso/volume/musica errada)";
@@ -542,11 +543,12 @@ static void marcas_processar(void) {
             fprintf(stderr, "[marca-audio] #%d quadro %llu: problema de audio marcado pelo jogador (ultimos %.1f s gravados em %ls)%c", n, q, secs, wf, 10);
             marca_nota_log(n, nota, "marca-audio"); display_notify(t); return;
         }
-        if (!rapida && !marca_nota_modal(true, &nota)) { fprintf(stderr, "[marca-graf] descartada no quadro %llu (Esc ou nota vazia)\n", q); display_notify("Graphics mark discarded"); }
+        if (!rapida && !marca_nota_modal(true, &nota, pisc)) { fprintf(stderr, "[marca-graf] descartada no quadro %llu (Esc ou nota vazia)\n", q); display_notify("Graphics mark discarded"); }
         else {
             const int n = ++g_marcag_n;
+            if (pisc) nota = nota_vazia(nota) ? "[piscada] sem descricao: vasculhar a piscada (flick_seq.py + [iring])" : "[piscada] " + nota;   /* P: the prefix is added here, the player only types where */
             fprintf(stderr, "[marca-graf] #%d quadro %llu (marcado pelo jogador: problema grafico)\n", n, q);
-            cap_marcar(); g_burst_n = 2; g_burst_next = q + 10;   /* este quadro inteiro e mais 2, 10 e 20 quadros depois (piscadas) */
+            interp_audit_flush((unsigned)n); cap_marcar(); g_burst_n = 2; g_burst_next = q + 10;   /* este quadro inteiro e mais 2, 10 e 20 quadros depois (piscadas) */
             char motivo[24]; snprintf(motivo, sizeof motivo, "F8 #%d", n); seq_gravar(motivo);   /* caixa-preta: os ~1,5 s apresentados antes do F8 */
             fprintf(stderr, "[marca-graf] #%d config: renderizador=%d resolucao=%dx msaa=%d texturas_ampliadas=%d tela=%dx%d quadro=%llu\n", n, (int)g_gfx.renderer, (int)g_gfx.res, (int)g_gfx.msaa, (int)g_gfx.texscale, g_sw, g_sh, q);
             {   /* saida: janela e o monitor onde ela esta */

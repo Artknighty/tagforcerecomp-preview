@@ -28,6 +28,7 @@ bool interp_hold_ok(void);      /* o quadro real pode esperar o intermediario na
 bool interp_extra(float t, int res);
 void interp_extra_done(void);
 bool interp_enabled(void);
+void interp_audit_flush(unsigned mark);   /* F8: writes the last pairings (ring kept by the always-on audit) to the log */
 uint32_t interp_fb_version(int fb);                            /* muda a cada desenho/copia no quadro sombra (o display.cpp nao reapresenta uma imagem igual) */
 bool interp_has_new(int gfb);                                    /* ha desenho novo no quadro exibido desde a ultima apresentacao? */
 bool interp_mid_ready(int gfb, uint64_t vblank, bool allow);     /* o quadro novo esta pronto e vai ganhar o intermediario: o chamador pode apresentar sem esperar a grade de vblanks */
