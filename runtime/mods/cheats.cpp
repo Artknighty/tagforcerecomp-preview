@@ -286,6 +286,7 @@ static int duelist_real_decks(uint32_t character, uint16_t *decks) {
         for (uint32_t level = 1; level <= duelist::kDecksPerLadder; level++)
             if (duelist::LadderUsedMask(character) & (1u << (level - 1))) decks[n++] = (uint16_t)duelist::LadderDeck(character, level);
     } else if (duelist::HasSingleDeck(character) && !duelist::IsPlaceholder(duelist::SingleDeck(character))) decks[n++] = (uint16_t)duelist::SingleDeck(character);
+    else if (character == duelist::kNightshroud) decks[n++] = duelist::kNightshroudDeck;   /* in the duelist lists, but outside the deck rules: he plays Atticus's level 1 deck */
     return n;
 }
 static int unlock_duelists(void) {
