@@ -5,8 +5,8 @@ Pieces (game texture hash -> output in textures/duel_result_hd/):
   f6f6c44f  title sheet (DUEL RESULT, DUEL BONUS, NEW HIGH SCORE BONUS, CHALLENGE COMPLETE BONUS, INTERMEDIATE RESULT, FINAL RESULT):
             every line is drawn with Arial Black fitted into the ink box of the original line; the white-to-grey vertical shading of the
             face is sampled row by row from the original, plus a soft dark drop shadow.
-  b602d300  table sheet: the columns/rows the game stretches over the screen (separator above Total, row dividers) are made uniform so the
-            upscale noise cannot show as stripes; colours are the original ones.
+  b602d300  table sheet: the flat bands of the frame (stretched columns/rows, row strips) are rebuilt as exact flat texels with hard straight
+            edges, and the dotted ends of the line above Total are replaced by the plain line; colours are the original ones.
   tall pill pieces (the palette-specific rows of this screen): the same analytic pill as the menus (oval_hd/, see mod_menu_oval.py).
 
 Usage: python tools/mods/mod_duel_result.py [--register]
@@ -27,10 +27,13 @@ LINES = ['DUEL RESULT', 'DUEL BONUS', 'NEW HIGH SCORE BONUS', 'CHALLENGE COMPLET
 SRC_BG = 'mikeymk/ui/duels/results_background.png'
 SRC_TITLE = 'mikeymk/ui/text/duel_result.png'
 SRC_TABLE = 'mikeymk/extras/00000000658d9d5fb602d300.png'
-# parts of the sheet the game stretches (measured with the tf.py texdump command): (u, v0, v1) columns and (v, u0, u1) rows, in PSP texels
-COLUMNS = [(10, 0, 47), (24, 0, 16), (25, 16, 19), (27, 0, 16)]
-ROWS = [(20, 0, 6), (20, 17, 23), (18, 23, 25)]
-# every hash -> (source key used by the pack, new file)
+# parts of the sheet that are flat bands (stretched or tiled by the game; measured with the tf.py texdump command), in PSP texels:
+# (u0, u1, v0, v1) half-open. Each texel becomes an exact flat 8x8 block (median of its inner 4x4), so every band edge is a hard straight line.
+FLAT = [(10, 11, 0, 47),    # header / bottom stretch column
+        (0, 6, 20, 21), (17, 23, 20, 21),    # left / right wall rows
+        (23, 29, 0, 19)]    # row strip: cell borders, cream interior, DP cell, joints between rows
+SLOT = (4, 18, 23, 26)   # (u0, u1, v0, v1): the dotted 'slot' ends of the line above Total get the plain line colours
+# every game texture hash -> new file (relative to textures/)
 TARGETS = {
     'b602d300': OUT + '/table_sheet.png',
     '20b3dd72': OUT + '/results_background.png',
@@ -112,15 +115,20 @@ def title(a):
     return (np.dstack([np.clip(rgb, 0, 1), np.clip(alpha, 0, 1)]) * 255 + 0.5).astype(np.uint8)
 
 
+def texel(a, u, v):
+    return np.median(a[v * K + 2:v * K + 6, u * K + 2:u * K + 6].reshape(-1, 4), axis=0)
+
+
 def table(a):
-    out = a.astype(np.float32)
-    for u, v0, v1 in COLUMNS:
-        b = out[v0 * K:v1 * K, u * K:(u + 1) * K]
-        out[v0 * K:v1 * K, u * K:(u + 1) * K] = b.mean(axis=1, keepdims=True)
-    for v, u0, u1 in ROWS:
-        b = out[v * K:(v + 1) * K, u0 * K:u1 * K]
-        out[v * K:(v + 1) * K, u0 * K:u1 * K] = b.mean(axis=0, keepdims=True)
-    return np.round(out).astype(np.uint8)
+    out = a.copy()
+    for u0, u1, v0, v1 in FLAT:
+        for v in range(v0, v1):
+            for u in range(u0, u1):
+                out[v * K:(v + 1) * K, u * K:(u + 1) * K] = texel(a, u, v)
+    u0, u1, v0, v1 = SLOT
+    for v in range(v0, v1):
+        out[v * K:(v + 1) * K, u0 * K:u1 * K] = texel(a, 10, v)
+    return out
 
 
 def register(mod, files):
