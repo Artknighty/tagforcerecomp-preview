@@ -274,7 +274,13 @@ bool interp_lists(const Rec &pv, Rec &cur, int target, int depth, std::vector<Fr
     for (size_t j = 0; j < cn; j++) {
         const Draw &c = cur.d[j]; int best = -1; float bestc = 1e30f;
         size_t lo = hint > 6 ? hint - 6 : 0, hi = std::min(pn, hint + 14);
-        for (size_t k = lo; k < hi; k++) {
+        /* janela em torno do ultimo par; sem par nela, uma 2a passada olha o resto da lista. Um efeito que entra no meio da lista (a espiral do corte
+         * de invocacao: ~20 desenhos novos antes do resto) desloca os indices alem da janela e deixava TODO o resto sem par (cena "trocou": o corte
+         * 3D ficava a 30 FPS; sessao 20261023_213431, quadros 3779-3793). TF_INTERP_NOWIDE=1 desliga (A/B) */
+        static const bool no_wide = getenv("TF_INTERP_NOWIDE") != nullptr;
+        for (int pass = 0; pass < (no_wide ? 1 : 2) && best < 0; pass++)
+        for (size_t k = pass ? 0 : lo, kend = pass ? pn : hi; k < kend; k++) {
+            if (pass && k >= lo && k < hi) continue;
             if (used[k] || !same_kind(pv.d[k], c)) continue;
             const GpuVtx *a = &pv.v[pv.d[k].off], *b = &cur.v[c.off]; float cost = 0; const uint32_t step = std::max<uint32_t>(1, c.n / 48);
             bool uvok = true;
