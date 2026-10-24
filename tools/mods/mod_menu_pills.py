@@ -60,7 +60,7 @@ def base():
             153, 132, 97, 71, 0]
     g = lerp_profile(y, rows, np.array(vals, np.float32)) / 255
     u = -d
-    cap = sstep(0.0, 2.0, dx)                                      # 0 on the straight part, 1 from 2 px into the caps
+    cap = sstep(0.0, R, dx)                                        # 0 on the straight part, 1 at the end of the cap (smooth, no notch where the cap starts)
     rim = 1 - cap * (1 - sstep(0.4, 4.2, u)) * 0.62                # darker rim round the caps
     g = g * rim
     ol = 1 - sstep(1.0 - 1.0 / K, 1.0 + 1.0 / K, u)                # 1 px black outline
