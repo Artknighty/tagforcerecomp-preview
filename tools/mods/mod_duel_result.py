@@ -32,7 +32,6 @@ SRC_TABLE = 'mikeymk/extras/00000000658d9d5fb602d300.png'
 FLAT = [(10, 11, 0, 47),    # header / bottom stretch column
         (0, 6, 20, 21), (17, 23, 20, 21),    # left / right wall rows
         (23, 29, 0, 19)]    # row strip: cell borders, cream interior, DP cell, joints between rows
-SLOT = (4, 18, 23, 26)   # (u0, u1, v0, v1): the dotted 'slot' ends of the line above Total get the plain line colours
 # every game texture hash -> new file (relative to textures/)
 TARGETS = {
     'b602d300': OUT + '/table_sheet.png',
@@ -45,6 +44,8 @@ TARGETS = {
     'b441d53d': 'oval_hd/oval_transparent_tall_center.png',
     '9d15ec20': 'oval_hd/oval_transparent_tall_right.png',
 }
+
+JOINTS = [(23, 16), (33, 16), (23, 26), (33, 26)]   # (u, v) of the four corner joints of the row area
 
 
 def checkerboard(a, cells=8):
@@ -119,15 +120,100 @@ def texel(a, u, v):
     return np.median(a[v * K + 2:v * K + 6, u * K + 2:u * K + 6].reshape(-1, 4), axis=0)
 
 
+def _gauss(a, sig):
+    r = int(sig * 3) + 1
+    x = np.arange(-r, r + 1)
+    k = np.exp(-x * x / (2.0 * sig * sig)); k /= k.sum()
+    for ax in (0, 1):
+        pad = [(0, 0), (0, 0)]; pad[ax] = (r, r)
+        b = np.pad(a, pad, mode='edge')
+        n = a.shape[ax]
+        a = sum(k[i] * (b[i:i + n] if ax == 0 else b[:, i:i + n]) for i in range(2 * r + 1))
+    return a
+
+
+def _lerp_col(vals, y):
+    """Piecewise-linear interpolation through the texel centres (y in texels)."""
+    return np.interp(y, np.arange(len(vals)) + 0.5, vals)
+
+
+def door(a):
+    """The table frame (23 x 47 texels of the sheet, drawn at K per texel) rebuilt from geometry: left wall with the slanted corner, dark
+    header panel, line above Total, right wall and soft shadow. Bands are exact (hard straight edges), the slanted edges and the rounded outer
+    corners are antialiased; colours come from the original texels."""
+    S = 4
+    R = K * S
+    W, H = 23, 47
+    x = ((np.arange(W * R) + 0.5) / R)[None, :]
+    y = ((np.arange(H * R) + 0.5) / R)[:, None]
+    g = lambda u, v: float(texel(a, u, v)[:3].mean())
+    # silhouette: slanted left edge, notched top-right and bottom-left corners, then rounded
+    ol = 5.0 - 0.5556 * y
+    ol = 0.5 * (ol + np.sqrt(ol * ol + 0.5))            # smooth max(ol, 0): the slanted edge bends into the vertical wall
+    right = np.where(y < 1, 21.0, 22.0)
+    bottom = np.where(x < 1, 45.0, 46.0)
+    solid = ((x >= ol) & (x < right) & (y < bottom)).astype(np.float32)
+    solid = np.clip((_gauss(solid, 0.4 * R) - 0.5) * (R * 0.5) + 0.5, 0, 1)   # rounded convex corners with a ~1 px soft edge
+    # vertical profile of the body (column u=10 of the sheet); header rows get the plain grey beside the dark panel
+    vb = np.array([g(10, v) for v in range(H)], np.float32)
+    body = vb.copy(); body[3:17] = g(18, 8)
+    rows = np.minimum(y.astype(int), H - 1)
+    col = body[rows] * np.ones_like(x)                    # (H*R, W*R)
+    # line above Total: only between x=4 and x=18, the rest of those rows is plain grey
+    plain = g(10, 22)
+    slot = (rows >= 23) & (rows <= 25) & ((x < 4) | (x >= 18))
+    col = np.where(slot, plain, col)
+    # dark header panel: left edge follows the slanted corner, 4 texels in from the wall below it
+    pl = np.maximum(4.0, 8.0 - 0.5 * (y - 3.0))
+    panel = (y >= 3) & (y < 17) & (x >= pl) & (x < 18)
+    col = np.where(panel, 0.5 * (g(10, 3) + g(10, 10)), col)
+    # right wall: two grey texels, then the dark outline columns (shaded along y)
+    cy = [g(20, v) for v in range(H)]; cz = [g(21, v) for v in range(H)]
+    c20 = _lerp_col(cy, y) * np.ones_like(x); c21 = _lerp_col(cz, y) * np.ones_like(x)
+    top = y < 3
+    col = np.where((x >= 18) & (x < 19) & ~top, g(18, 8), col)
+    col = np.where((x >= 19) & (x < 20) & ~top, g(19, 8), col)
+    col = np.where((x >= 20) & (x < 21), c20, col)
+    col = np.where((x >= 21) & (x < 22), c21, col)
+    # left wall in coordinates sheared along the slanted edge: black outline, bright edge (narrower on the slant), then the body
+    s = x - ol
+    hw = np.clip(0.55 + 0.45 * (y - 7.0) / 2.5, 0.55, 1.0)
+    hl = _lerp_col([g(1, min(max(v, 9), 43)) for v in range(H)], y) * np.ones_like(x)
+    hl = np.where(y < 9, 205.0, hl)
+    dark = (s < 1.5 - hw / 2) & ~(y < 1)
+    edge = (np.abs(s - 1.5) <= hw / 2) & ~(y < 1)
+    wall = s < 3.0
+    col = np.where(wall & ~(y < 1), np.where(dark, 4.0 + 12.0 * np.clip((5.0 - y) / 5.0, 0, 1), np.where(edge, hl, np.where(top, col, g(3, 20)))), col)
+    # bottom rows: dark outline then shadow row
+    col = np.where((y >= 44) & (y < 45), g(10, 44), col)
+    col = np.where((y >= 45), g(10, 45), col)
+    # soft shadow right of the wall
+    sh = _lerp_col([texel(a, 22, v)[3] for v in range(H)], y) * np.ones_like(x)
+    alpha = np.where(x >= 22, np.where(x < 23, sh / 255.0, 0.0), solid)
+    rgb = np.where(x >= 22, 0.0, col)
+    pm = np.stack([rgb * alpha, rgb * alpha, rgb * alpha, alpha], -1)
+    pm = pm.reshape(H * K, S, W * K, S, 4).mean(axis=(1, 3))
+    al = pm[..., 3:4]
+    grey = np.where(al > 1e-4, pm[..., :3] / np.maximum(al, 1e-4), 0)
+    return np.dstack([np.clip(grey, 0, 255), np.clip(al * 255, 0, 255)]).round().astype(np.uint8)
+
+
 def table(a):
     out = a.copy()
+    out[0:47 * K, 0:23 * K] = door(a)
     for u0, u1, v0, v1 in FLAT:
         for v in range(v0, v1):
             for u in range(u0, u1):
-                out[v * K:(v + 1) * K, u * K:(u + 1) * K] = texel(a, u, v)
-    u0, u1, v0, v1 = SLOT
-    for v in range(v0, v1):
-        out[v * K:(v + 1) * K, u0 * K:u1 * K] = texel(a, 10, v)
+                if u0 == 10 or u0 == 0 or u0 == 17:
+                    continue                       # the stretched column and wall rows come from the redrawn frame
+                c = texel(a, u, v).copy()
+                if u0 == 23:
+                    c = texel(a, u, 1 if v == 0 else (14 if v == 15 and u < 26 else v)).copy()
+                    c[3] = 255                      # no notched corners on the row cells
+                out[v * K:(v + 1) * K, u * K:(u + 1) * K] = c
+    plain = texel(a, 24, 17).copy(); plain[3] = 255
+    for u, v in JOINTS:   # 2x2 corner pieces of the row area (notched, bevelled in the original): plain grey squares
+        out[v * K:(v + 2) * K, u * K:(u + 2) * K] = plain
     return out
 
 
