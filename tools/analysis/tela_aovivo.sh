@@ -24,7 +24,7 @@ rm -f gen/mods_teste/EnhancedTextures/disabled; mkdir -p gen/mods_teste/Texturas
 for d in gen/mods/*/; do n=$(basename "$d"); [ -f "$d/plugin.dll" ] || continue; rm -rf "gen/mods_teste/$n"; [ -f "$d/disabled" ] && continue
   mkdir -p "gen/mods_teste/$n"; for f in "$d"*; do [ "$(basename "$f")" = llm ] || cp -r "$f" "gen/mods_teste/$n/"; done; done
 W="gen/replay/$S$TAG"; rm -rf "$W"
-( TF_WINDOW="0,0,1920,1080,1,0,0" PACE=1 PRIMEIRO_PLANO=1 INI=gen/tagforce_recomp.ini MODDIR=gen/mods_teste RECENT=gen/texturas_recentes.txt \
+( TF_WINDOW="0,0,1920,1080,1,0,0" PACE=1 PRIMEIRO_PLANO=1 INI="${INI:-gen/tagforce_recomp.ini}" MODDIR=gen/mods_teste RECENT=gen/texturas_recentes.txt \
   TF_PRESENT_LOG=1 TF_LAT_DEBUG=1 TAG="$TAG" SNAPS="${ENDF:-999999999}" sh tools/test/replay.sh "$S" 100000 1800 "$OSK" > "$W.out" 2>&1 ) &
 JOGO=$!
 LOG=""; for i in $(seq 1 600); do LOG=$(ls "$W"/logs/sessao_*.log 2>/dev/null | head -1); [ -n "$LOG" ] && break; sleep 1; done

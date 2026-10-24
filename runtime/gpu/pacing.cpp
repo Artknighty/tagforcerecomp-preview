@@ -121,7 +121,7 @@ int64_t pace_ticks(double ms) { init(); return (int64_t)(ms * (double)g_freq.Qua
  * antes da saida marcada, e nunca antes de `earliest` (a atualizacao do monitor que mostra a imagem anterior) */
 int64_t pace_fit_call(int64_t ideal, int64_t earliest) {
     const int64_t xt = pace_exit_target();
-    if (!xt) return ideal;
+    if (!xt || xt < pace_now()) return ideal;   /* exit schedule behind the clock (debt being repaid): it says nothing about when the monitor needs this image */
     return std::max(earliest, std::min(ideal, xt - pace_ticks(0.5)));
 }
 
@@ -164,6 +164,12 @@ void pace_grid(bool sleep) {
  * slow machine on a fast one. */
 static const bool g_catchup = !(getenv("TF_RITMO_RECUPERA") && atoi(getenv("TF_RITMO_RECUPERA")) == 0);
 static uint32_t g_catch_n, g_catch_reset_n;
+/* Paying the debt back used to mean exits with no wait at all, so the exit-to-exit spacing shrank to 5-10 ms for dozens of calls and the real frame
+ * (pinned to the scheduled exit, pace_fit_call) came out early: R->M 11 ms / M->R 22 ms instead of 16.7 for as long as the debt lasted (title/menus
+ * and duel of session 20261023_213431, 900 frames). Now each exit waits at least step - g_catch_squeeze_ms after the previous one: the debt is repaid
+ * at <= 0.5 ms per call (3%) and every image stays within 0.5 ms of the ideal spacing. TF_RITMO_RECUPERA_MS overrides the 100 ms restart limit. */
+static const double g_catch_squeeze_ms = 0.5;
+static const double g_catch_max_ms = getenv("TF_RITMO_RECUPERA_MS") ? atof(getenv("TF_RITMO_RECUPERA_MS")) : 100.0;
 static void sim_delay(void) {
     static double p = -1, ms; static uint32_t rng = 12345;
     if (p < 0) { p = 0; if (const char *e = getenv("TF_SIM_ATRASO")) { p = atof(e); if (const char *c = strchr(e, ',')) ms = atof(c + 1); } }
@@ -178,7 +184,11 @@ void pace_exit(bool timed) {
     if (!timed) g_lastx = 0;
     else {
         if (g_lastx && n < g_lastx + step()) { g_lastx += step(); pace_wait_until(g_lastx); n = pace_now(); }   /* espacamento de 1/60 s entre saidas */
-        else if (g_lastx && g_catchup && n - (g_lastx + step()) < g_freq.QuadPart / 10) { g_lastx += step(); g_catch_n++; }   /* late: keep the slot, no wait */
+        else if (g_lastx && g_catchup && n - (g_lastx + step()) < pace_ticks(g_catch_max_ms)) {   /* late: keep the slot, but never exit closer than step - 0.5 ms to the previous exit (even cadence while the debt is repaid) */
+            g_lastx += step(); g_catch_n++;
+            const int64_t floor = g_exit_qpc + step() - pace_ticks(g_catch_squeeze_ms);
+            if (g_have_exit && n < floor) { pace_wait_until(floor); n = pace_now(); }
+        }
         else { if (g_lastx) g_catch_reset_n++; g_lastx = n; }
         if (g_dbg) { static uint32_t calls; if (++calls % 600 == 0) { fprintf(stderr, "[ritmo] saidas atrasadas recuperadas: %u, cadeia reiniciada (>100 ms): %u (ultimas 600 chamadas)%c", g_catch_n, g_catch_reset_n, 10); g_catch_n = g_catch_reset_n = 0; } }
     }
