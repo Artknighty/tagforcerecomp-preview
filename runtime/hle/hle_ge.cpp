@@ -24,6 +24,7 @@ extern "C" { extern uint32_t g_trace[1024]; extern uint32_t g_trace_i; }
 #include <map>
 #include <unordered_map>
 #include <algorithm>
+#include <memory>
 
 struct GeCb { uint32_t signal_fn, signal_arg, finish_fn, finish_arg; };
 static std::map<uint32_t, GeCb> g_gecb;
@@ -1633,7 +1634,8 @@ static void draw_prim(GeList &l, uint32_t data) {
      * edges a hair off the pixel grid (33.91 instead of 34.00). On the PSP that covers the same pixels, but on the GPU at 4x/8x it leaves a
      * visible step at each seam. Axis-aligned flat quads get edges within 1/8 px of a whole pixel snapped to it (same pixel coverage at 1x). */
     if (g_gpu_on && !t.through && type == 4 && count == 4 && vv[0].z == vv[1].z && vv[0].z == vv[2].z && vv[0].z == vv[3].z &&
-        vv[0].x == vv[2].x && vv[1].x == vv[3].x && vv[0].y == vv[1].y && vv[2].y == vv[3].y) {
+        ((vv[0].x == vv[2].x && vv[1].x == vv[3].x && vv[0].y == vv[1].y && vv[2].y == vv[3].y) ||
+         (vv[0].x == vv[1].x && vv[2].x == vv[3].x && vv[0].y == vv[2].y && vv[1].y == vv[3].y))) {   /* either strip order: the Duel Result checkerboard uses the second */
         auto snap = [](float v) { float r = roundf(v); return fabsf(v - r) <= 0.125f ? r : v; };
         for (int i = 0; i < 4; i++) { vv[i].x = snap(vv[i].x); vv[i].y = snap(vv[i].y); }
     }
@@ -1802,3 +1804,25 @@ HLE(sceDisplaySetFrameBuf) { if (ARG(0)) ge_shadow_add_display(ARG(0)); if (ARG(
 /* devolve float (59,94) em $f0: o player de filmes usa para o limite de sincronia audio/video (90000/fps*2); com 0
  * o limite virava lixo e quase todo quadro era descartado (filme "congelado") */
 HLE(sceDisplayGetFramePerSec) { c->f[0].f = 59.9400599f; RET(0); }
+
+/* ------------------------------------------------------------------ state save / load (savestate.cpp)
+ * Saved: the GE registers/matrices/palette and the display lists that are waiting (stall). Everything else here is derived from memory (texture
+ * caches, shadow frames, the GPU's copies of the frame buffers) and is simply dropped and rebuilt from the restored VRAM. */
+struct GeSnap { Ge g; std::map<uint32_t, GeCb> cb; std::map<uint32_t, GeList> lists; uint32_t next_list, next_cb; };
+void ge_state_prepare(void) {   /* before VRAM is read or written: frame buffers only the GPU holds (protected pages) are copied back to VRAM first */
+    if (g_gpu_on) for (auto &f : g_gf) if (f.used) gpu_materialize(f);
+}
+std::shared_ptr<void> ge_state_save(void) {
+    auto s = std::make_shared<GeSnap>();
+    s->g = G; s->cb = g_gecb; s->lists = g_lists; s->next_list = g_next_list; s->next_cb = g_next_cb;
+    return s;
+}
+void ge_state_load(const std::shared_ptr<void> &p) {   /* after memory is restored */
+    const GeSnap &s = *(const GeSnap *)p.get();
+    G = s.g; g_gecb = s.cb; g_lists = s.lists; g_next_list = s.next_list; g_next_cb = s.next_cb;
+    g_ge_depth = 0; g_ge_finished.clear();
+    texcache_flush(); g_ep_tr++;
+    for (auto &sh : g_sh) sh = Shadow();
+    g_small_valid = false;
+    gpu_reset_fbs();   /* drops the GPU frame buffers (and the 60/120 FPS interpolation history): they are rebuilt from VRAM on the next primitive */
+}
