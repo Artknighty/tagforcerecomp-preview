@@ -50,9 +50,14 @@ TEXTS = {
 
 def white_box_x(t):
     """First column of the biggest pure-white blob (the number field of the tab / plate)."""
+    return white_box(t)[0]
+
+
+def white_box(t):
+    """(first, last) column of the biggest pure-white blob (the number field of the tab / plate)."""
     m = (t[..., :3] >= 250).all(2) & (t[..., 3] == 255)
     seen = np.zeros(m.shape, bool)
-    best = (0, 0)
+    best = (0, 0, 0)
     for y, x in zip(*np.nonzero(m)):
         if seen[y, x]:
             continue
@@ -67,8 +72,8 @@ def white_box_x(t):
                     seen[c, d] = True
                     st.append((c, d))
         if len(cells) > best[0]:
-            best = (len(cells), min(b for _, b in cells))
-    return best[1]
+            best = (len(cells), min(b for _, b in cells), max(b for _, b in cells))
+    return best[1], best[2]
 
 
 def typeset(out, item, x1, fill, face='Bold Condensed'):
@@ -114,7 +119,7 @@ def lettered(h, t):
         fill = t[it['fill']].copy()
         e[it['y0']:it['y1'], it['x0']:x1] = fill
         items.append((it, x1, fill))
-    out = redraw(e, h)
+    out = tab_head(t) if h in TAB_HEADS else redraw(e, h)
     if h == '4400d119':
         out[:] = types_plate(t)
         btn = types_buttons(t)
@@ -255,6 +260,41 @@ def types_buttons(t):
     img = Image.fromarray(pill)
     img.alpha_composite(Image.fromarray(box))
     return np.asarray(img).copy()
+
+
+TAB_HEADS = {'b77db24b', '34a9652d', 'fd0f9c3b', '92c07948'}
+
+
+def tab_head(t):
+    """Tab head (Deck / Fusion / Side / Trunk) from geometry: rounded top corners, three flat bevel bands, one fill, a rounded white number field;
+    below the tab the stripes and the panel border / cream that the original texture carries."""
+    H, W = t.shape[:2]
+    outer, light, dark = px(t, 5, 0), px(t, 5, 1), px(t, 5, 2)
+    fill = px(t, 3, 10)
+    cream = px(t, 20, 30)
+    stripes = [px(t, 15, 10), px(t, 16, 10), px(t, 17, 10)]
+    edge = [px(t, 15, W - 2), px(t, 16, W - 2), px(t, 17, W - 2)]
+    bx1 = int(np.nonzero(t[0, :, 3])[0].max()) + 1
+    f0, f1 = white_box(t)
+
+    def inside(X, Y):
+        col = np.empty(X.shape + (4,), np.float32)
+        col[:] = fill
+        col[rr_depth(X, Y, (f0 - 0.5, 4.0, f1 + 1.5, 14.0), 2.4) > 0] = (255, 255, 255, 255)
+        return col
+    body = beveled(W, H, (0, 0, bx1, 15), (3.6, 3.6, 0, 0), [outer, light, dark], inside, (0, 0))
+    c = np.zeros((H, W, 4), np.uint8)
+    c[15:, 0] = outer
+    c[15:, 1] = light
+    c[15:, 2] = dark
+    c[18:, 3:] = cream
+    for i in range(3):
+        c[15 + i, 3:bx1 - 3] = stripes[i]
+        c[15 + i, bx1 - 3:] = edge[i]
+    low = depixel.render(c, K)                       # straight rectangles: no smoothing
+    out = low.copy()
+    out[:15 * K] = body[:15 * K]
+    return out
 
 
 def cursor_frame(out):
