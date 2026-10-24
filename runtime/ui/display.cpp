@@ -189,12 +189,15 @@ static void quit_process(void);
 static void toggle_fps_overlay(void);
 static bool g_pending_pack;   /* F5: pedido de troca Original <-> Enhanced; aplicado em display_present, entre dois quadros */
 static void request_texture_pack_switch(void) { g_pending_pack = true; }
+static bool g_pending_fps;    /* F4: next frame rate 30 -> 60 -> 120 -> 30; applied in display_present, between two frames */
+static void request_fps_cycle(void) { g_pending_fps = true; }
 
 /* As teclas de funcao da janela, TODAS aqui (hotkeys.h): tecla, nome extra para a ajuda, descricao e acao. Para criar uma, basta uma linha. */
 struct Hotkey { int vk; const wchar_t *key, *also, *help; void (*run)(void); };
 static const Hotkey kHotkeys[] = {
     {VK_F3,  L"F3",  L"",              L"show FPS",                                        toggle_fps_overlay},
-    {VK_F5,  L"F5",  L"",              L"switch textures Original / Enhanced",             request_texture_pack_switch},   /* compara com o visual do PSP original */
+    {VK_F4,  L"F4",  L"",              L"cycle the frame rate 30 / 60 / 120 FPS",          request_fps_cycle},
+    {VK_F5,  L"F5",  L"",              L"switch textures Original / Enhanced",            request_texture_pack_switch},   /* compara com o visual do PSP original */
     {VK_F7,  L"F7",  L"",              L"same as F8",                                      marca_cpu},                     /* atalho antigo, mesma marca geral */
     {VK_F8,  L"F8",  L"",              L"report a problem: graphics, CPU, anything (note + captures + duel state); for something specific. Controller quick marks (no note): L3 = graphics glitch, R3 = performance problem, Start + Select = audio problem", marca_graf},   /* marca geral: nota + quadros + estado do duelo */
     {'P',    L"P",   L"",              L"report a flicker: same mark as F8, the note box opens already tagged as flicker (say where, or leave it empty to have it searched automatically)", marca_piscada},
@@ -640,6 +643,10 @@ void display_present(void) {
     if (g_pending_pack) {
         g_pending_pack = false; const int to = gfx_option_get(GFXOPT_TEXTURE_PACK) ? 0 : 1;
         gfx_option_set(GFXOPT_TEXTURE_PACK, to); display_notify(to ? "Textures: Enhanced" : "Textures: Original (PSP)");
+    }
+    if (g_pending_fps) {
+        g_pending_fps = false; const int to = (gfx_option_get(GFXOPT_FRAME_RATE) + 1) % 3;
+        gfx_option_set(GFXOPT_FRAME_RATE, to); display_notify(to == GFX_FPS_120 ? "Frame rate: 120 FPS" : to == GFX_FPS_60 ? "Frame rate: 60 FPS" : "Frame rate: 30 FPS");
     }
     { static const long lose_at = getenv("TF_GPU_LOSE_AT") ? atol(getenv("TF_GPU_LOSE_AT")) : 0; if (lose_at && (long)g_frames == lose_at) g_gpu_lost = true; }   /* test: simulate a device loss at frame N */
     if (g_excl_failed) { g_excl_failed = false; pres_drain(); if (g_exclusive) { g_kind = GFX_WIN_BORDERLESS; apply_exclusive(); display_notify("Exclusive fullscreen failed: using borderless"); } }
