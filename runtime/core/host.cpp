@@ -143,7 +143,8 @@ void psp_call(CPU *c, uint32_t addr) {
         if (g_diag_frames == f0) {
             static LARGE_INTEGER qf; if (!qf.QuadPart) QueryPerformanceFrequency(&qf);
             double ms = (t1.QuadPart - t0.QuadPart) * 1000.0 / qf.QuadPart;
-            if (ms > 100) fprintf(stderr, "[perf] syscall lenta no quadro %llu: %s levou %.0f ms\n", (unsigned long long)f0, g_imports[addr].name, ms);
+            static const double slow_ms = getenv("TF_SYSCALL_SLOW_MS") ? atof(getenv("TF_SYSCALL_SLOW_MS")) : 100.0;   /* diagnostico: baixe (ex.: 3) para achar o que prende o jogo num quadro pesado */
+            if (ms > slow_ms) fprintf(stderr, "[perf] syscall lenta no quadro %llu: %s levou %.0f ms\n", (unsigned long long)f0, g_imports[addr].name, ms);
         }
         if (waddr) { uint32_t after = *(uint32_t *)(g_mem + MA(waddr)); if (after != before) fprintf(stderr, "[watch] %08x mudou %08x -> %08x em %s\n", waddr, before, after, g_imports[addr].name); }
         if (trace) fprintf(stderr, "[hle]   -> %08x\n", c->r[2]);

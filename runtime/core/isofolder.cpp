@@ -49,10 +49,50 @@ HANDLE open_ext(size_t ei) {
     if (h == INVALID_HANDLE_VALUE) return nullptr;
     v->ext = ei; v->h = h; v->used = ++g_tick; return h;
 }
+/* RAM cache of the game files (same idea as the ISO cache in iso.cpp): the duel start reads ~8 files in one frame and, with the disk cache cold,
+ * each read took 5-7 ms (35-40 ms frames at every duel start, session 20261023_224203). A background thread (low I/O priority) reads every file
+ * once; fold_read serves the files that are done from memory. TF_NO_ISO_CACHE=1 turns it off. */
+uint8_t *g_fc; std::vector<uint64_t> g_fc_off; std::vector<uint8_t> g_fc_ok; volatile LONG g_fc_stop; HANDLE g_fc_thr;
+struct FcJob { std::vector<std::wstring> paths; std::vector<uint64_t> sizes, offs; };
+DWORD WINAPI fc_thread(void *p) {
+    FcJob *j = (FcJob *)p;
+    SetThreadPriority(GetCurrentThread(), THREAD_MODE_BACKGROUND_BEGIN);
+    for (size_t i = 0; i < j->paths.size() && !g_fc_stop; i++) {
+        HANDLE h = CreateFileW(j->paths[i].c_str(), GENERIC_READ, FILE_SHARE_READ | FILE_SHARE_WRITE, nullptr, OPEN_EXISTING, FILE_FLAG_SEQUENTIAL_SCAN, nullptr);
+        if (h == INVALID_HANDLE_VALUE) continue;
+        uint64_t got = 0; bool ok = true;
+        while (got < j->sizes[i] && !g_fc_stop) {
+            DWORD n = (DWORD)std::min<uint64_t>(j->sizes[i] - got, 4u << 20), r = 0;
+            if (!ReadFile(h, g_fc + j->offs[i] + got, n, &r, nullptr) || r != n) { ok = false; break; }
+            got += r;
+        }
+        CloseHandle(h);
+        if (ok && got == j->sizes[i]) __atomic_store_n(&g_fc_ok[i], (uint8_t)1, __ATOMIC_RELEASE);
+    }
+    delete j; return 0;
+}
+void fc_stop(void) {
+    if (g_fc_thr) { InterlockedExchange(&g_fc_stop, 1); WaitForSingleObject(g_fc_thr, 10000); CloseHandle(g_fc_thr); g_fc_thr = nullptr; }
+    if (g_fc) { VirtualFree(g_fc, 0, MEM_RELEASE); g_fc = nullptr; }
+    g_fc_ok.clear(); g_fc_off.clear(); g_fc_stop = 0;
+}
+void fc_start(void) {
+    if (getenv("TF_NO_ISO_CACHE") || g_ext.empty()) return;
+    uint64_t total = 0; FcJob *j = new FcJob;
+    for (auto &x : g_ext) { j->paths.push_back(g_dir + x.path); j->sizes.push_back(x.size); j->offs.push_back(total); total += (x.size + 4095) & ~4095ull; }
+    MEMORYSTATUSEX ms = {sizeof ms}; GlobalMemoryStatusEx(&ms);
+    if (!total || total > (3ull << 30) || ms.ullAvailPhys < total + (1536ull << 20)) { delete j; return; }   /* needs the data plus 1.5 GB of free RAM to spare */
+    g_fc = (uint8_t *)VirtualAlloc(nullptr, (SIZE_T)total, MEM_RESERVE | MEM_COMMIT, PAGE_READWRITE);
+    if (!g_fc) { delete j; return; }
+    g_fc_off = j->offs; g_fc_ok.assign(g_ext.size(), 0); g_fc_stop = 0;
+    g_fc_thr = CreateThread(nullptr, 0, fc_thread, j, 0, nullptr);
+    fprintf(stderr, "[iso] arquivos do jogo (%llu MB) sendo lidos para a memoria em segundo plano%c", (unsigned long long)(total >> 20), 10);
+}
 }
 
 bool iso_folder_mode(void);
 void fold_close(void) {
+    fc_stop();
     std::lock_guard<std::mutex> lk(g_mu);
     for (auto &o : g_open) { if (o.h) CloseHandle(o.h); o = Open{0, nullptr, 0}; }
     g_ext.clear(); g_ent.clear(); g_dirs.clear(); g_runs.clear(); g_meta.clear(); g_on = false;
@@ -102,6 +142,7 @@ bool fold_open(const wchar_t *dir) {
         fclose(f);
     }
     g_on = !g_ent.empty() && g_ent.count("");
+    if (g_on) fc_start();
     return g_on;
 }
 int fold_read(uint32_t lba, uint32_t off, void *dst, uint32_t n) {
@@ -120,7 +161,9 @@ int fold_read(uint32_t lba, uint32_t off, void *dst, uint32_t n) {
             memset(d + done, 0, chunk);
             if (fo < x.size) {
                 uint32_t rd = (uint32_t)std::min<uint64_t>(chunk, x.size - fo);
-                HANDLE h = open_ext((size_t)(&x - g_ext.data()));
+                const size_t ei = (size_t)(&x - g_ext.data());
+                if (g_fc && ei < g_fc_ok.size() && __atomic_load_n(&g_fc_ok[ei], __ATOMIC_ACQUIRE)) { memcpy(d + done, g_fc + g_fc_off[ei] + fo, rd); done += chunk; continue; }
+                HANDLE h = open_ext(ei);
                 if (!h) return -1;
                 LARGE_INTEGER li; li.QuadPart = (LONGLONG)fo; DWORD got = 0;
                 if (!SetFilePointerEx(h, li, nullptr, FILE_BEGIN) || !ReadFile(h, d + done, rd, &got, nullptr)) return -1;
