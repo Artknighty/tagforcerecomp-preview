@@ -16,6 +16,7 @@ from PIL import Image, ImageDraw, ImageFont
 
 sys.path.insert(0, os.path.dirname(os.path.abspath(__file__)))
 import depixel  # noqa: E402
+from mod_duelist_list import beveled  # noqa: E402
 
 ROOT = os.path.dirname(os.path.dirname(os.path.dirname(os.path.abspath(__file__))))
 MODS = [os.path.join(ROOT, 'mods', 'EnhancedTextures'), os.path.join(ROOT, 'gen', 'mods', 'EnhancedTextures')]
@@ -195,6 +196,36 @@ def marble_strips(out, t):
         out[iy0 * K:iy1 * K, ix0 * K:ix1 * K] = np.asarray(img)
 
 
+def rr_depth(X, Y, rect, r):
+    """Depth inside the rounded rectangle rect = (x0, y0, x1, y1) (texels, negative outside) at the continuous points X, Y."""
+    x0, y0, x1, y1 = rect
+    cx, cy, hx, hy = (x0 + x1) / 2, (y0 + y1) / 2, (x1 - x0) / 2, (y1 - y0) / 2
+    qx, qy = np.abs(X - cx) - (hx - r), np.abs(Y - cy) - (hy - r)
+    return -(np.minimum(np.maximum(qx, qy), 0) + np.hypot(np.maximum(qx, 0), np.maximum(qy, 0)) - r)
+
+
+def px(t, y, x):
+    return tuple(float(c) for c in t[y, x])
+
+
+def personal_plate(t):
+    """'Personal Deck' plate drawn from geometry: gold bevelled frame, cream rim, one dark rounded field; the deck-case icon is redrawn from its texels."""
+    gold = [px(t, 11, 0), px(t, 11, 1), px(t, 11, 2)]
+    cream, rim, dark = px(t, 3, 60), px(t, 4, 60), px(t, 8, 60)
+
+    def inside(X, Y):
+        col = np.empty(X.shape + (4,), np.float32)
+        col[:] = cream
+        d = rr_depth(X, Y, (15, 4, 130, 18), 3.0)
+        col[d > 0] = rim
+        col[d > 2] = dark
+        return col
+    out = beveled(256, 32, (0, 0, 135, 22), (3.2, 3.2, 3.2, 3.2), gold, inside, (1, 1))
+    icon = depixel.render_smooth(t[4:19, 4:15], K, sigma=SIGMA)
+    out[4 * K:19 * K, 4 * K:15 * K] = icon
+    return out
+
+
 def cursor_frame(out):
     """9-slice of the yellow cursor: the game stretches a single texel row/column of each edge."""
     depixel.flat_row(out, 213, 219, 128)
@@ -204,6 +235,8 @@ def cursor_frame(out):
 
 
 def redraw(t, h=None):
+    if h == '1659d75e':
+        return personal_plate(t)
     if h == '8e3f02b7':
         out = tiled(t, sigma=SIGMA)
         marble_strips(out, t)
