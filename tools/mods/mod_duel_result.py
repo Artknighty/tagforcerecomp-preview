@@ -198,8 +198,29 @@ def door(a):
     return np.dstack([np.clip(grey, 0, 255), np.clip(al * 255, 0, 255)]).round().astype(np.uint8)
 
 
+# WIN / DRAW / LOSE below the doors of the table sheet: (word, face colour, ink box x0, y0, x1, y1 in sheet pixels at 8x)
+WORDS = [('WIN', (255, 254, 0), 99, 390, 324, 492), ('DRAW', (202, 0, 97), 461, 387, 832, 494), ('LOSE', (38, 81, 255), 908, 388, 1250, 493)]
+
+
+def words(out):
+    out[384:500, 80:1262] = 0
+    for text, color, x0, y0, x1, y1 in WORDS:
+        w, h = x1 - x0, y1 - y0
+        m = text_mask(text).resize((w, h), Image.LANCZOS)
+        face = Image.new('L', (w + 40, h + 40), 0); face.paste(m, (20, 20))
+        f = np.asarray(face, np.float32) / 255
+        under = np.asarray(face.filter(ImageFilter.MaxFilter(5)).filter(ImageFilter.GaussianBlur(1.5)), np.float32) / 255
+        under = np.roll(np.roll(under, 4, axis=0), 3, axis=1) * 0.85           # dark outline + offset shadow, as in the original
+        alpha = f + under * (1 - f)
+        rgb = np.array(color, np.float32) * (f / np.maximum(alpha, 1e-4))[..., None]
+        patch = np.dstack([rgb, alpha * 255]).clip(0, 255).round().astype(np.uint8)
+        hh = min(patch.shape[0], out.shape[0] - (y0 - 20))
+        out[y0 - 20:y0 - 20 + hh, x0 - 20:x0 - 20 + patch.shape[1]] = patch[:hh]
+
+
 def table(a):
     out = a.copy()
+    words(out)
     out[0:47 * K, 0:23 * K] = door(a)
     for u0, u1, v0, v1 in FLAT:
         for v in range(v0, v1):
