@@ -30,7 +30,7 @@ export TF_INI="$TF_LOG_DIR/teste.ini"
 # (o modelo de IA do BetterAI, llm/ ~500 MB, so e copiado se for usado: TF_IA_LLM=1 ou llm=1 no config.ini do mod; o padrao e desligado)
 copiar_mod() { src="${1%/}"; dst="$2/$(basename "$src")"; mkdir -p "$dst"
   for f in "$src"/*; do if [ "$(basename "$f")" = llm ] && [ "${TF_IA_LLM:-0}" = 0 ] && ! grep -qs '^llm=1' "$src/config.ini"; then continue; fi; cp -r "$f" "$dst/"; done; }
-if [ -z "$TF_MODS_DIR" ]; then rm -rf gen/plugins_teste; mkdir -p gen/plugins_teste; for d in gen/pkg/TagForceRecomp/mods/*/; do [ -f "$d/plugin.dll" ] && [ ! -f "$d/disabled" ] && copiar_mod "$d" gen/plugins_teste; done; export TF_MODS_DIR="$(cygpath -m "$PWD/gen/plugins_teste" 2>/dev/null || echo "$PWD/gen/plugins_teste")"; fi
+if [ -z "$TF_MODS_DIR" ]; then rm -rf gen/plugins_teste; mkdir -p gen/plugins_teste; PM=gen/pkg/TagForceRecomp/mods; [ -f gen/pkg/TagForceRecomp/TagForceRecomp_bg.exe ] || PM=mods; for d in "$PM"/*/; do [ -f "$d/plugin.dll" ] && [ ! -f "$d/disabled" ] && copiar_mod "$d" gen/plugins_teste; done; export TF_MODS_DIR="$(cygpath -m "$PWD/gen/plugins_teste" 2>/dev/null || echo "$PWD/gen/plugins_teste")"; fi
 # janela escondida e sem som, como no replay.sh (the player uses the PC enquanto os testes rodam; as capturas vem do framebuffer). PRIMEIRO_PLANO=1 mostra.
 [ -z "$PRIMEIRO_PLANO" ] && export TF_SEGUNDO_PLANO=1
 # janela escondida: caixa Sim/Nao (ex.: sair do jogo) respondida com Nao, senao o teste fica parado esperando um clique
