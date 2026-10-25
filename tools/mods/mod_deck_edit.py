@@ -272,6 +272,43 @@ def small_parts(out, t):
             out[y0 * K:(y1 + 1) * K, x0 * K:(x1 + 1) * K] = np.clip(reg + 0.5, 0, 255).astype(np.uint8)
 
 
+def paint(reg, x0, y0, x1, y1, rgb, a=1.0):
+    """Blend a flat rectangle (texel coordinates) over the float RGBA canvas reg."""
+    sl = (slice(int(round(y0 * K)), int(round(y1 * K))), slice(int(round(x0 * K)), int(round(x1 * K))))
+    A = reg[sl][..., 3:4] / 255.0
+    ao = a + A * (1 - a)
+    reg[sl][..., :3] = (np.asarray(rgb[:3], np.float32) * a + reg[sl][..., :3] * A * (1 - a)) / np.maximum(ao, 1e-6)
+    reg[sl][..., 3:4] = ao * 255.0
+
+
+def stat_boxes(out, t):
+    """The six card-type counters (mini cards: coloured frame, blue lip, shaded window, brown side strip, light bar) from geometry.
+    The sheet is minified 4x horizontally in game, so the rectangles follow the original 4-texel columns; the window shading is interpolated, not stepped."""
+    reg = np.zeros((114 * K, 78 * K, 4), np.float32)
+    rim, rim_top, lip, brown = (126, 116, 111), (149, 138, 140), (106, 112, 143), (100, 84, 56)
+    grad = np.array([t[0 + k, 40, :3] for k in range(4, 13)], np.float32)
+    img = Image.fromarray(np.clip(grad[:, None, :], 0, 255).astype(np.uint8)).resize((1, 9 * K), Image.BICUBIC)
+    gradpx = np.asarray(img, np.float32)[:, 0, :]
+    for i in range(6):
+        r = 19 * i
+        F, dF, bar = px(t, r + 1, 4), px(t, r + 2, 20), px(t, r + 15, 20)
+        paint(reg, 2, r + 18, 78, r + 19, (0, 0, 0), 0.5)               # shadow: bottom row and right columns
+        paint(reg, 74, r + 1, 78, r + 19, (0, 0, 0), 0.5)
+        paint(reg, 0, r, 74, r + 1, rim_top)
+        paint(reg, 0, r + 1, 74, r + 18, rim)
+        paint(reg, 2, r + 1, 70, r + 17, F)
+        paint(reg, 6, r + 2, 66, r + 3, dF)
+        paint(reg, 6, r + 3, 66, r + 4, lip)
+        paint(reg, 6, r + 4, 10, r + 13, lip)
+        paint(reg, 62, r + 4, 66, r + 14, brown)
+        paint(reg, 6, r + 13, 66, r + 14, brown)
+        sl = (slice((r + 4) * K, (r + 13) * K), slice(10 * K, 62 * K))
+        reg[sl][..., :3] = gradpx[:, None, :]
+        reg[sl][..., 3] = 255.0
+        paint(reg, 6, r + 15, 66, r + 16, bar)
+    out[:114 * K, :78 * K] = np.clip(reg + 0.5, 0, 255).astype(np.uint8)
+
+
 def rr_depth(X, Y, rect, r):
     """Depth inside the rounded rectangle rect = (x0, y0, x1, y1) (texels, negative outside) at the continuous points X, Y."""
     x0, y0, x1, y1 = rect
@@ -387,6 +424,7 @@ def redraw(t, h=None):
     else:
         out = depixel.render_smooth(t, K, sigma=SOFT.get(h, SIGMA), **FINE.get(h, {}))
     if h == 'c630f1be':
+        stat_boxes(out, t)
         out[:, 124 * K:] = 0                         # two stray opaque columns at the sheet's right edge: the game draws them as a lone vertical line beside the Deck tab
     h, w = t.shape[:2]
     if (t == t[:, :1]).all():                       # every column equal: the game stretches it horizontally
