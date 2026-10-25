@@ -62,6 +62,16 @@ static Chan *chan_for(uint64_t *cursor) {
     for (int i = 0; i < g_nch; i++) if (g_ch[i].key == cursor) return &g_ch[i];
     return g_nch < 8 ? &(g_ch[g_nch++] = {cursor, 0.0}) : nullptr;
 }
+/* How many ms of game audio are still queued ahead of the read position on the emptiest active channel (a big number when nothing plays). The game
+ * thread uses it to decide how long it may block (texture waits) without starving the device. */
+double audio_out_slack_ms(void) {
+    if (!g_on) return 1e9;
+    std::lock_guard<std::mutex> lk(g_mx);
+    const double t = now_ms(); double low = 1e18;
+    for (int i = 0; i < g_nch; i++) { if (!g_ch[i].last_ms || t - g_ch[i].last_ms > 300.0 || !*g_ch[i].key) continue; low = std::min(low, (double)*g_ch[i].key - g_rpos); }
+    return low > 1e17 ? 1e9 : std::max(0.0, low) * 1000.0 / RATE;
+}
+
 /* reserve target ahead of the read position, adaptive (see the top comment); after 60 s without an underrun it comes back down 25 ms */
 static const double RESERVE_MIN = 3300, RESERVE_MAX = 7500, RESERVE_STEP = 1100;
 static double g_target = RESERVE_MIN, g_under_ms;

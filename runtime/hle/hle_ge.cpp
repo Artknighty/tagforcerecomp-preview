@@ -1126,13 +1126,17 @@ static int repl_get(uint32_t dh, int ow, int oh, std::shared_ptr<TexReplImg> &ri
     /* primeira vez que a textura aparece (nao esta no cache em RAM): segura o quadro ate o PNG ficar pronto, em vez de mostrar a original
      * de baixa resolucao e trocar depois (pop-in). Orcamento por quadro: TF_TEX_WAIT_MS (padrao 80; 0 = nunca segura). */
     static const double first_us = (getenv("TF_TEX_WAIT_MS") ? atof(getenv("TF_TEX_WAIT_MS")) : 80.0) * 1000.0;
-    const double limit = wait ? 200000.0 : first ? first_us : 0.0;
+    /* the wait also stops the game thread's audio: never hold the frame longer than the queued audio can cover (minus a margin), or it clicks */
+    extern double audio_out_slack_ms(void);
+    const double aud_us = std::max(0.0, audio_out_slack_ms() - 40.0) * 1000.0;
+    const double limit = wait ? 200000.0 : first ? std::min(first_us, aud_us) : 0.0;
     if (st != 1 || limit <= 0.0) return st;
     extern uint64_t display_frames(void);
     static uint64_t frame = ~0ull; static double spent; if (display_frames() != frame) { frame = display_frames(); spent = 0; }
     const double t0 = gpu_now_us();
     while (st == 1 && spent + (gpu_now_us() - t0) < limit) { Sleep(1); st = texrepl_get(dh, CMD(0xb8) & 0xf0f, ow, oh, ri, tcol); }
     spent += gpu_now_us() - t0; g_fc_wait_ms += (gpu_now_us() - t0) / 1000.0;
+    { const double w = (gpu_now_us() - t0) / 1000.0; static int told; if (w > 15.0 && told < 200) { told++; fprintf(stderr, "[texturas] espera lenta %.0f ms pela substituta %08x (%s, limite do quadro %.0f ms)%c", w, dh, st == 1 ? "ainda carregando: fila de leitura" : "chegou", limit / 1000.0, 10); } }
     return st;
 }
 static uint32_t gpu_tex_create_ev(int w, int h, const uint32_t *px, bool mips, uint64_t *bytes, const uint32_t *chain = nullptr);

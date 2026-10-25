@@ -474,7 +474,9 @@ int texrepl_get(uint32_t hash0, uint32_t dim, int ow, int oh, std::shared_ptr<Te
         const uint32_t gen = g_gen; const std::wstring path = pick->path;
         LeaveCriticalSection(&g_cs);
         auto img = std::make_shared<TexReplImg>(); std::wstring cf;
+        const uint64_t rt0 = GetTickCount64();
         const bool ok = disk_key(path, cf) && disk_read(cf, *img);
+        { const uint64_t rms = GetTickCount64() - rt0; static int told; if (rms > 10 && told < 100) { told++; fprintf(stderr, "[texturas] leitura direta lenta (%llu ms, %zu KB): %ls%c", (unsigned long long)rms, img->bc.size() >> 10, path.c_str(), 10); } }
         EnterCriticalSection(&g_cs);
         if (ok && gen == g_gen) { ram_put(hash, img, path, now); note_recent(hash, hash0, path, *img); out = img; g_loaded++; g_sync_reads++; LeaveCriticalSection(&g_cs); return 2; }
         r = g_res.find(hash);
