@@ -4,6 +4,24 @@ Format: [Keep a Changelog](https://keepachangelog.com/en/1.1.0/). Versioning: [S
 
 ## [Unreleased]
 
+## [0.5.0] - 2026-10-25
+
+### Added
+- **Four downloads** (see the README): the plain runtime, the mods, the Enhanced Textures pack and a Full pack with everything. Every mod and the textures start switched off.
+- **Enhanced Textures pack** (HD menus, Deck Edit, duel screens, HD opening movie, EU card art), split into parts below 2 GB each because of the release size limit.
+- **Card style** option (TCG / Anime) on the launcher, right below Textures.
+- Launcher: the Textures row shows where the pack lives and has a Browse button; the Mods page has a Disable all / Enable all button.
+- Cheats: save states (F1 save, F12 load, 4 slots). F4 cycles the frame rate 30/60/120 FPS.
+- On-screen notices are drawn as an overlay panel, so they show in fullscreen.
+- Recovery from a lost GPU device (the renderer is rebuilt; software fallback after repeated losses).
+- Folder mode caches the game files in RAM in the background (no stall at the start of a duel).
+- Plugin API 7: `set_bgm` replaces the next looping music; the Yugi mod plays its own theme only in the duel against him.
+
+### Fixed
+- Frame interpolation: sliding menu panels, the 3D summon cut and face-down defense cards no longer run at the base rate or flicker; steadier frame pacing after a late frame.
+- Duel win screen painted orange (triangles beyond the far plane); seams between axis-aligned 3D pieces at 4x/8x.
+- Hand-redrawn HD UI in the textures pack: Deck Edit, duelist list, Duel Result, menu frames and pills, HD digits.
+
 ### Changed
 - **Cheats is now part of the recomp, not a mod.** It lives in the exe (`runtime/mods/cheats.cpp`) and no longer needs `mods/Cheats`; the launcher's Cheats page and the in-game keys are unchanged. Settings moved to `cheats.ini` next to `tagforce_recomp.ini` (the old `mods/Cheats/config.ini` and its on/off switch are imported on the first start; an old `mods/Cheats` folder is ignored).
 

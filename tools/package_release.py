@@ -1,6 +1,6 @@
 """Builds the release package: a zip the player extracts and runs, with nothing to install.
 
-    python tools/package_release.py [--out gen/release] [--no-build] [--version 0.1-preview]
+    python tools/package_release.py [--out gen/release] [--no-build] [--version 0.1-preview] [--extras]
 
 The package contains NO game data and no game code. It holds:
   TagForceRecomp.exe   the generic runtime (no game code inside)
@@ -10,6 +10,8 @@ The package contains NO game data and no game code. It holds:
   gen/nids_hle.tsv     names of the system calls the runtime implements
 The main zip carries NO mods (it stays as close to the original game as possible). The behavior mods of plugins/src/ (plugin.dll) go in a
 second zip, TagForceRecomp-Mods-<version>.zip, whose mods/ folder the player copies next to the exe; each ships switched off.
+With --extras it also builds the Enhanced Textures pack (mods/EnhancedTextures, switched off) and a Full pack (runtime + mods + textures),
+both cut into parts below the 2 GB release-asset limit; the parts of one pack are extracted into the same folder.
 On first run the program installs the game files from the player's ISO and translates the game's code on the player's machine
 (runtime/core/prepare.cpp); the C code is then compiled in memory by TinyCC (runtime/core/jit.cpp).
 Needs (on the build machine only): MSYS2 UCRT64 (g++, windres, glslc, FFmpeg), Python 3. Downloads TinyCC and the embeddable Python
@@ -42,6 +44,72 @@ def fetch(url, dest):
         print('downloading', url, flush=True)
         urllib.request.urlretrieve(url, dest)
     return dest
+
+
+PART_LIMIT = 1_950_000_000   # bytes per part: GitHub release assets must stay below 2 GiB
+TEX_SKIP = ('origem.tsv', 'LEIA-ME.txt', 'mod.txt')
+
+
+def write_parts(entries, out, base):
+    """entries = [(source_path, arcname)]. Writes <base>-partN.zip files under PART_LIMIT and renames them to partNofM. Returns their paths."""
+    parts, z, used = [], None, 0
+    for src, arc in entries:
+        size = os.path.getsize(src)
+        if z is None or (used + size > PART_LIMIT and used > 0):
+            if z: z.close()
+            parts.append(os.path.join(out, '%s-part%d.zip' % (base, len(parts) + 1)))
+            z = zipfile.ZipFile(parts[-1], 'w', zipfile.ZIP_DEFLATED, compresslevel=6, allowZip64=True); used = 0
+        stored = src.lower().endswith(('.png', '.h264', '.webp', '.zip', '.wav', '.dll', '.exe'))   # already compressed: do not waste time
+        z.write(src, arc, compress_type=zipfile.ZIP_STORED if stored else zipfile.ZIP_DEFLATED)
+        used += size
+    if z: z.close()
+    final = []
+    for i, pth in enumerate(parts, 1):
+        dst = os.path.join(out, '%s-part%dof%d.zip' % (base, i, len(parts)))
+        if os.path.exists(dst): os.remove(dst)
+        os.rename(pth, dst); final.append(dst)
+        print('package: %s (%.1f MB)' % (dst, os.path.getsize(dst) / 1048576))
+    return final
+
+
+def package_extras(out, pkg, mods_pkg, version):
+    """Enhanced Textures pack and Full pack, in parts. Both ship the textures switched off (marker file 'disabled')."""
+    tex = os.path.join(ROOT, 'mods', 'EnhancedTextures')
+    if not os.path.isdir(os.path.join(tex, 'textures')): sys.exit('mods/EnhancedTextures/textures not found')
+    stage = os.path.join(out, 'TexStage'); shutil.rmtree(stage, ignore_errors=True); os.makedirs(stage)
+    open(os.path.join(stage, 'mod.txt'), 'w').write(
+        'name=Enhanced Textures\nauthor=MikeyMK, Filipe Ramos (PT-BR), Artknightt (character sprites); upscaled with Real-ESRGAN\nversion=%s\n'
+        'description=Remastered textures, menus and text in high resolution, plus the HD opening movie\n' % version)
+    open(os.path.join(stage, 'disabled'), 'w').write('Switched off. Delete this file (or pick Textures: Enhanced on the launcher) to switch it on.\n')
+    open(os.path.join(stage, 'README.txt'), 'w').write(
+        'Enhanced Textures - Tag Force Recomp %s\r\n\r\n'
+        'Extract EVERY part of this pack so that the "mods" folder lands next to TagForceRecomp.exe (merge folders if asked).\r\n'
+        'The pack starts switched off: open the launcher and set Textures to Enhanced (restart to apply).\r\n'
+        'Use only this pack for textures; do not copy a second texture pack with the same hashes.\r\n\r\n'
+        'CREDITS\r\n'
+        '- MikeyMK: the HD texture pack this package is built on (folder textures/mikeymk). Thank you!\r\n'
+        '- Filipe Ramos: the Brazilian Portuguese (PT-BR) texture work.\r\n'
+        '- Artknightt: the character sprites.\r\n'
+        '- Real-ESRGAN (BSD-3-Clause): the AI upscaler used for the 2x versions and the HD opening movie.\r\n'
+        '- Menus, Deck Edit, duel screens and HD digits redrawn by the Tag Force Recomp contributors.\r\n'
+        'Yu-Gi-Oh! and Tag Force are trademarks of Konami. Unofficial fan project; the textures are derived from the game.\r\n' % version)
+    entries = []   # (source, path inside mods/EnhancedTextures)
+    for n in ('mod.txt', 'disabled', 'README.txt'): entries.append((os.path.join(stage, n), n))
+    for dp, dn, fn in os.walk(tex):
+        dn.sort()
+        for f in sorted(fn):
+            rel = os.path.relpath(os.path.join(dp, f), tex).replace(os.sep, '/')
+            if rel in TEX_SKIP or '.bak' in f: continue
+            entries.append((os.path.join(dp, f), rel))
+    tex_only = [(s, 'mods/EnhancedTextures/' + a) for s, a in entries]
+    write_parts(tex_only, out, 'TagForceRecomp-EnhancedTextures-%s' % version)
+    full = []   # runtime + mods first, so part 1 is a playable game even before the textures arrive
+    for base_dir in (pkg, mods_pkg):
+        for dp, dn, fn in os.walk(base_dir):
+            for f in sorted(fn):
+                if f != 'INSTALL.txt': full.append((os.path.join(dp, f), 'TagForceRecomp/' + os.path.relpath(os.path.join(dp, f), base_dir).replace(os.sep, '/')))
+    full += [(s, 'TagForceRecomp/' + a) for s, a in tex_only]
+    write_parts(full, out, 'TagForceRecomp-Full-%s' % version)
 
 
 def main():
@@ -166,6 +234,7 @@ def main():
             for f in fn:
                 p = os.path.join(dp, f); z.write(p, os.path.relpath(p, mods_pkg))
     print('mods package: %s (%.1f MB)' % (mz, os.path.getsize(mz) / 1048576))
+    if '--extras' in args: package_extras(out, pkg, mods_pkg, version)
 
 
 if __name__ == '__main__':

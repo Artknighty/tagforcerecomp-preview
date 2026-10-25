@@ -38,8 +38,15 @@ ATRAC3/3+) and H.264 movies through FFmpeg. Network/ad-hoc modes are not support
 ## Mods
 
 The main download has **no mods**: it is as close to the original game as possible. Mods come separately: every one is a folder in `mods/`
-(next to the exe), switched on or off on the launcher's **Mods** page (applies on restart). The release has a second file,
-`TagForceRecomp-Mods-<version>.zip`, with all the behavior mods below (each starts switched off); copy its `mods` folder next to the exe.
+(next to the exe), switched on or off on the launcher's **Mods** page (applies on restart). Every mod ships **switched off**.
+Each release has four downloads:
+
+| File | What it is |
+|---|---|
+| `TagForceRecomp-<version>-win64.zip` | the plain runtime, no mods, no textures |
+| `TagForceRecomp-Mods-<version>.zip` | all behavior mods below; copy its `mods` folder next to the exe |
+| `TagForceRecomp-EnhancedTextures-<version>-partNofM.zip` | the Enhanced Textures pack (HD menus, opening movie, EU cards), cut into parts below 2 GB; extract all of them next to the exe, then set Textures to Enhanced on the launcher |
+| `TagForceRecomp-Full-<version>-partNofM.zip` | everything above in one set of parts (extract all of them into the same folder); mods and textures start switched off |
 There are three kinds of mod:
 
 | Kind | What it does |
@@ -61,14 +68,14 @@ Behavior mods in this repository (sources in [`plugins/src/`](plugins/src/)):
 | **Story Duel LP** (`StoryLP`) | story duels start with 4000 LP for both duelists instead of 8000 (value in `config.ini`) |
 | **Monsters on the field** (`MonstersOnField`) | *experimental prototype*: shows your face-up monsters larger over their zone |
 
-Texture, video and button packs (HD menus, HD opening movie, EU cards, Xbox buttons) are separate mods distributed outside the repository.
+The Enhanced Textures pack (HD menus, HD opening movie, EU cards, Xbox buttons) is a release download, not part of the repository.
 
 The plugin API can read and write PSP memory and registers, call game functions, show message boxes over the screen and register
 slider settings in the menu. See [`docs/MODS.md`](docs/MODS.md) to build your own.
 
 ## Download and play
 
-1. Download `TagForceRecomp-<version>-win64.zip` from the [Releases](../../releases) page and extract it anywhere (not inside `Program Files`).
+1. Download `TagForceRecomp-<version>-win64.zip` (or the Full pack, see [Mods](#mods)) from the [Releases](../../releases) page and extract it anywhere (not inside `Program Files`).
 2. Run `TagForceRecomp.exe`, click **Select ISO...** and pick **your own** copy of the game (European release, ULES-00600).
 3. Click **Install and play**. The first run copies the game files and translates the game's code on your machine (a few minutes,
    only once; the ISO is not needed afterwards). From then on just click **Play**.
@@ -136,7 +143,7 @@ The most important rule: **no game data in the repository**.
 
 ## Credits
 
-- HD texture pack used by many players: **MikeyMK** and **Filipe Ramos**.
+- HD texture pack used by many players: **MikeyMK** and **Filipe Ramos** (PT-BR). The Enhanced Textures pack in the releases builds on their work, with the character sprites by **Artknightt**, 2x versions made with Real-ESRGAN, and menus redrawn by the contributors. Thank you!
 - [PPSSPP](https://www.ppsspp.org/): reference for hardware behavior and the texture pack format (read-only reference, no code copied).
 - [FFmpeg](https://ffmpeg.org/): video and ATRAC audio.
 - [llama.cpp](https://github.com/ggml-org/llama.cpp): runs the small language model of the Better AI mod.
