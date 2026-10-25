@@ -148,8 +148,12 @@ static bool choose(Job &j, std::shared_ptr<TexReplImg> &o, bool *todo) {   /* j.
         uint32_t sig; EnterCriticalSection(&g_sigcs); auto it = g_sig.find(j.cands[i]); bool have = it != g_sig.end(); if (have) sig = it->second; LeaveCriticalSection(&g_sigcs);
         if (!have) { imgs[i] = std::make_shared<TexReplImg>(); bool t = false; if (!load_tex(j.cands[i], *imgs[i], &t)) { imgs[i].reset(); EnterCriticalSection(&g_sigcs); g_sig[j.cands[i]] = 0xffffffffu; LeaveCriticalSection(&g_sigcs); continue; } td[i] = t; sig = imgs[i]->sig; EnterCriticalSection(&g_sigcs); g_sig[j.cands[i]] = sig; LeaveCriticalSection(&g_sigcs); }
         if (sig == 0xffffffffu || j.target == 0xffffffffu) { if (bd < 0 && i == 0) best = 0; continue; }
-        long long dr = (long long)(sig & 255) - (j.target & 255), dg = (long long)((sig >> 8) & 255) - ((j.target >> 8) & 255), db = (long long)((sig >> 16) & 255) - ((j.target >> 16) & 255);
-        long long d = dr * dr + dg * dg + db * db; if (bd < 0 || d < bd) { bd = d; best = (int)i; }
+        /* palette variants differ in hue, while the HD PNGs are brighter than the PSP texture: compare the colour ratios first, brightness only as a small tie-breaker */
+        const double sr = sig & 255, sg = (sig >> 8) & 255, sb = (sig >> 16) & 255, tr = j.target & 255, tg = (j.target >> 8) & 255, tb = (j.target >> 16) & 255;
+        const double ss = sr + sg + sb + 1.0, ts = tr + tg + tb + 1.0;
+        const double cr = sr / ss - tr / ts, cg = sg / ss - tg / ts, cb = sb / ss - tb / ts;
+        const double dl = (ss - ts) / 765.0;
+        long long d = (long long)((cr * cr + cg * cg + cb * cb) * 1e6 + dl * dl * 1e3); if (bd < 0 || d < bd) { bd = d; best = (int)i; }
     }
     if (!imgs[best]) { imgs[best] = std::make_shared<TexReplImg>(); bool t = false; if (!load_tex(j.cands[best], *imgs[best], &t)) return false; td[best] = t; }
     o = imgs[best]; *todo = td[best] != 0; j.path = j.cands[best]; return true;
@@ -402,6 +406,7 @@ void texrepl_init(void) {
             unsigned key = 0, h0 = 0; unsigned long long b = 0; char path[1800] = "";
             if (sscanf(line, "%x %x %llu %1799[^\r\n]", &key, &h0, &b, path) != 4) continue;
             auto it = g_idx.find(h0); if (it == g_idx.end()) continue;
+            if (g_amb.count(h0)) continue;   /* palette variants are re-chosen by colour each run: a stale record must not pin a wrong frame */
             /* casa pelo trecho depois de "textures\" (o pacote pode estar em outra pasta: replays usam gen/mods_teste, a lista do jogador tem mods\...) */
             auto tail = [](const std::wstring &p) { size_t k = p.rfind(L"\\textures\\"); if (k == std::wstring::npos) k = p.rfind(L"/textures/"); return k == std::wstring::npos ? p : p.substr(k + 10); };
             std::wstring wp = to_wide(path); const std::wstring wt = tail(wp); bool known = false;
