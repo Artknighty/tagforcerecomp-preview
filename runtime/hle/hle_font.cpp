@@ -58,7 +58,7 @@ static Glyph &glyph(uint32_t code) {
 
 /* O mesmo glifo desenhado em HDS x o tamanho (fonte em alta resolucao, ver hdfont.h). FONT_HD_FACE troca so a fonte HD (padrao: a mesma do nativo). */
 static HFONT g_latin_hd, g_cjk_hd;
-constexpr float kDigitX = 1.1f, kDigitY = 0.88f;   /* digit glyph scale (width, height) */
+constexpr float kDigitX = 1.32f, kDigitY = 0.92f;   /* digit glyph scale (width, height) */
 static int g_hd_lift;   /* HD px que o glifo sobe: encolher ancorado na linha de base deixaria o texto colado embaixo; mantem o centro das maiusculas (~0,35 em) no mesmo lugar */
 bool font_hd_glyph(uint32_t code, int *w, int *h, int *top, std::vector<uint8_t> *a8) {
     init_gdi();
