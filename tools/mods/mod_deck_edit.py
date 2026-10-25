@@ -191,18 +191,19 @@ def marble_strips(out, t):
             for x in range(x0, x1):
                 if t[y, x, 3] != 255:
                     continue
-                if x < ix0:
-                    e[y, x] = left[x - x0]
-                elif x >= ix1:
-                    e[y, x] = right[x1 - 1 - x]
-                elif y < iy0:
-                    e[y, x] = top[y - y0]
-                elif y >= iy1:
-                    e[y, x] = bottom[y1 - 1 - y]
+                side, tb = x < ix0 or x >= ix1, y < iy0 or y >= iy1
+                ds, dt = min(x - x0, x1 - 1 - x), min(y - y0, y1 - 1 - y)
+                if side and tb:                                   # corner: mitre, the nearer edge wins
+                    side = dt >= ds
+                    tb = not side
+                if side:
+                    e[y, x] = left[x - x0] if x < ix0 else right[x1 - 1 - x]
+                elif tb:
+                    e[y, x] = top[y - y0] if y < iy0 else bottom[y1 - 1 - y]
         e[iy0:iy1, ix0:ix1] = med(inner)
         pa = 2
         ya, yb, xa, xb = max(0, y0 - pa), y1 + 1 + pa, max(0, x0 - pa), min(t.shape[1], x1 + 1 + pa)
-        r = depixel.render(e[ya:yb, xa:xb], K, sigma=SIGMA)
+        r = depixel.render(e[ya:yb, xa:xb], K, sigma=0.3)
         out[y0 * K:(y1 + 1) * K, x0 * K:(x1 + 1) * K] = r[(y0 - ya) * K:(y1 + 1 - ya) * K, (x0 - xa) * K:(x1 + 1 - xa) * K]
         img = Image.fromarray(np.ascontiguousarray(inner)).resize(((ix1 - ix0) * K, (iy1 - iy0) * K), Image.BICUBIC)
         out[iy0 * K:iy1 * K, ix0 * K:ix1 * K] = np.asarray(img)
