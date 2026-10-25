@@ -45,14 +45,14 @@ static const LOpt kOpts[] = {
     {L"Resolution", L"Screen resolution, as in any PC game. 2560x1440 and 3840x2160 need the GPU.", L"resolucao", 6, {L"480 x 272 (PSP)", L"1280 x 720", L"1920 x 1080", L"2560 x 1440", L"3840 x 2160", L"Match monitor"}, kResV, 0},
     {L"Window mode", L"Fullscreen is exclusive (Direct3D 11 only; Vulkan uses borderless). Borderless covers the screen with a window. In game, F11 or Alt+Enter switches too.", L"tela", 3, {L"Windowed", L"Fullscreen", L"Fullscreen borderless"}, kWinV, 0},
     {L"Textures", L"Original is the plain PSP look. Enhanced is the remastered package: textures, menus and text in high resolution.", nullptr, 2, {L"Original", L"Enhanced"}, nullptr, 1},
+    {L"Card style", L"TCG is the printed card look. Anime changes the card back and the rock-paper-scissors art. Needs the Enhanced textures.", L"estilo_cartas", 2, {L"TCG version", L"Anime version"}, nullptr, 0},
     {L"Frame rate", L"60 and 120 FPS are interpolated from the original 30 (GPU). 120 needs a 120 Hz monitor.", L"fps60", 3, {L"30 FPS", L"60 FPS", L"120 FPS"}, nullptr, 1},
     {L"Synchronization", L"Default avoids tearing. VSync waits for the monitor.", L"sincronizacao", 3, {L"Default", L"VSync", L"Lowest latency"}, nullptr, 0},
     {L"Filter", L"How the 480 x 272 image is scaled to the window.", L"filtro", 3, {L"Sharp pixels", L"Smoothed", L"Bilinear"}, nullptr, 1},
     {L"Aspect ratio", L"Proportion of the image: original 16:9, stretched or 4:3.", L"proporcao", 3, {L"16:9", L"Stretch", L"4:3"}, nullptr, 0},
-    {L"Card style", L"TCG is the printed card look. Anime changes the card back and the rock-paper-scissors art. Needs the Enhanced textures.", L"estilo_cartas", 2, {L"TCG version", L"Anime version"}, nullptr, 0},
 };
 static const int N_OPT = (int)(sizeof kOpts / sizeof kOpts[0]);
-enum { NQ = 4, OPT_FPS = 4 };
+enum { NQ = 4, OPT_FPS = 5 };
 static const int kQuick[NQ] = {0, 1, 2, OPT_FPS};     /* opcoes repetidas na pagina Play: renderer, resolucao, modo de janela, FPS */
 static HWND g_sel[N_OPT], g_qsel[NQ]; static int g_cur[N_OPT];
 static std::wstring g_path;                 /* ISO escolhida */
