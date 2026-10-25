@@ -21,4 +21,5 @@ int gfx_texscale();   /* texture upscaling in effect (1 when gfx_raw_psp) */
 /* Resolucao como num jogo de PC (2026-10-15): o jogador escolhe 1280x720, 1920x1080, 2560x1440, 3840x2160 ou a do monitor; por dentro vale o menor
  * multiplo inteiro de 480x272 que cobre essa altura (3x = 1440x816, 4x = 1920x1088, 6x = 2880x1632, 8x = 3840x2176) e a imagem e reduzida para a janela.
  * Fator inteiro: os sprites 2D do PSP (menus, cartas, texto) nao ganham costuras nem tremem como numa escala fracionaria. */
+int gfx_vram_mb(bool *integrated);   /* video memory of the best adapter in MB (integrated: a quarter of the shared memory); 0 = unknown */
 int gfx_res_monitor(void);   /* fator para a altura do monitor principal */

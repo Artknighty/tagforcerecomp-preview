@@ -1034,7 +1034,12 @@ static uint64_t hash_bytes(const uint8_t *p, size_t n) {   /* so comparado em me
     return h;
 }
 static uint64_t g_tex_bytes, g_tex_fail;   /* memoria estimada das texturas na GPU (cache) e falhas de criacao */
-static const uint64_t g_tex_budget = (uint64_t)(getenv("TF_TEX_BUDGET_MB") ? atoll(getenv("TF_TEX_BUDGET_MB")) : 1536) << 20;
+/* GPU texture budget: 1536 MB, but at most 40% of the video memory (the internal-resolution framebuffers need the rest), never below 384 MB */
+static uint64_t tex_budget_default(void) {
+    extern int gfx_vram_mb(bool *); const int mb = gfx_vram_mb(nullptr);
+    return mb > 0 ? (uint64_t)std::max(384, std::min(1536, mb * 4 / 10)) : 1536;
+}
+static const uint64_t g_tex_budget = (uint64_t)(getenv("TF_TEX_BUDGET_MB") ? atoll(getenv("TF_TEX_BUDGET_MB")) : (long long)tex_budget_default()) << 20;
 /* TEXTURAS HD COMPARTILHADAS (2026-10-15): a substituta de um hash (+ variante de cor, + ampliada ou nao) vira UMA textura na GPU, usada por
  * todas as entradas do cache que a pedem (o jogo recarrega a mesma arte em outro endereco ao voltar a uma tela). Antes cada entrada criava a sua
  * e a entrada parada 5 s saia da GPU: ao voltar a uma tela as HD subiam de novo (~11 ms de GPU por 16 MB, o intermediario do 60 FPS saia

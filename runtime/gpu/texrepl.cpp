@@ -8,6 +8,7 @@
 #include "mods.h"
 #include "util.h"
 #include <windows.h>
+#include <winioctl.h>
 #include <atomic>
 #include <unordered_map>
 #include <unordered_set>
@@ -56,7 +57,12 @@ static void note_recent(uint32_t key, uint32_t hash0, const std::wstring &path, 
 }
 static std::unordered_map<uint32_t, RamEnt> g_ram; static uint64_t g_ram_bytes, g_ram_hits;
 static std::deque<uint32_t> g_pre_ready;   /* pre-carregadas prontas na RAM, na ordem da lista (mais recentes primeiro), para subir para a GPU */
-static const uint64_t g_ram_budget = (uint64_t)(getenv("TF_TEX_RAM_MB") ? atoll(getenv("TF_TEX_RAM_MB")) : 1024) << 20;
+/* RAM cache of the decoded substitutes: 1024 MB, but at most 1/8 of the installed RAM (4 GB machines get 512 MB) */
+static uint64_t ram_budget_default(void) {
+    MEMORYSTATUSEX ms = {sizeof ms}; GlobalMemoryStatusEx(&ms);
+    return std::max<uint64_t>(256, std::min<uint64_t>(1024, ms.ullTotalPhys >> 23));
+}
+static const uint64_t g_ram_budget = (uint64_t)(getenv("TF_TEX_RAM_MB") ? atoll(getenv("TF_TEX_RAM_MB")) : (long long)ram_budget_default()) << 20;
 static void ram_put(uint32_t hash, const std::shared_ptr<TexReplImg> &img, const std::wstring &path, uint64_t last) {   /* sob g_cs; last = 0: pre-carga (sai primeiro) */
     uint64_t b = (uint64_t)img->bytes(); if (!g_ram_budget || b > g_ram_budget / 4) return;
     auto it = g_ram.find(hash); if (it != g_ram.end()) { g_ram_bytes -= (uint64_t)it->second.img->bytes(); g_ram.erase(it); }
@@ -72,7 +78,7 @@ static void ram_put(uint32_t hash, const std::shared_ptr<TexReplImg> &img, const
  * A compressao e feita em segundo plano (fila g_bgq, prioridade minima): a textura usada agora sai em RGBA e a versao BC7 fica para as proximas
  * vezes; e, aos poucos, o pacote inteiro (TF_TEX_BC7_FUNDO=0 desliga essa parte). TF_TEX_BC7=0 desliga o BC7 (volta ao RGBA de antes).
  * Limite TF_TEX_DISK_MB (padrao 8192; 0 desliga o cache); ao iniciar, apaga as entradas mais antigas se passar do limite (e os .rgba do formato antigo). */
-static const uint64_t g_disk_budget = (uint64_t)(getenv("TF_TEX_DISK_MB") ? atoll(getenv("TF_TEX_DISK_MB")) : 8192) << 20;
+static const uint64_t g_disk_budget = (uint64_t)(getenv("TF_TEX_DISK_MB") ? atoll(getenv("TF_TEX_DISK_MB")) : 8192ll) << 20;
 static bool g_bc_on = g_disk_budget && !(getenv("TF_TEX_BC7") && atoi(getenv("TF_TEX_BC7")) == 0);
 static std::wstring g_cdir = getenv("TF_TEX_CACHE_DIR") ? to_wide(getenv("TF_TEX_CACHE_DIR")) : std::wstring(L"texcache");
 static volatile LONG64 g_disk_bytes;   /* tamanho atual do cache em disco (aproximado; disk_trim mede ao iniciar) */
@@ -188,8 +194,15 @@ static uint64_t g_bg_from;   /* a fila de fundo so anda depois desta hora (ms): 
 static void queue_compress(uint32_t hash, const std::wstring &path, const std::shared_ptr<TexReplImg> &img) {   /* sob g_cs */
     Job c; c.kind = 4; c.hash = hash; c.path = path; c.img = img; g_bgq.push_front(std::move(c));
 }
+/* the drive holding the cache is nearly full (< 4 GB free): stop adding files (checked at most every 20 s) */
+static bool disk_low(void) {
+    static uint64_t last; static bool low; const uint64_t now = GetTickCount64();
+    if (now - last > 20000) { last = now; ULARGE_INTEGER fr; low = GetDiskFreeSpaceExW(nullptr, &fr, nullptr, nullptr) && (fr.QuadPart >> 30) < 4; }
+    return low;
+}
 static void run_bg(Job &j, uint32_t gen) {
     std::wstring cf; if (!g_bc_on || !disk_key(j.path, cf)) return;
+    if (disk_low()) { static bool told; if (!told) { told = true; fprintf(stderr, "[texturas] less than 4 GB free on the drive: not adding more BC7 files to the cache\n"); } return; }
     const uint64_t t0 = GetTickCount64();
     std::shared_ptr<TexReplImg> src = j.img;
     if (j.kind == 5) {
@@ -312,6 +325,15 @@ static void build_mips(TexReplImg &img) {   /* mesmos tamanhos do Vulkan (max(1,
 /* Cold-open warm-up. The first open of each cache file costs ~5 ms (real-time antivirus scan / metadata), reading it only ~0.3 ms; a re-open is ~0.25 ms and
  * parallel first opens are ~5x faster. A new scene asks for ~24 textures one by one on the game thread (~130 ms: an audio gap). So a few background threads
  * open every cached .bc7 once after the start (low priority, I/O included); by the first duel the opens are warm. */
+static bool cache_on_hdd(void) {   /* the drive of the working folder has a seek penalty (spinning disk): parallel opens would only make the heads thrash */
+    wchar_t cwd[MAX_PATH]; if (!GetCurrentDirectoryW(MAX_PATH, cwd) || cwd[1] != L':') return false;
+    wchar_t vol[8] = {L'\\', L'\\', L'.', L'\\', cwd[0], L':', 0};
+    HANDLE h = CreateFileW(vol, 0, FILE_SHARE_READ | FILE_SHARE_WRITE, nullptr, OPEN_EXISTING, 0, nullptr); if (h == INVALID_HANDLE_VALUE) return false;
+    STORAGE_PROPERTY_QUERY q = {}; q.PropertyId = StorageDeviceSeekPenaltyProperty; q.QueryType = PropertyStandardQuery;
+    DEVICE_SEEK_PENALTY_DESCRIPTOR d = {}; DWORD got = 0;
+    const bool ok = DeviceIoControl(h, IOCTL_STORAGE_QUERY_PROPERTY, &q, sizeof q, &d, sizeof d, &got, nullptr) && got >= sizeof d;
+    CloseHandle(h); return ok && d.IncursSeekPenalty;
+}
 static DWORD WINAPI warm_cache(LPVOID) {
     Sleep(4000);
     std::vector<std::wstring> files; WIN32_FIND_DATAW fd;
@@ -320,14 +342,14 @@ static DWORD WINAPI warm_cache(LPVOID) {
     do files.push_back(g_cdir + L"/" + fd.cFileName); while (FindNextFileW(h, &fd));
     FindClose(h);
     static std::atomic<size_t> next; static std::atomic<int> live; const uint64_t t0 = GetTickCount64();
-    const int nt = 3; live = nt;
+    const int nt = cache_on_hdd() ? 1 : 3; live = nt;
     for (int i = 0; i < nt; i++) CreateThread(nullptr, 0, [](LPVOID p) -> DWORD {
         auto *fl = (std::vector<std::wstring> *)p;
         SetThreadPriority(GetCurrentThread(), THREAD_MODE_BACKGROUND_BEGIN);
         for (size_t k; (k = next++) < fl->size();) { HANDLE f = CreateFileW((*fl)[k].c_str(), GENERIC_READ, FILE_SHARE_READ | FILE_SHARE_WRITE | FILE_SHARE_DELETE, nullptr, OPEN_EXISTING, FILE_ATTRIBUTE_NORMAL, nullptr); if (f != INVALID_HANDLE_VALUE) CloseHandle(f); }
         live--; return 0; }, &files, 0, nullptr);
     while (live > 0) Sleep(200);
-    fprintf(stderr, "[texturas] cache BC7 aquecido: %zu arquivo(s) abertos em %llu ms (3 threads de fundo)%c", files.size(), (unsigned long long)(GetTickCount64() - t0), 10);
+    fprintf(stderr, "[texturas] cache BC7 aquecido: %zu arquivo(s) abertos em %llu ms (%d thread(s) de fundo)%c", files.size(), (unsigned long long)(GetTickCount64() - t0), nt, 10);
     return 0;
 }
 static int g_nthreads;

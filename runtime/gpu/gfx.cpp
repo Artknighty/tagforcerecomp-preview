@@ -1,6 +1,7 @@
 #include "gfx.h"
 #include "raster_pool.h"
 #include "util.h"
+#include <dxgi.h>
 #include <vector>
 #include <stdio.h>
 #include <stdlib.h>
@@ -11,10 +12,35 @@
 GfxSettings g_gfx = {GFX_FILTER_SHARP, GFX_ASPECT_ORIGINAL, false, 1, GFX_RENDER_D3D11, 1, 1, 1, 0};   /* GPU por padrao; sem D3D11 volta ao software */
 
 static std::wstring ini_path() { return app_ini_path(); }
+/* Video memory of the best adapter, in MB (dedicated; for integrated GPUs a quarter of the shared system memory), and whether it is an integrated one.
+ * Used to size the texture budgets and to cap the automatic resolution on weak machines. Cached; 0 when DXGI cannot tell. */
+int gfx_vram_mb(bool *integrated) {
+    static int mb = -1; static bool integ;
+    if (mb < 0) {
+        mb = 0; IDXGIFactory1 *fac = nullptr;
+        if (SUCCEEDED(CreateDXGIFactory1(__uuidof(IDXGIFactory1), (void **)&fac))) {
+            IDXGIAdapter1 *ad = nullptr; uint64_t best = 0, bestShared = 0;
+            for (UINT i = 0; fac->EnumAdapters1(i, &ad) == S_OK; i++) {
+                DXGI_ADAPTER_DESC1 d; if (SUCCEEDED(ad->GetDesc1(&d)) && !(d.Flags & DXGI_ADAPTER_FLAG_SOFTWARE)) { if (d.DedicatedVideoMemory > best) best = d.DedicatedVideoMemory; if (d.SharedSystemMemory > bestShared) bestShared = d.SharedSystemMemory; }
+                ad->Release();
+            }
+            fac->Release();
+            integ = best < (1024ull << 20);   /* integrated GPUs report only a small dedicated carve-out */
+            mb = (int)((integ ? bestShared / 4 : best) >> 20);
+        }
+    }
+    if (integrated) *integrated = integ;
+    return mb;
+}
 int gfx_res_monitor(void) {
     const int h = GetSystemMetrics(SM_CYSCREEN);
-    for (int f : {1, 2, 3, 4, 6, 8}) if (272 * f >= h - 8) return f;   /* 720 -> 3 (816), 1080 -> 4 (1088), 1440 -> 6 (1632), 2160 -> 8 (2176) */
-    return 8;
+    int f = 8;
+    for (int c : {1, 2, 3, 4, 6, 8}) if (272 * c >= h - 8) { f = c; break; }   /* 720 -> 3 (816), 1080 -> 4 (1088), 1440 -> 6 (1632), 2160 -> 8 (2176) */
+    /* "Match monitor" must not be a trap on weak hardware: cap by the GPU (integrated or < 2 GB -> 3x, < 4 GB -> 4x); the user can still pick any resolution by hand */
+    bool integ; const int mb = gfx_vram_mb(&integ);
+    const int cap = mb <= 0 ? 8 : (integ || mb < 2048) ? 3 : mb < 4096 ? 4 : 8;
+    static bool told; if (f > cap && !told) { told = true; fprintf(stderr, "[gfx] Match monitor limited to %dx for this GPU (%d MB video memory%s)\n", cap, mb, integ ? ", integrated" : ""); }
+    return std::min(f, cap);
 }
 void gfx_load(void) {
     std::wstring ini = ini_path();

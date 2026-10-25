@@ -9,6 +9,7 @@
 #define VK_NO_PROTOTYPES
 #define VK_USE_PLATFORM_WIN32_KHR
 #include <mutex>
+#include <thread>
 #include <vulkan/vulkan.h>
 #include "gpu.h"
 #include "gfx.h"
@@ -277,8 +278,9 @@ static VkShaderModule mk_sm(const uint32_t *code, size_t bytes) {
     VkShaderModule m = VK_NULL_HANDLE; vkCreateShaderModule(g_dev, &ci, nullptr, &m); return m;
 }
 struct PipeDesc { VkPipelineLayout layout; VkShaderModule vs, fs; bool vertexIn; VkFormat colorFmt, depthFmt; VkPipelineColorBlendAttachmentState blend; bool dynDepth, staticDepthAlways; VkSampleCountFlagBits samples = VK_SAMPLE_COUNT_1_BIT; };
+static thread_local bool t_pipeWarm;   /* the warm-up thread's pipeline time is not game-thread time */
 static VkPipeline make_pipe(const PipeDesc &d) {
-    struct PipeT { double t0; ~PipeT() { g_gpu_pipe_ms += (gpu_now_us() - t0) / 1000.0; } } pipe_t{gpu_now_us()};   /* quadros pesados (display.cpp) */
+    struct PipeT { double t0; ~PipeT() { if (!t_pipeWarm) g_gpu_pipe_ms += (gpu_now_us() - t0) / 1000.0; } } pipe_t{gpu_now_us()};   /* quadros pesados (display.cpp) */
     VkPipelineShaderStageCreateInfo st[2] = {{VK_STRUCTURE_TYPE_PIPELINE_SHADER_STAGE_CREATE_INFO}, {VK_STRUCTURE_TYPE_PIPELINE_SHADER_STAGE_CREATE_INFO}};
     st[0].stage = VK_SHADER_STAGE_VERTEX_BIT; st[0].module = d.vs; st[0].pName = "main"; st[1].stage = VK_SHADER_STAGE_FRAGMENT_BIT; st[1].module = d.fs; st[1].pName = "main";
     VkVertexInputBindingDescription vb = {0, sizeof(GpuVtx), VK_VERTEX_INPUT_RATE_VERTEX};
@@ -320,20 +322,52 @@ static VkBlendFactor map_factor(uint32_t f, bool is_src) {
     default: return VK_BLEND_FACTOR_CONSTANT_COLOR;
     }
 }
-static VkPipeline main_pipe(const GpuState &s) {
-    uint32_t mask = (s.clear ? (((s.clear & 0x100) ? 7u : 0u) | ((s.clear & 0x200) ? 8u : 0u)) : 15u) & s.cmask;
-    bool bl = s.blend && !s.clear;
-    const bool acb = bl && s.aconst;   /* blend + alfa gravado constante (stencil): o alfa de saida vem do alfa da constante de blend, o RGB blenda normal */
-    uint64_t key = mask | ((uint64_t)bl << 4) | ((uint64_t)(bl ? s.bsf : 0) << 5) | ((uint64_t)(bl ? s.bdf : 0) << 9) | ((uint64_t)(bl ? s.beq : 0) << 13) | ((uint64_t)acb << 20);
-    auto it = g_pipes.find(key); if (it != g_pipes.end()) return it->second;
+/* Main pipeline for a blend/colour-mask key (see main_pipe); also used by the warm-up thread. */
+static VkPipeline pipe_for_key(uint64_t key) {
+    const uint32_t mask = key & 15, bsf = (key >> 5) & 15, bdf = (key >> 9) & 15, beq = (key >> 13) & 7;
+    const bool bl = (key >> 4) & 1, acb = (key >> 20) & 1;   /* acb: blend + constant stored alpha (stencil): output alpha comes from the blend constant's alpha, RGB blends normally */
     VkPipelineColorBlendAttachmentState b = blend_off(mask);
     if (bl) {
         static const VkBlendOp ops[] = {VK_BLEND_OP_ADD, VK_BLEND_OP_SUBTRACT, VK_BLEND_OP_REVERSE_SUBTRACT, VK_BLEND_OP_MIN, VK_BLEND_OP_MAX, VK_BLEND_OP_ADD};
-        b.blendEnable = VK_TRUE; b.srcColorBlendFactor = map_factor(s.bsf, true); b.dstColorBlendFactor = map_factor(s.bdf, false); b.colorBlendOp = ops[s.beq > 5 ? 0 : s.beq];
+        b.blendEnable = VK_TRUE; b.srcColorBlendFactor = map_factor(bsf, true); b.dstColorBlendFactor = map_factor(bdf, false); b.colorBlendOp = ops[beq > 5 ? 0 : beq];
         b.srcAlphaBlendFactor = acb ? VK_BLEND_FACTOR_CONSTANT_ALPHA : VK_BLEND_FACTOR_ONE; b.dstAlphaBlendFactor = VK_BLEND_FACTOR_ZERO; b.alphaBlendOp = VK_BLEND_OP_ADD;
     }
     PipeDesc d = {g_plA, g_sm[SM_MAIN_VERT], g_sm[SM_MAIN_FRAG], true, VK_FORMAT_R8G8B8A8_UNORM, g_dsFmt, b, true, false, g_msaa};
-    VkPipeline p = make_pipe(d); g_pipes[key] = p; return p;
+    return make_pipe(d);
+}
+/* Pipeline keys seen in earlier runs are kept in tagforce_vk_keys.txt (next to the pipeline cache) and compiled by a background thread right after the
+ * start, so the driver cache is hot before the first duel: creating one on the game thread cost 40-235 ms (a visible hitch and an audio gap on a cold
+ * shader cache, i.e. every first run on a new PC). The thread only fills the driver's VkPipelineCache (internally synchronised) and discards the pipeline. */
+static std::wstring g_keysPath; static std::vector<uint64_t> g_seenKeys; static std::thread g_warmThr; static volatile bool g_warmStop;
+static void note_key(uint64_t key) {
+    for (uint64_t k : g_seenKeys) if (k == key) return;
+    g_seenKeys.push_back(key);
+    if (FILE *f = _wfopen(g_keysPath.c_str(), L"a")) { fprintf(f, "%llx\n", (unsigned long long)key); fclose(f); }
+}
+static void start_pipe_warm(void) {
+    g_keysPath = exe_dir() + L"tagforce_vk_keys.txt";
+    std::vector<uint64_t> keys;
+    if (FILE *f = _wfopen(g_keysPath.c_str(), L"r")) { unsigned long long k; while (fscanf(f, "%llx", &k) == 1) { bool dup = false; for (uint64_t o : keys) dup |= o == k; if (!dup) keys.push_back(k); } fclose(f); }
+    /* keys seen while playing a duel, the title and the menus (so a first run on a new PC already starts with these) */
+    for (uint64_t k : {0xfull, 0x65full, 0x0ull, 0x145full, 0x657ull, 0x8ull, 0x100658ull, 0x10065full, 0x10157full, 0x7ull, 0x650ull, 0x155full, 0x1577ull, 0x101578ull, 0x545full, 0x14dfull, 0x157full, 0x143full}) { bool dup = false; for (uint64_t o : keys) dup |= o == k; if (!dup) keys.push_back(k); }
+    g_seenKeys = keys;
+    if (keys.empty() || getenv("TF_NO_PIPE_WARM")) return;
+    g_warmStop = false;
+    g_warmThr = std::thread([keys] {
+        SetThreadPriority(GetCurrentThread(), THREAD_PRIORITY_BELOW_NORMAL); t_pipeWarm = true;
+        const double t0 = gpu_now_us(); size_t n = 0;
+        for (uint64_t k : keys) { if (g_warmStop) break; VkPipeline p = pipe_for_key(k); if (p) vkDestroyPipeline(g_dev, p, nullptr); n++; }
+        fprintf(stderr, "[gpu] %zu pipeline(s) pre-compiled in the background in %.0f ms\n", n, (gpu_now_us() - t0) / 1000.0);
+    });
+}
+static void stop_pipe_warm(void) { g_warmStop = true; if (g_warmThr.joinable()) g_warmThr.join(); }
+static VkPipeline main_pipe(const GpuState &s) {
+    uint32_t mask = (s.clear ? (((s.clear & 0x100) ? 7u : 0u) | ((s.clear & 0x200) ? 8u : 0u)) : 15u) & s.cmask;
+    bool bl = s.blend && !s.clear;
+    const bool acb = bl && s.aconst;
+    uint64_t key = mask | ((uint64_t)bl << 4) | ((uint64_t)(bl ? s.bsf : 0) << 5) | ((uint64_t)(bl ? s.bdf : 0) << 9) | ((uint64_t)(bl ? s.beq : 0) << 13) | ((uint64_t)acb << 20);
+    auto it = g_pipes.find(key); if (it != g_pipes.end()) return it->second;
+    VkPipeline p = pipe_for_key(key); g_pipes[key] = p; note_key(key); return p;
 }
 static void load_pcache(void) {
     std::vector<uint8_t> data;
@@ -967,7 +1001,7 @@ static void vk_set_overlay(const uint32_t *rgba) {
 /* ------------------------------------------------------------------ inicializacao */
 static void destroy_all(void) {
     if (!g_dev) return;
-    wait_all(); save_pcache();
+    stop_pipe_warm(); wait_all(); save_pcache();
     destroy_swap();
     for (int i = 0; i < kMaxFb; i++) if (g_fb[i].used) { FbRec &f = g_fb[i]; free_img(f.col); free_img(f.dep); free_img(f.mc); f = FbRec(); }
     g_msaa = VK_SAMPLE_COUNT_1_BIT;
@@ -1079,7 +1113,7 @@ static bool build_resources(void) {
     g_sm[SM_RESYNC] = mk_sm(spv_resync_frag, sizeof spv_resync_frag); g_sm[SM_DOWN] = mk_sm(spv_down_frag, sizeof spv_down_frag); g_sm[SM_PRESENT] = mk_sm(spv_present_frag, sizeof spv_present_frag);
     g_sm[SM_OVERLAY] = mk_sm(spv_overlay_frag, sizeof spv_overlay_frag);
     g_pcPath = exe_dir() + L"tagforce_vk_cache.bin";
-    load_pcache();
+    load_pcache(); start_pipe_warm();
     PipeDesc rs = {g_plB, g_sm[SM_FULL_VERT], g_sm[SM_RESYNC], false, VK_FORMAT_R8G8B8A8_UNORM, g_dsFmt, blend_off(), false, true, g_msaa}; g_pResync = make_pipe(rs);
     PipeDesc dn = {g_plA, g_sm[SM_FULL_VERT], g_sm[SM_DOWN], false, VK_FORMAT_R8G8B8A8_UNORM, VK_FORMAT_UNDEFINED, blend_off(), false, false}; g_pDown = make_pipe(dn);
     for (int i = 0; i < NF; i++) {
