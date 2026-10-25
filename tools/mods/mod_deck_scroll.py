@@ -109,7 +109,7 @@ def track(sheet):
 def end_markers(sheet):
     up = canvas(118, 108, 128, 116)
     X, Y = _REG_XY[id(up)]
-    pts = [(121.2, 108.0), (124.8, 108.0), (126.0, 113.0), (120.0, 113.0)]
+    pts = [(122.5, 108.1), (123.5, 108.1), (126.2, 112.9), (119.8, 112.9)]
     d = poly_depth(X, Y, pts)
     over(up, (127, 127, 127), 0.5 * aa(d) * (1 - aa(d - 0.9)))
     over(up, (0, 0, 0), 0.85 * aa(d - 0.9))
@@ -117,12 +117,21 @@ def end_markers(sheet):
     put(sheet, up, 118, 108)
     dn = canvas(118, 116, 128, 124)
     X, Y = _REG_XY[id(dn)]
-    pts = [(120.0, 116.0), (126.0, 116.0), (124.8, 121.0), (121.2, 121.0)]
+    pts = [(119.8, 116.1), (126.2, 116.1), (123.5, 120.9), (122.5, 120.9)]
     d = poly_depth(X, Y, pts)
     over(dn, (127, 127, 127), 0.5 * aa(d) * (1 - aa(d - 0.9)))
     over(dn, (0, 0, 0), 0.8 * aa(d - 0.9))
     over(dn, (255, 255, 255), 0.5 * aa(d) * (Y > 120.0))
     put(sheet, dn, 118, 116)
+    # the list draws a second, tinted copy of the down marker from rows 68..76 at the same screen spot: keep it identical so the two coincide
+    dn2 = canvas(118, 68, 128, 76)
+    X, Y = _REG_XY[id(dn2)]
+    pts = [(119.8, 68.1), (126.2, 68.1), (123.5, 72.9), (122.5, 72.9)]
+    d = poly_depth(X, Y, pts)
+    over(dn2, (127, 127, 127), 0.5 * aa(d) * (1 - aa(d - 0.9)))
+    over(dn2, (0, 0, 0), 0.85 * aa(d - 0.9))
+    over(dn2, (255, 255, 255), 0.5 * aa(d) * (Y > 72.0))
+    put(sheet, dn2, 118, 68)
 
 
 def thumbs(sheet):
@@ -140,7 +149,7 @@ def main():
     img = Image.open(SRC).convert('RGBA')
     assert img.size == (128 * K, 128 * K), img.size
     sheet = np.asarray(img).copy()
-    for y0, y1 in ((0, 20), (20, 60), (108, 124)):                    # clear the strip pieces (keep the icons to its left)
+    for y0, y1 in ((0, 20), (20, 60), (68, 76), (108, 124)):                    # clear the strip pieces (keep the icons to its left)
         sheet[y0 * K:y1 * K, 118 * K:128 * K] = 0
     track(sheet)
     thumbs(sheet)
