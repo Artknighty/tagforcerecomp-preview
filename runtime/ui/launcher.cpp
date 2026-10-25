@@ -28,11 +28,11 @@
 typedef void (*InstProgress)(double frac, const wchar_t *msg, void *ctx);
 bool iso_install(const wchar_t *iso, const wchar_t *dest, InstProgress cb, void *ctx, std::wstring *err);
 
-enum { ID_PICK = 101, ID_PLAY = 102, ID_QUIT = 103, ID_STOP = 105, ID_LOGS = 106, ID_SAVES = 107, ID_MODDIR = 108, ID_MODALL = 109, ID_COPT0 = 400, ID_OPT0 = 200, ID_QOPT0 = 300, TIMER_UI = 1 };
+enum { ID_PICK = 101, ID_PLAY = 102, ID_QUIT = 103, ID_STOP = 105, ID_LOGS = 106, ID_SAVES = 107, ID_MODDIR = 108, ID_MODALL = 109, ID_TEXDIR = 110, ID_COPT0 = 400, ID_OPT0 = 200, ID_QOPT0 = 300, TIMER_UI = 1 };
 enum { PG_PLAY, PG_GRAPHICS, PG_GAME, PG_MODS, PG_CHEATS, PG_ABOUT, N_PAGES };
 enum { NAV_QUIT = N_PAGES };   /* item extra da sidebar (nao e pagina) */
 static const wchar_t *kNavName[N_PAGES] = {L"Play", L"Graphics", L"Game", L"Mods", L"Cheats", L"About"};
-static HWND g_wnd, g_bpick, g_play, g_bstop, g_blogs, g_bsaves, g_bmoddir, g_bmodall;
+static HWND g_wnd, g_bpick, g_play, g_bstop, g_blogs, g_bsaves, g_bmoddir, g_bmodall, g_btex;
 static HANDLE g_proc;                       /* jogo em andamento (processo filho); a janela continua aberta */
 static int g_page = PG_PLAY, g_navhot = -1;
 
@@ -172,12 +172,15 @@ static void stop_game() {
     EnumWindows(close_game_window, (LPARAM)GetProcessId(g_proc));
     if (WaitForSingleObject(g_proc, 4000) == WAIT_TIMEOUT) TerminateProcess(g_proc, 0);
 }
+enum { OPT_TEX = 3 };                       /* "Textures" row: a path line with a Browse button sits right below it */
+static int opt_row_y(int i) { return S(100) + i * S(56) + (i > OPT_TEX ? S(44) : 0); }
 static bool is_sel(int id) { return (id >= ID_COPT0 && id < ID_COPT0 + N_CHEAT) ||  (id >= ID_OPT0 && id < ID_OPT0 + N_OPT) || (id >= ID_QOPT0 && id < ID_QOPT0 + NQ); }
 static int sel_option(int id) { return id >= ID_QOPT0 ? kQuick[id - ID_QOPT0] : id - ID_OPT0; }
 
 /* which controls each page shows */
 static void apply_page() {
     for (int i = 0; i < N_OPT; i++) ShowWindow(g_sel[i], g_page == PG_GRAPHICS ? SW_SHOW : SW_HIDE);
+    ShowWindow(g_btex, g_page == PG_GRAPHICS ? SW_SHOW : SW_HIDE);
     for (int i = 0; i < N_CHEAT; i++) ShowWindow(g_csel[i], g_page == PG_CHEATS ? SW_SHOW : SW_HIDE);
     for (int k = 0; k < NQ; k++) ShowWindow(g_qsel[k], g_page == PG_PLAY ? SW_SHOW : SW_HIDE);
     ShowWindow(g_bpick, g_page == PG_GAME ? SW_SHOW : SW_HIDE);
@@ -193,7 +196,7 @@ static void refresh() {
     SetWindowTextW(g_play, run ? L"PLAYING..." : g_installed ? L"PLAY" : L"INSTALL AND PLAY"); SetWindowTextW(g_bpick, g_installed ? L"Reinstall from ISO..." : L"Select ISO...");
     apply_page();
     InvalidateRect(g_wnd, nullptr, FALSE);
-    for (HWND b : {g_bpick, g_play, g_bstop, g_blogs, g_bsaves, g_bmoddir, g_bmodall}) InvalidateRect(b, nullptr, FALSE);
+    for (HWND b : {g_bpick, g_play, g_bstop, g_blogs, g_bsaves, g_bmoddir, g_bmodall, g_btex}) InvalidateRect(b, nullptr, FALSE);
     for (int i = 0; i < N_OPT; i++) InvalidateRect(g_sel[i], nullptr, FALSE); for (int k = 0; k < NQ; k++) InvalidateRect(g_qsel[k], nullptr, FALSE);
 }
 static void show_page(int p) { if (p == g_page) return; g_page = p; if (p == PG_MODS) { mods_reload(); g_modscroll = 0; } if (p == PG_CHEATS) { cheat_load(); cheat_text(); } refresh(); }
@@ -440,9 +443,14 @@ static void paint(HWND h) {
         text(dc, g_fHead, C_TXT, RECT{cx, S(22), cx + cw, S(58)}, L"Graphics");
         text(dc, g_fSub, C_DIM, RECT{cx, S(58), cx + cw, S(80)}, L"Saved in tagforce_recomp.ini; the in-game Graphics screen changes the same values.");
         for (int i = 0; i < N_OPT; i++) {
-            int y = S(100) + i * S(56);
+            int y = opt_row_y(i);
             text(dc, g_fText, C_TXT, RECT{cx, y, cx + cw - S(300), y + S(24)}, kOpts[i].label);
             text(dc, g_fSmall, C_DIM, RECT{cx, y + S(24), cx + cw - S(290), y + S(44)}, kOpts[i].hint, DT_LEFT | DT_SINGLELINE | DT_VCENTER | DT_END_ELLIPSIS);
+            if (i == OPT_TEX) {   /* where the Enhanced textures live; Browse opens that folder */
+                int py = y + S(50);
+                text(dc, g_fSmall, C_DIM, RECT{cx, py, cx + cw - S(290), py + S(34)}, (exe_dir() + L"mods\\EnhancedTextures").c_str(), DT_LEFT | DT_SINGLELINE | DT_VCENTER | DT_PATH_ELLIPSIS);
+                y += S(44);
+            }
             RECT l = {cx, y + S(50), cx + cw, y + S(51)}; HBRUSH b = CreateSolidBrush(C_LINE); FillRect(dc, &l, b); DeleteObject(b);
         }
     } else if (g_page == PG_GAME) {
@@ -504,6 +512,7 @@ static LRESULT CALLBACK proc(HWND h, UINT m, WPARAM w, LPARAM l) {
         case ID_LOGS: open_folder(exe_dir() + L"logs"); return 0;
         case ID_SAVES: open_folder(exe_dir() + L"ms0"); return 0;
         case ID_MODDIR: mods_open_folder(); return 0;
+        case ID_TEXDIR: open_folder(dir_exists(exe_dir() + L"mods/EnhancedTextures") ? exe_dir() + L"mods/EnhancedTextures" : exe_dir() + L"mods"); return 0;
         case ID_MODALL: if (!game_running()) { bool any = false; for (auto &e : g_modlist) any |= e.enabled; mods_all(!any); refresh(); } return 0;
         default:
             if (LOWORD(w) >= ID_COPT0 && LOWORD(w) < ID_COPT0 + N_CHEAT) {
@@ -543,7 +552,7 @@ static LRESULT CALLBACK proc(HWND h, UINT m, WPARAM w, LPARAM l) {
     case WM_TIMER:
         if (w == TIMER_UI) {
             { static bool was[24 + N_OPT]; static POINT lastp; int i = 0; POINT cp; GetCursorPos(&cp); bool moved = cp.x != lastp.x || cp.y != lastp.y; lastp = cp;   /* hover dos botoes: so redesenha quando muda */
-              std::vector<HWND> bs = {g_bpick, g_play, g_bstop, g_blogs, g_bsaves, g_bmoddir, g_bmodall}; bs.insert(bs.end(), g_qsel, g_qsel + NQ); bs.insert(bs.end(), g_sel, g_sel + N_OPT); bs.insert(bs.end(), g_csel, g_csel + N_CHEAT);
+              std::vector<HWND> bs = {g_bpick, g_play, g_bstop, g_blogs, g_bsaves, g_bmoddir, g_bmodall, g_btex}; bs.insert(bs.end(), g_qsel, g_qsel + NQ); bs.insert(bs.end(), g_sel, g_sel + N_OPT); bs.insert(bs.end(), g_csel, g_csel + N_CHEAT);
               for (HWND b : bs) { bool hot = is_hot(b); if (hot != was[i] || (hot && moved && i >= 7)) { was[i] = hot; InvalidateRect(b, nullptr, FALSE); } i++; } }
             { static bool wasrun; bool run = game_running(); if (run != wasrun) { wasrun = run; refresh(); } }
             if (g_installing) { RECT bar; GetClientRect(h, &bar); InvalidateRect(h, &bar, FALSE); }
@@ -598,7 +607,8 @@ std::string launcher_pick_iso(std::wstring *data) {
     auto btn = [&](const wchar_t *t, int id, int x, int y, int w, int h) { return CreateWindowW(L"BUTTON", t, WS_CHILD | WS_VISIBLE | WS_TABSTOP | BS_OWNERDRAW, x, y, w, h, g_wnd, (HMENU)(INT_PTR)id, hi, nullptr); };
     opt_load();
     { int selw = S(270), selx = cx + cw - selw, h = S(34);   /* pagina Graphics: uma linha por opcao, seletor a direita */
-      for (int i = 0; i < N_OPT; i++) g_sel[i] = btn(kOpts[i].names[g_cur[i]], ID_OPT0 + i, selx, S(100) + i * S(56) + S(4), selw, h); }
+      for (int i = 0; i < N_OPT; i++) g_sel[i] = btn(kOpts[i].names[g_cur[i]], ID_OPT0 + i, selx, opt_row_y(i) + S(4), selw, h);
+      g_btex = btn(L"Browse...", ID_TEXDIR, selx, opt_row_y(OPT_TEX) + S(50) + S(2), selw, S(30)); }
     { int colw = (cw - S(40)) * 11 / 20, rx = cx + colw + S(40), w = cx + cw - rx;   /* pagina Play: seletores rapidos na coluna direita */
       for (int k = 0; k < NQ; k++) g_qsel[k] = btn(kOpts[kQuick[k]].names[g_cur[kQuick[k]]], ID_QOPT0 + k, rx, S(220) + S(26) + S(30) + S(24) + k * S(68), w, S(36)); }
     cheat_load();
