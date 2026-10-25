@@ -27,7 +27,7 @@ OUT = 'deck_edit_hd'
 # tab / panel pieces and header plates drawn by the Deck Edit screen
 PIECES = '''02cf9d44 b77db24b 1d34b07b 8ab9c0f6 270d1417 b125544b 1f9c71e3 e0a7c50a b4c89e29 936aa71c 533b0214 56dfbf73 4afa4ec8
 dba54dc6 92c07948 53a27e1e a6610a0b 46dec002 05809703 34a9652d 9dead951 fd0f9c3b faddc253 657a5145 1659d75e 4400d119
-403380d6 8e3f02b7 c630f1be'''.split()
+403380d6 8e3f02b7 c630f1be 3ce8d1c8'''.split()
 
 
 FONT = 'C:/Windows/Fonts/bahnschrift.ttf'
@@ -410,7 +410,32 @@ def cursor_frame(out):
     out[(y0 - 1) * K:(y1 + 2) * K, (x0 - 1) * K:(x1 + 1) * K] = np.clip(reg + 0.5, 0, 255).astype(np.uint8)
 
 
+def pill_bar(t):
+    """The dark ATK/DEF pill under the big card from geometry: rounded olive bar with its bevel rows, soft drop shadow."""
+    H, W = t.shape[:2]
+    xe = int(np.nonzero(t[..., 3].any(axis=0))[0].max()) - 1            # last opaque column + 1 (the shadow runs two texels further)
+    xe = xe - 1
+    rows = [tuple(float(c) for c in t[y, 60, :3]) for y in range(14)]
+    X, Y = grid(0, 0, W, H)
+    reg = np.zeros(X.shape + (4,), np.float32)
+    body = aa(rr_depth(X, Y, (0, 0, xe, 14), 3.2))
+    over(reg, (0, 0, 0), 0.5 * aa(rr_depth(X, Y, (0.5, 1.5, xe + 1.5, 15.5), 3.4)))
+    prof = np.zeros(X.shape + (3,), np.float32)
+    for y in range(14):
+        prof[y * K:(y + 1) * K] = rows[y]
+    d = rr_depth(X, Y, (0, 0, xe, 14), 3.2)
+    side = (np.abs(Y - 7) < 6) & ((d > 1.0) & (d < 2.0)) & (np.minimum(X, xe - X) < 3)
+    prof[side & (X < xe / 2)] = (50, 55, 44)
+    prof[side & (X >= xe / 2)] = (31, 34, 29)
+    a = body[..., None]
+    reg[..., :3] = np.where(a > 0, (prof * a + reg[..., :3] * (reg[..., 3:4] / 255.0) * (1 - a)) / np.maximum(a + (reg[..., 3:4] / 255.0) * (1 - a), 1e-6), reg[..., :3])
+    reg[..., 3] = (a[..., 0] + reg[..., 3] / 255.0 * (1 - a[..., 0])) * 255.0
+    return np.clip(reg + 0.5, 0, 255).astype(np.uint8)
+
+
 def redraw(t, h=None):
+    if h == '3ce8d1c8':
+        return pill_bar(t)
     if h == '1659d75e':
         return personal_plate(t)
     if h == '8e3f02b7':
