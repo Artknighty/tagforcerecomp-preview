@@ -4,6 +4,16 @@ Format: [Keep a Changelog](https://keepachangelog.com/en/1.1.0/). Versioning: [S
 
 ## [Unreleased]
 
+### Added
+- **Recipe Viewer tabs redrawn**: the "User" and "Character" tabs are now crisp 8x redraws (new lettering, icons and bevels) in Enhanced Textures.
+- **Texture cache is prepared on the first install**: when the Enhanced Textures pack is next to the program, "Install and play" also fills the BC7 texture cache (about 5 GB, a few minutes) so the first session starts without stutter. A pack that is switched off is only prepared if you agree. `TagForceRecomp.exe --prepare-textures` does the same from the command line.
+
+### Fixed
+- The HD opening movie no longer appears a moment late: the file is read and the first frames are decoded at startup, so the blurry original frame is not shown first.
+
+### Changed
+- The Enhanced Textures pack is regrouped by theme (`cards`, `characters`, `menus`, `duel`, `deck`, `text`, `world`, `intro`, `extras`) instead of ~120 folders; redraws live in a `pc/` sub-folder of their theme. `tools/mods/reorganizar_texturas.py` migrates an old layout.
+
 ## [0.5.0] - 2026-10-25
 
 ### Added

@@ -1,7 +1,7 @@
 """Remaster of the Deck Edit screen UI (tabs, panel frame, header plates, stat boxes), redrawn from the original texels.
 
 Every piece is a separate small PSP texture. Each one is redrawn with tools/mods/depixel.py (flat shapes, smooth outlines)
-and written to EnhancedTextures/textures/deck_edit_hd/<hash>.png; the ini rows of that hash are repointed there.
+and written to EnhancedTextures/textures/deck/pc/<hash>.png; the ini rows of that hash are repointed there.
 Pieces the game stretches (all columns or all rows equal in the original) are kept flat along that direction.
 Needs the original texels in gen/ref_texels/deckedit/<hash>_<variant>.png (TF_TEX_DUMP_RAW dump, raw_*_<hash>.png).
 
@@ -22,12 +22,13 @@ ROOT = os.path.dirname(os.path.dirname(os.path.dirname(os.path.abspath(__file__)
 MODS = [os.path.join(ROOT, 'mods', 'EnhancedTextures'), os.path.join(ROOT, 'gen', 'mods', 'EnhancedTextures')]
 K = depixel.K
 SIGMA = 0.65
-OUT = 'deck_edit_hd'
+OUT = 'deck/pc'
 
 # tab / panel pieces and header plates drawn by the Deck Edit screen
 PIECES = '''02cf9d44 b77db24b 1d34b07b 8ab9c0f6 270d1417 b125544b 1f9c71e3 e0a7c50a b4c89e29 936aa71c 533b0214 56dfbf73 4afa4ec8
 dba54dc6 92c07948 53a27e1e a6610a0b 46dec002 05809703 34a9652d 9dead951 fd0f9c3b faddc253 657a5145 1659d75e 4400d119
-403380d6 8e3f02b7 c630f1be 3ce8d1c8'''.split()
+403380d6 8e3f02b7 c630f1be 3ce8d1c8
+4efbece8 72966f8d'''.split()   # last two: the User / Character tabs of the Recipe Viewer
 
 
 FONT = 'C:/Windows/Fonts/bahnschrift.ttf'
@@ -39,6 +40,8 @@ TEXTS = {
     'b77db24b': [dict(TAB, text='Deck')],
     '34a9652d': [dict(TAB, text='Fusion')],
     'fd0f9c3b': [dict(TAB, text='Side')],
+    '4efbece8': [dict(TAB, text='User', x0=14, x1=68, fill=(3, 3))],
+    '72966f8d': [dict(TAB, text='Character', x0=70, x1=124, fill=(3, 100))],
     '92c07948': [dict(TAB, text='Trunk')],
     '4400d119': [
         dict(TAB, text='Card types in possession', x0=5, y1=19, fill=(3, 6), base=14.0),
@@ -119,6 +122,10 @@ def lettered(h, t):
         fill = t[it['fill']].copy()
         e[it['y0']:it['y1'], it['x0']:x1] = fill
         items.append((it, x1, fill))
+    if h == '72966f8d':                              # left of the Character tab: the three bevel stripes carry dither noise; make them flat
+        for r in range(15, 18):
+            e[r, :56] = e[r, 40]
+        e[15, :56] = (145, 15, 33, 255)
     out = tab_head(t) if h in TAB_HEADS else redraw(e, h)
     if h == '4400d119':
         out[:] = types_plate(t)
