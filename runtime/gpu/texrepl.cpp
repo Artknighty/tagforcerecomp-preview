@@ -370,6 +370,8 @@ static void build_index(void) {   /* indice das pastas de texturas dos mods liga
     for (auto &d : dirs) {
         size_t n = 0; std::wstring ini = d + L"\\textures.ini";
         if (GetFileAttributesW(ini.c_str()) != INVALID_FILE_ATTRIBUTES) add_dir_ini(d, ini, &n); else scan_pngs(d, &n);
+        /* card style (Graphics > Card style): 1 = anime version, an optional textures_anime.ini whose rows replace the TCG ones */
+        if ((getenv("TF_CARD_STYLE") ? atoi(getenv("TF_CARD_STYLE")) : (int)GetPrivateProfileIntW(L"graficos", L"estilo_cartas", 0, app_ini_path().c_str())) == 1) { std::wstring an = d + L"\\textures_anime.ini"; if (GetFileAttributesW(an.c_str()) != INVALID_FILE_ATTRIBUTES) add_dir_ini(d, an, &n); }
         fprintf(stderr, "[texturas] %ls: %zu substituicao(oes)\n", d.c_str(), n);
     }
     for (auto &kv : g_idx) { for (auto &e : kv.second) if (e.path != kv.second[0].path) { g_amb.insert(kv.first); break; } }

@@ -49,6 +49,7 @@ static const LOpt kOpts[] = {
     {L"Synchronization", L"Default avoids tearing. VSync waits for the monitor.", L"sincronizacao", 3, {L"Default", L"VSync", L"Lowest latency"}, nullptr, 0},
     {L"Filter", L"How the 480 x 272 image is scaled to the window.", L"filtro", 3, {L"Sharp pixels", L"Smoothed", L"Bilinear"}, nullptr, 1},
     {L"Aspect ratio", L"Proportion of the image: original 16:9, stretched or 4:3.", L"proporcao", 3, {L"16:9", L"Stretch", L"4:3"}, nullptr, 0},
+    {L"Card style", L"TCG is the printed card look. Anime changes the card back and the rock-paper-scissors art. Needs the Enhanced textures.", L"estilo_cartas", 2, {L"TCG version", L"Anime version"}, nullptr, 0},
 };
 static const int N_OPT = (int)(sizeof kOpts / sizeof kOpts[0]);
 enum { NQ = 4, OPT_FPS = 4 };
