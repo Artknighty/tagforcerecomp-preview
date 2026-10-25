@@ -238,11 +238,11 @@ def small_parts(out, t):
             bx1, by1 = x1, y1
             X, Y = grid(x0, y0, x1 + 1, y1 + 1)
             reg = np.zeros(X.shape + (4,), np.float32)
-            over(reg, (0, 0, 0), 0.47 * aa(rr_depth(X, Y, (x0 + 1, y0 + 1, bx1 + 1, by1 + 1), 2.6)))
+            over(reg, (0, 0, 0), 0.47 * aa(rr_depth(X, Y, (x0 + 1, y0 + 1, bx1 + 1, by1 + 1), 1.2)))
             body = np.asarray(Image.fromarray(np.ascontiguousarray(t[y0:by1, x0:bx1])).resize(((bx1 - x0) * K, (by1 - y0) * K), Image.BICUBIC), np.float32)
             full = np.zeros(X.shape + (4,), np.float32)
             full[:(by1 - y0) * K, :(bx1 - x0) * K] = body
-            cov = aa(rr_depth(X, Y, (x0, y0, bx1, by1), 2.6))
+            cov = aa(rr_depth(X, Y, (x0, y0, bx1, by1), 1.2))
             full[..., 3] = cov * 255.0
             a0 = reg[..., 3:4] / 255.0
             a1 = cov[..., None]
@@ -266,8 +266,8 @@ def small_parts(out, t):
         elif 13 <= w <= 21 and h == 13 and t[y0 + 5, x0 + 6, 3] == 255 and (t[y0 + 5, x0 + 6, :3] > 240).all():   # white number window
             X, Y = grid(x0, y0, x1 + 1, y1 + 1)
             reg = np.zeros(X.shape + (4,), np.float32)
-            over(reg, (0, 0, 0), 0.47 * aa(rr_depth(X, Y, (x0, y0, x1 + 1, y1 + 1), 3.4)))
-            over(reg, (255, 255, 255), aa(rr_depth(X, Y, (x0 + 2, y0 + 1, x1, y1), 2.8)))
+            over(reg, (0, 0, 0), 0.3 * aa(rr_depth(X, Y, (x0, y0, x1 + 1, y1 + 1), 0.6)))
+            over(reg, (255, 255, 255), aa(rr_depth(X, Y, (x0 + 2, y0 + 1, x1, y1), 0.5)))
             out[y0 * K:(y1 + 1) * K, x0 * K:(x1 + 1) * K] = np.clip(reg + 0.5, 0, 255).astype(np.uint8)
 
 
@@ -343,7 +343,7 @@ def tab_head(t):
     def inside(X, Y):
         col = np.empty(X.shape + (4,), np.float32)
         col[:] = fill
-        col[rr_depth(X, Y, (f0, 3.0, f1 + 1, 15.0), 2.6) > 0] = (255, 255, 255, 255)
+        col[rr_depth(X, Y, (f0, 3.0, f1 + 1, 15.0), 1.2) > 0] = (255, 255, 255, 255)
         return col
     body = beveled(W, H, (0, 0, bx1, 18), (3.6, 3.6, 0, 0), [outer, light, dark], inside, (0, 0))
     c = np.zeros((H, W, 4), np.uint8)
@@ -365,7 +365,7 @@ def cursor_frame(out):
     x0, y0, x1, y1 = 213, 122, 255, 164
     X, Y = grid(x0 - 1, y0 - 1, x1 + 1, y1 + 2)
     reg = np.zeros(X.shape + (4,), np.float32)
-    d = rr_depth(X, Y, (x0, y0, x1, y1), 4.6)
+    d = rr_depth(X, Y, (x0, y0, x1, y1), 0.8)
     over(reg, (0, 0, 0), 0.5 * aa(d - 3.0) * (1 - aa(d - 4.0)))
     over(reg, (214, 181, 0), aa(d) * (1 - aa(d - 3.0)))
     over(reg, (252, 255, 1), aa(d - 1.0) * (1 - aa(d - 2.0)))
