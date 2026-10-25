@@ -5,7 +5,7 @@ Format: [Keep a Changelog](https://keepachangelog.com/en/1.1.0/). Versioning: [S
 ## [Unreleased]
 
 ### Added
-- **Recipe Viewer tabs redrawn**: the "User" and "Character" tabs are now crisp 8x redraws (new lettering, icons and bevels) in Enhanced Textures.
+- **Recipe Viewer tabs redrawn**: the "User" and "Character" tabs are are now drawn from scratch at 8x in Enhanced Textures (tab outline and bevels from geometry, a simple sheet-of-paper icon, new lettering), not upscaled.
 - **Texture cache is prepared on the first install**: when the Enhanced Textures pack is next to the program, "Install and play" also fills the BC7 texture cache (about 5 GB, a few minutes) so the first session starts without stutter. A pack that is switched off is only prepared if you agree. `TagForceRecomp.exe --prepare-textures` does the same from the command line.
 
 ### Fixed
