@@ -147,7 +147,8 @@ def thumbs(sheet):
 
 def main():
     img = Image.open(SRC).convert('RGBA')
-    assert img.size == (128 * K, 128 * K), img.size
+    if img.size != (128 * K, 128 * K):                                         # the icons only; the strip is redrawn below
+        img = img.resize((128 * K, 128 * K), Image.LANCZOS)
     sheet = np.asarray(img).copy()
     for y0, y1 in ((0, 20), (20, 60), (68, 76), (108, 124)):                    # clear the strip pieces (keep the icons to its left)
         sheet[y0 * K:y1 * K, 118 * K:128 * K] = 0
