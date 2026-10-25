@@ -1,5 +1,5 @@
 #!/usr/bin/env python3
-"""Reduz o mod `gen/mods/EnhancedTextures` para caber em menos disco: limita o maior lado a 2048 px (Lanczos) e comprime cada PNG.
+"""Reduz o mod `mods/EnhancedTextures` para caber em menos disco: limita o maior lado a 2048 px (Lanczos) e comprime cada PNG.
 
 Compressao: paleta de 256 cores so quando o resultado fica praticamente igual (PSNR ponderado pelo alfa >= --psnr, padrao 38 dB);
 senao PNG RGBA otimizado, sem perda. Escreve em uma pasta nova (padrao `gen/mods/EnhancedTextures_2k`), sem tocar na original;
@@ -17,7 +17,7 @@ import numpy as np
 from PIL import Image
 
 RAIZ = os.path.normpath(os.path.join(os.path.dirname(__file__), "..", ".."))
-ORIGEM = os.path.join(RAIZ, "gen", "mods", "EnhancedTextures")
+ORIGEM = os.path.join(RAIZ, "mods", "EnhancedTextures")   # the live pack (the old gen/mods copy was removed on 2026-10-25)
 
 
 def psnr(a, b):

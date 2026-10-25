@@ -1,5 +1,6 @@
 #!/usr/bin/env python3
 """Monta o mod `gen/mods/EnhancedTextures` (texturas melhoradas por IA) a partir do pacote `gen/mods/TexturasPC`.
+Historical: the live pack is now `mods/EnhancedTextures` (themed layout, edited by the redraw tools); this output goes to gen/mods and does not replace it.
 
 Cada PNG do pacote e ampliado com o Real-ESRGAN (`realesrgan-x4plus-anime`, ncnn-vulkan em gen/ferramentas_ai/realesrgan) e reduzido ao
 fator pedido (padrao 2x o tamanho do pacote, que e o que um monitor 4K precisa: o pacote ja tem ~4x as texturas do PSP, 8x = 3840x2176).
