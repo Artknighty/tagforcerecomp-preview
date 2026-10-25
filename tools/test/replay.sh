@@ -1,5 +1,5 @@
 #!/bin/sh
-# Reproduz uma sessao gravada pelo diag (gen/logs/<sessao>.inputs + <sessao>_ms0) numa pasta isolada, sem tocar em
+# Reproduz uma sessao gravada pelo diag (logs/<sessao>.inputs + <sessao>_ms0; sessions of the root install, or gen/logs for older ones) numa pasta isolada, sem tocar em
 # nenhum save. Uso: sh tools/test/replay.sh <sessao> [passo_capturas=1000] [segundos=900] ["texto1|texto2" do OSK]
 # Resultado em gen/replay/<sessao><TAG>/: gen/snap_*.bmp, sheet.png (todas as capturas) e log.txt (log da execucao).
 # Opcoes (variaveis de ambiente):
@@ -7,7 +7,7 @@
 #   TAG=_x       sufixo da pasta (varias reproducoes lado a lado) RUN_EXE=gen/base.exe   outro executavel
 #   MODDIR=pasta usa essa pasta de mods (ex.: gen/mods, com o pacote de texturas of the player; so leitura, sem copiar)
 #   PACE=1       com o limitador de 60 fps (tempo real; mede atrasos de carregamento) - o padrao e sem limitador
-#   INPUTS=arq   usa outro arquivo de entradas (ex.: a sessao cortada + teclas novas) no lugar de gen/logs/<sessao>.inputs
+#   INPUTS=arq   usa outro arquivo de entradas (ex.: a sessao cortada + teclas novas) no lugar de logs/<sessao>.inputs
 #   PRIMEIRO_PLANO=1  mostra a janela; COM_SOM=1 liga o som (padrao: escondida e muda, p/ nao atrapalhar)    
 #   RECENT=arq   copia uma lista texturas_recentes.txt para a pasta da reproducao (testa o pre-carregamento das texturas substitutas)
 #   TEXCACHE=pasta  copia um texcache/ de outra reproducao (pixels ja decodificados: testa a 2a visita as texturas)
@@ -18,10 +18,11 @@ ISO="${TF_ISO:-$(grep -i "^iso=" gen/tagforce_recomp.ini 2>/dev/null | head -1 |
 if [ ! -f "$ISO" ]; then
   if [ -d "$(pwd)/jogo/PSP_GAME" ]; then GA1=--dados; GA2="$(pwd)/jogo"; elif [ -d "$(pwd)/gen/pkg/TagForceRecomp/jogo" ]; then GA1=--dados; GA2="$(pwd)/gen/pkg/TagForceRecomp/jogo"; else echo "set TF_ISO=<path to your ISO> (or iso= in gen/tagforce_recomp.ini), or run tools/install_dev.sh"; exit 1; fi
 fi
-IN="${INPUTS:-$ROOT/gen/logs/$S.inputs}"; [ -f "$IN" ] || { echo "sem $IN"; exit 1; }
+LOGD="$ROOT/logs"; [ -f "$LOGD/$S.inputs" ] || LOGD="$ROOT/gen/logs"   # the root exe (the one the player uses) records in ./logs; gen/logs holds the older sessions
+IN="${INPUTS:-$LOGD/$S.inputs}"; [ -f "$IN" ] || { echo "sem $IN"; exit 1; }
 EXE="$ROOT/${RUN_EXE:-gen/pkg/TagForceRecomp/TagForceRecomp_bg.exe}"; case "$RUN_EXE" in /*) EXE="$RUN_EXE";; esac
 W="$ROOT/gen/replay/$S$TAG"; rm -rf "$W"; mkdir -p "$W/gen"
-[ -d "$ROOT/gen/logs/${S}_ms0" ] && cp -r "$ROOT/gen/logs/${S}_ms0" "$W/ms0"
+[ -d "$LOGD/${S}_ms0" ] && cp -r "$LOGD/${S}_ms0" "$W/ms0"
 [ -n "$MODDIR" ] && export TF_MODS_DIR="$(cygpath -m "$(cd "$MODDIR" && pwd)")"   # usada no lugar (so leitura), sem copiar
 # sem MODDIR: os mods de COMPORTAMENTO ligados (plugin.dll, ex. caixa de boosters) entram assim mesmo - eles mudam o jogo, e a
 # reproducao precisa repetir what was played; os de dados ficam de fora (determinismo)
@@ -36,9 +37,9 @@ F=$(python -c "print(','.join(str(i) for i in list(range($STEP, $END, $STEP)) + 
 [ -n "$SNAPS" ] && F="$SNAPS"
 echo "reproduzindo $S ate o quadro $END (capturas: $F)"
 # sessoes gravadas antes dos filmes (sem linha "[mpeg]" no log) reproduzem com os filmes desligados
-grep -q '^\[mpeg\]' "$ROOT/gen/logs/$S.log" 2>/dev/null || export TF_NO_MOVIES=1
+grep -q '^\[mpeg\]' "$LOGD/$S.log" 2>/dev/null || export TF_NO_MOVIES=1
 NP="NO_PACE=1"; [ -n "$PACE" ] && NP="TF_PACE=1"
-export TF_LOG_DIR="$(cygpath -m "$W/logs" 2>/dev/null || echo "$W/logs")"   # o log desta execucao fica na pasta da reproducao (gen/logs e so do usuario)
+export TF_LOG_DIR="$(cygpath -m "$W/logs" 2>/dev/null || echo "$W/logs")"   # o log desta execucao fica na pasta da reproducao (logs/ and gen/logs belong to the player)
 export TF_INI="$TF_LOG_DIR/teste.ini"   # .ini proprio: as configuracoes of the player nao influem nem sao gravadas (use TF_GPU/TF_RES/TF_MSAA...)
 # INI=arq: parte de uma COPIA desse .ini (ex.: INI=gen/tagforce_recomp.ini = a config exata of the player: filtro, proporcao, 60 FPS...; o original nunca e gravado)
 [ -n "$INI" ] && mkdir -p "$TF_LOG_DIR" && cp "$INI" "$TF_INI"

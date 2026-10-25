@@ -1,7 +1,7 @@
 """Biblioteca para editar decks do Tag Force (usa o banco gerado por tools/game/decks_extrair.py em gen/decks_db).
 Um deck e um dict {'principal': [ids], 'extra': [ids], 'side': [ids]}. Funcoes: carregar, trocar cartas por NOME, validar (copias <= maximo visto em decks de NPC, tamanho),
 escrever o arquivo do mod (decks/RCPnnn.txt, formato do plugin BetterDecks) e resumo legivel."""
-import json, os, collections, sys
+import json, os, collections
 RAIZ = os.path.dirname(os.path.dirname(os.path.dirname(os.path.abspath(__file__))))
 DB = os.path.join(RAIZ, 'gen', 'decks_db')
 CARTAS = {int(k): v for k, v in json.load(open(os.path.join(DB, 'cartas.json'), encoding='utf-8')).items()}

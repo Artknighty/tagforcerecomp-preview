@@ -39,7 +39,8 @@ void api_add_toggle(const wchar_t *title, int vk, int (*get)(void), void (*set)(
     /* teclas da janela (tabela kHotkeys, hotkeys.h; mais F10 = menu do Windows e Esc) e os botoes do PSP no teclado (display.cpp, read_keys):
      * uma delas trocaria o liga/desliga E apertaria o botao no jogo */
     static const int reservadas[] = {VK_F10, VK_ESCAPE, VK_RETURN, VK_SHIFT, VK_CONTROL, VK_UP, VK_DOWN, VK_LEFT, VK_RIGHT, 'Z', 'X', 'A', 'S', 'Q', 'W', 'D', 'E', 'F', 'R', 'C', VK_SPACE, VK_BACK, VK_TAB};
-    for (int r : reservadas) if (vk == r || hotkey_reserved(vk)) { api_log("tecla %d reservada pelo jogo: liga/desliga so pelo menu", vk); vk = 0; }
+    for (int r : reservadas) if (vk == r || hotkey_reserved(vk)) { api_log("key %d is reserved by the game: this toggle gets no key", vk); vk = 0; }
+    for (const Toggle &t : g_toggles) if (vk && t.vk == vk) { api_log("key %d is already used by \"%ls\": this toggle gets no key", vk, t.title.c_str()); vk = 0; }   /* plugin_toggle_by_key flips only the first one */
     Plugin *p = current(); const int menu = p ? p->menu : 0;
     g_toggles.push_back({p, title, vk, get, set, menu});
     api_log("liga/desliga no menu %s%s (atual: %s)", menu ? "Cheats" : "Mods", vk ? " e por tecla" : "", get() ? "ligado" : "desligado");

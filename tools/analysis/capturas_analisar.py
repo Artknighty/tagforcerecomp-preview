@@ -1,6 +1,6 @@
 """Prepara as capturas do modo de diagnostico grafico (runtime/gpu/capturas.inc) para analise.
 Uso: python tools/analysis/capturas_analisar.py [pasta_das_capturas | ultima] [--por-folha 12]
-  - 'ultima' (padrao) = a pasta *_capturas mais recente em gen/logs (player sessions) ou gen/replay/**/logs (testes)
+  - 'ultima' (padrao) = a pasta *_capturas mais recente em logs/ ou gen/logs (player sessions) ou gen/replay/**/logs (testes)
   - monta FOLHAS DE CONTATO (grade 4x3 de miniaturas legendadas com numero, etiqueta e tempo) em <pasta>/folhas/folha_NN.png: uma imagem mostra 12 quadros
   - calcula sinais de problema por quadro (preto/branco quase total, magenta = textura ausente, bloco de cor unica, quadro igual ao anterior por muito tempo) e grava suspeitas.tsv
   - imprime o resumo: quantidades por etiqueta, intervalo de tempo, suspeitas e os caminhos das folhas e das marcas (F8)
@@ -18,7 +18,8 @@ RAIZ = os.path.dirname(os.path.dirname(os.path.dirname(os.path.abspath(__file__)
 def achar_pasta(arg):
     if arg and arg != 'ultima':
         return arg
-    cands = glob.glob(os.path.join(RAIZ, 'gen', 'logs', '*_capturas')) + glob.glob(os.path.join(RAIZ, 'gen', 'replay', '*', 'logs', '*_capturas'))
+    cands = (glob.glob(os.path.join(RAIZ, 'logs', '*_capturas')) + glob.glob(os.path.join(RAIZ, 'gen', 'logs', '*_capturas'))   # logs/ = the root install the player uses; gen/logs = older sessions
+             + glob.glob(os.path.join(RAIZ, 'gen', 'replay', '*', 'logs', '*_capturas')))
     if not cands:
         sys.exit('nenhuma pasta *_capturas encontrada (ligue o modo com TF_CAPTURAS=1 ou F9 no jogo)')
     return max(cands, key=os.path.getmtime)

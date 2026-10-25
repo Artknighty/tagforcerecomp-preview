@@ -30,9 +30,12 @@ extern "C" void psp_watch_hit(uint32_t fn, uint32_t before, uint32_t after) {
     fputc(10, stderr); g_watch_val = after;
 }
 void diag_flush(void);
+void audio_out_shutdown(void);
 /* A mensagem do erro sai em stderr, que vai para o log da sessao por um pipe e uma thread (diag.cpp); exit()/o fim do processo matavam essa
- * thread antes de ela gravar as ultimas linhas, e justamente a mensagem do erro (ex.: "[HLE] nao implementado") podia faltar em gen/logs. */
-[[noreturn]] void host_fatal(int code) { diag_flush(); exit(code); }
+ * thread antes de ela gravar as ultimas linhas, e justamente a mensagem do erro (ex.: "[HLE] nao implementado") podia faltar em gen/logs.
+ * ExitProcess, not exit(): exit() runs the static destructors, and a std::thread that is still joinable there (HD movie decoder, Vulkan pipeline
+ * warm-up, launcher worker) calls std::terminate, turning a clean error exit into an abort. Same path as display.cpp quit_process. */
+[[noreturn]] void host_fatal(int code) { audio_out_shutdown(); fflush(nullptr); diag_flush(); ExitProcess((UINT)code); }
 static LONG WINAPI crash_handler(EXCEPTION_POINTERS *ep) {
     uint8_t *fa = (uint8_t *)ep->ExceptionRecord->ExceptionInformation[1];
     fprintf(stderr, "\n[CRASH] excecao 0x%08lx, acesso em %p (end PSP 0x%08llx)\n", ep->ExceptionRecord->ExceptionCode,

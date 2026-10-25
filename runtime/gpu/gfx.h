@@ -11,6 +11,7 @@ struct GfxSettings { int filter; int aspect; bool integer; int res; int renderer
 extern GfxSettings g_gfx;
 void gfx_load(void);
 void gfx_save(void);
+void gfx_keep_saved_renderer(int r);   /* r >= 0: gfx_save writes r as the renderer (a fallback is running something else this session); -1 = the running one */
 enum { GFX_WIN_WINDOWED = 0, GFX_WIN_BORDERLESS = 1, GFX_WIN_EXCLUSIVE = 2 };
 int gfx_ini_window_mode(void); void gfx_ini_set_window_mode(int m);   /* modo de janela salvo (tela=0/1/2); 1 = tela cheia sem bordas (o "tela=1" antigo) */
 /* pinta a imagem sw x sh (0x00RRGGBB) na area cw x ch do dc, com as opcoes atuais */

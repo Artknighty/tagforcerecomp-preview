@@ -72,12 +72,16 @@ void gfx_load(void) {
 /* modo de janela: [graficos] tela = 0 janela, 1 tela cheia (lancador, menu Graphics e F11 gravam a mesma chave) */
 int gfx_ini_window_mode(void) { const int v = (int)GetPrivateProfileIntW(L"graficos", L"tela", 0, ini_path().c_str()); return v == 1 || v == 2 ? v : 0; }
 void gfx_ini_set_window_mode(int m) { wchar_t b[8]; swprintf(b, 8, L"%d", m); WritePrivateProfileStringW(L"graficos", L"tela", b, ini_path().c_str()); }
+/* >= 0: the renderer the player chose, written to the ini while a fallback runs another one (display.cpp: GPU lost several times -> software for this
+ * session only). g_gfx.renderer always says what is really running. -1 = save g_gfx.renderer. */
+static int g_saved_renderer = -1;
+void gfx_keep_saved_renderer(int r) { g_saved_renderer = r; }
 void gfx_save(void) {
     std::wstring ini = ini_path(); wchar_t b[16];
     swprintf(b, 16, L"%d", g_gfx.filter); WritePrivateProfileStringW(L"graficos", L"filtro", b, ini.c_str());
     swprintf(b, 16, L"%d", g_gfx.aspect); WritePrivateProfileStringW(L"graficos", L"proporcao", b, ini.c_str());
     swprintf(b, 16, L"%d", g_gfx.res_auto ? 0 : g_gfx.res); WritePrivateProfileStringW(L"graficos", L"resolucao", b, ini.c_str());
-    swprintf(b, 16, L"%d", g_gfx.renderer); WritePrivateProfileStringW(L"graficos", L"renderizador", b, ini.c_str());
+    swprintf(b, 16, L"%d", g_saved_renderer >= 0 ? g_saved_renderer : g_gfx.renderer); WritePrivateProfileStringW(L"graficos", L"renderizador", b, ini.c_str());
     swprintf(b, 16, L"%d", g_gfx.fps); WritePrivateProfileStringW(L"graficos", L"fps60", b, ini.c_str());
     swprintf(b, 16, L"%d", g_gfx.sync); WritePrivateProfileStringW(L"graficos", L"sincronizacao", b, ini.c_str());
 }

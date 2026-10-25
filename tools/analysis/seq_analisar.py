@@ -1,6 +1,6 @@
 """Analisa a caixa-preta do F8 (quadros APRESENTADOS antes da marca: runtime/gpu/capturas.inc, pasta <sessao>_capturas/seq_<n>/).
 
-Uso: python tools/analysis/seq_analisar.py [pasta seq_<n> | ultima]      (ultima = a seq mais recente de gen/logs)
+Uso: python tools/analysis/seq_analisar.py [pasta seq_<n> | ultima]      (ultima = a seq mais recente de logs/ ou gen/logs)
 
 Para cada trio de quadros apresentados consecutivos a, b, c (reais R e intermediarios M do 60 FPS se alternam, cada um 1/60 s):
   - mede o movimento global a->c (correlacao de fase, subpixel) e preve b = a andado METADE disso;
@@ -17,7 +17,7 @@ from PIL import Image
 
 def achar_pasta(arg):
     if arg and arg != 'ultima': return arg
-    cands = glob.glob('gen/logs/*_capturas/seq_*') + glob.glob('gen/replay/*/logs/*_capturas/seq_*')
+    cands = glob.glob('logs/*_capturas/seq_*') + glob.glob('gen/logs/*_capturas/seq_*') + glob.glob('gen/replay/*/logs/*_capturas/seq_*')   # logs/ = root install (the player's)
     if not cands: sys.exit('nenhuma pasta seq_* encontrada')
     return max(cands, key=os.path.getmtime)
 

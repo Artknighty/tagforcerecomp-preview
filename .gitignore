@@ -15,7 +15,11 @@ __pycache__/
 /jogo/
 texcache/
 texturas_recentes.txt
+texturas_recentes.txt.bak*
 texturas_despejo/
+# runtime files the root install writes next to the exe
+/cheats.ini
+/tagforce_vk_keys.txt
 
 # Local-only files (maintainer notes, agent instructions, internal docs, hooks, local game data)
 /HANDOFF*

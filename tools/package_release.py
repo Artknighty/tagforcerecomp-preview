@@ -16,7 +16,7 @@ On first run the program installs the game files from the player's ISO and trans
 (runtime/core/prepare.cpp); the C code is then compiled in memory by TinyCC (runtime/core/jit.cpp).
 Needs (on the build machine only): MSYS2 UCRT64 (g++, windres, glslc, FFmpeg), Python 3. Downloads TinyCC and the embeddable Python
 once into <out>/cache."""
-import os, re, shutil, subprocess, sys, urllib.request, zipfile, glob
+import os, shutil, subprocess, sys, urllib.request, zipfile, glob
 
 ROOT = os.path.dirname(os.path.dirname(os.path.abspath(__file__)))
 TCC_URL = 'https://download.savannah.gnu.org/releases/tinycc/tcc-0.9.27-win64-bin.zip'

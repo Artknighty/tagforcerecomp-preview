@@ -6,7 +6,7 @@ Para cada marca "[marca-cpu] #n quadro F" do log da sessao mostra, com nomes de 
   - as ultimas decisoes do plugin (o que a CPU via, as opcoes e a escolha);
   - alertas automaticos simples (monstro em ataque diante de um atacante maior, etc.);
   - o caminho da captura de tela (PNG inteiro) tirada na marca.
-Grava o relatorio em gen/marcas/<sessao>.md. Os dados sao os do log da sessao (gen/logs/sessao_*.log); nao precisa reproduzir o duelo."""
+Grava o relatorio em gen/marcas/<sessao>.md. Os dados sao os do log da sessao (logs/sessao_*.log, or gen/logs for older sessions); nao precisa reproduzir o duelo."""
 import re, sys, os, glob
 RAIZ = os.path.dirname(os.path.dirname(os.path.dirname(os.path.abspath(__file__))))
 sys.path.insert(0, os.path.join(RAIZ, 'tools', 'game'))
@@ -50,10 +50,11 @@ def campo_txt(campo):
 def achar_log(arg):
     if arg and arg != 'ultima':
         if os.path.exists(arg): return arg
-        c = glob.glob(os.path.join(RAIZ, 'gen', 'logs', '%s*.log' % arg.replace('.log', '')))
+        c = [f for d in ('logs', os.path.join('gen', 'logs')) for f in glob.glob(os.path.join(RAIZ, d, '%s*.log' % arg.replace('.log', '')))]
         if c: return c[0]
         sys.exit('log nao encontrado: %s' % arg)
-    c = glob.glob(os.path.join(RAIZ, 'gen', 'logs', 'sessao_*.log')) + glob.glob(os.path.join(RAIZ, 'gen', 'replay', '*', 'logs', 'sessao_*.log'))
+    c = (glob.glob(os.path.join(RAIZ, 'logs', 'sessao_*.log')) + glob.glob(os.path.join(RAIZ, 'gen', 'logs', 'sessao_*.log'))   # logs/ = root install (the player's)
+         + glob.glob(os.path.join(RAIZ, 'gen', 'replay', '*', 'logs', 'sessao_*.log')))
     c = [f for f in c if R_MARCA.search(open(f, errors='ignore').read())]   # marcas gravadas (as descartadas com Esc nao contam)
     if not c: sys.exit('nenhuma sessao com marcas "a CPU errou" (aperte F7 ou L3+R3 durante o duelo)')
     return max(c, key=os.path.getmtime)

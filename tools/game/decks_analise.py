@@ -6,7 +6,7 @@ import re, sys, os, glob, json, collections
 SESSAO = open(os.path.join(os.path.dirname(os.path.dirname(os.path.dirname(os.path.abspath(__file__)))), 'gen', 'arena', 'sessao.txt')).read().strip() if os.path.exists(os.path.join(os.path.dirname(os.path.dirname(os.path.dirname(os.path.abspath(__file__)))), 'gen', 'arena', 'sessao.txt')) else 'sessao'
 RAIZ = os.path.dirname(os.path.dirname(os.path.dirname(os.path.abspath(__file__))))
 sys.path.insert(0, os.path.join(RAIZ, 'tools', 'game'))
-from decks_lib import CARTAS, nome_de
+from decks_lib import nome_de
 
 R_MAO = re.compile(r'\[mon\] turno (\d+) \(vez de J(\d)\) J(\d) .* mao=\d+\(([\d,]*)\)')
 R_JOGA = re.compile(r'\[mon\] J(\d) joga da mao: carta (\d+)')

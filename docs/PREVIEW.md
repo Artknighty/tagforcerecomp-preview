@@ -54,7 +54,7 @@ experimental, what is missing, and what may change. If something is not listed h
   been run in a public CI**, so those instructions may have gaps. Please report them.
 - **No automated test suite in CI.** Regression checking is done with recorded sessions that you generate by playing
   ([TESTING.md](TESTING.md)); the scripts that refer to the maintainers' own sessions need you to substitute yours.
-- **Research tools** (`tools/decks_*.py`, `tools/ia_*`, `tools/capturas_*`, parts of `tools/ai/ia_treino`) expect a local module dump and
+- **Research tools** (`tools/game/decks_*.py`, `tools/ai/ia_*`, `tools/analysis/capturas_*`, parts of `tools/ai/ia_treino`) expect a local module dump and
   card database produced with a decompiler workflow that is not part of this repository
   ([ARCHITECTURE.md](ARCHITECTURE.md#note-on-the-research-tools)). The recompiler and the runtime do not need it.
 - **Language.** The documentation and the user interface are in English. Many source comments, log messages, some folder names

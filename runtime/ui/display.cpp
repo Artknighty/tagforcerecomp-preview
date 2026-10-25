@@ -172,6 +172,7 @@ static void gpu_restart(int renderer, bool on_main) {
 void ge_set_texscale(void);
 void ge_set_msaa(void);
 void display_set_renderer(int r) {
+    gfx_keep_saved_renderer(-1);   /* a choice made now is saved as is (the GPU-lost fallback below sets its own afterwards) */
     ge_set_gpu(false); gpu_release_swapchain(); g_exclusive = false; g_on_main = false;   /* solta o backend atual (quadros sombra, texturas, swapchain) */
     int got = start_gpu(r);
     ge_set_texscale(); ge_set_msaa();   /* o backend novo comeca sem texturas nem quadros sombra: esvazia os caches do anterior (sem isso sobram quadrados brancos) */
@@ -649,7 +650,7 @@ void display_present(void) {
         g_pending_fps = false; const int to = (gfx_option_get(GFXOPT_FRAME_RATE) + 1) % 3;
         gfx_option_set(GFXOPT_FRAME_RATE, to); display_notify(to == GFX_FPS_120 ? "Frame rate: 120 FPS" : to == GFX_FPS_60 ? "Frame rate: 60 FPS" : "Frame rate: 30 FPS");
     }
-    { static const long lose_at = getenv("TF_GPU_LOSE_AT") ? atol(getenv("TF_GPU_LOSE_AT")) : 0; if (lose_at && (long)g_frames == lose_at) g_gpu_lost = true; }   /* test: simulate a device loss at frame N */
+    { static const char *lose_at = getenv("TF_GPU_LOSE_AT"); if (lose_at && quadro_na_lista(lose_at, g_frames)) g_gpu_lost = true; }   /* test: simulate a device loss at these frames (n or n1,n2,...) */
     if (g_excl_failed) { g_excl_failed = false; pres_drain(); if (g_exclusive) { g_kind = GFX_WIN_BORDERLESS; apply_exclusive(); display_notify("Exclusive fullscreen failed: using borderless"); } }
     if (g_gpu_lost) {   /* driver reset / TDR / GPU removed: rebuild the same renderer; after 3 losses in 60 s fall back to software (without touching the saved choice) */
         g_gpu_lost = false; pres_drain();
@@ -657,8 +658,13 @@ void display_present(void) {
         if (now - t0 > 60000) { t0 = now; n = 0; }
         const int want = g_gfx.renderer;
         fprintf(stderr, "[gpu] device lost: recreating the renderer (%d in this minute)\n", n + 1);
-        if (++n > 3) { display_set_renderer(GFX_RENDER_SOFTWARE); g_gfx.renderer = want; gfx_save(); display_notify("GPU kept failing: using software rendering"); }
-        else { display_set_renderer(want); g_gpu_lost = false; display_notify("GPU reset: renderer restarted"); }
+        /* g_gfx.renderer must say what really runs (gpu_mode, the 120 FPS presenter and fullscreen read it); the ini keeps the player's choice */
+        if (++n > 3) { display_set_renderer(GFX_RENDER_SOFTWARE); gfx_keep_saved_renderer(want); gfx_save(); display_notify("GPU kept failing: using software rendering"); }
+        else {
+            display_set_renderer(want); g_gpu_lost = false;
+            if (g_gfx.renderer != want) { gfx_keep_saved_renderer(want); gfx_save(); }   /* the restart fell back to another renderer: still only for this session */
+            display_notify("GPU reset: renderer restarted");
+        }
     }
     if (g_pending_renderer >= 0) { const int r = g_pending_renderer; g_pending_renderer = -1; pres_drain(); display_set_renderer(r); }   /* pedido pela tela Graphics do jogo: trocado aqui, entre dois quadros */
     {   /* esconde o cursor depois de 5 s (3 s com controle ligado) sem mexer o mouse (so com a janela do jogo ativa e o cursor sobre a area do jogo) */

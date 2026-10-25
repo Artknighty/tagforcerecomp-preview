@@ -3,7 +3,7 @@ Cada duelo tem um quadro do tabuleiro a cada troca de vez (mao, campo, LP dos do
 jogador SABE no jogo real (a mao do oponente nao entra: so a quantidade de cartas; cartas viradas para baixo = forca desconhecida). Rotulo = o jogador do ponto de vista venceu.
 Uso: python tools/ai/ia_valor/dataset.py [saida=gen/ia_valor/valor.npz]
 Os mesmos 'features()' sao reimplementados em C++ no plugin (plugins/src/BetterAI) quando o modelo for integrado: mantenha as duas versoes iguais."""
-import re, os, sys, glob, json
+import re, os, sys, glob
 import numpy as np
 RAIZ = os.path.dirname(os.path.dirname(os.path.dirname(os.path.dirname(os.path.abspath(__file__)))))
 sys.path.insert(0, os.path.join(RAIZ, 'tools', 'game'))

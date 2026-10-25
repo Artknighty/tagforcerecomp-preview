@@ -84,10 +84,12 @@ typedef struct TfModApi {
     void (*add_slider)(const wchar_t *title, const wchar_t *unit, int min, int max, int def, int (*get)(void), void (*set)(int));
 
     /* ---- version 4 ---- */
-    /* On/off switch: a checkmark item in the Mods menu and, optionally, a key during play (Windows virtual-key code, e.g. 0x75 = F6;
-     * 0 = no key; F3/F5/F7/F8/F9/F10/F11, Esc, Enter and the keys of the PSP buttons in both keyboard layouts - arrows, W A S D,
-     * Z X C E F R Q, Space, Backspace, Tab, Shift, Ctrl - belong to the game and exist only in the menu). get() reads the state; set(new) is called on the game thread when the player toggles it (menu or
-     * key). Register in tfmod_init; storing the state in a file is up to the plugin (mod_dir). */
+    /* On/off switch flipped by a key during play (Windows virtual-key code, e.g. 0x75 = F6); each press shows "<title>: on/off" on screen.
+     * (Since the window menu bar was removed there is no menu item: with vk = 0 only the plugin itself can change it.) Keys already taken
+     * get refused and the toggle has no key: F3/F4/F5/F7/F8/F9/F10/F11, P, Esc, Enter, the keys of the PSP buttons in both keyboard
+     * layouts - arrows, W A S D, Z X C E F R Q, Space, Backspace, Tab, Shift, Ctrl - and any key an earlier toggle has (the built-in
+     * cheats use F1, F2, F6, F12). get() reads the state; set(new) is called on the game thread when the player presses the key.
+     * Register in tfmod_init; storing the state in a file is up to the plugin (mod_dir). */
     void (*add_toggle)(const wchar_t *title, int vk, int (*get)(void), void (*set)(int));
     /* Information panel over the game (translucent; it neither pauses nor blocks anything). Call it every frame in which it should be
      * visible. corner: 0 = top left, 1 = top right, 2 = bottom left, 3 = bottom right (the top ones sit below the 20 px strip at the top,
@@ -103,8 +105,8 @@ typedef struct TfModApi {
      *             L"*4" = star + 4 (level), L"ATK|1600" = small label + value, any other text = as is.
      * Whatever does not fit in the height becomes a "+N" line at the end. */
     void (*panel)(int corner, const wchar_t *title, const wchar_t *const *lines, int nlines);
-    /* Which window menu receives this plugin's next add_slider/add_toggle: TFMOD_MENU_MODS (default) or TFMOD_MENU_CHEATS (the
-     * menu-bar Cheats menu, separate from the mods: cheats and testing aids). */
+    /* (No effect since the window menu bar was removed; kept so older plugins still load.) Which window menu received this plugin's
+     * next add_slider/add_toggle: TFMOD_MENU_MODS (default) or TFMOD_MENU_CHEATS. */
     void (*use_menu)(int menu);
 
     /* ---- version 5 ---- */

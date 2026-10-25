@@ -119,7 +119,7 @@ mods/
 It is switched on and off in the **Mods** menu like any other mod (applies on restart). The game loads the `plugin.dll` of the
 enabled mods at start-up, in alphabetical folder order, and calls `tfmod_init(api)`.
 
-### The API (`plugins/sdk/tfmod.h`, C ABI, version 6)
+### The API (`plugins/sdk/tfmod.h`, C ABI, version 7)
 
 The game code is recompiled, so a code mod does not "patch" the ISO: it **intercepts game functions by their PSP address**. Every
 recompiled function checks a bitmap on entry; if there is a hook, it runs with the PSP registers (`reg(c, 4..7)` = arguments, `r2` =
@@ -137,13 +137,14 @@ result, `r31` = return address) and returns `0` = continue with the original (th
 | `message_box(...)` | show a message box over the game (a line `"=N/M"` becomes a bar of M segments with N lit) |
 | `log(fmt, ...)` | write to the session log, tagged with the mod name |
 | `guest_alloc(n)` (v2) | reserve PSP memory for data the game will read (for example UTF-16 text shown by the game's own message window) |
-| `add_slider(title, unit, min, max, def, get, set)` (v3) | register an integer setting; the runtime adds a **Mods** menu item that opens a dark modal slider dialog (`runtime/ui/slider_dialog.cpp`) |
-| `add_toggle(title, vk, get, set)` (v4) | register an on/off setting: a checkable **Mods** menu item and, optionally, an in-game key (Windows virtual-key code, e.g. `VK_F6`). Keys that belong to the game are refused (the item stays menu-only): the window's F-keys (F3, F5, F7, F8, F9, F11, listed in Help > Controls), F10, Esc, Enter and the keyboard keys of the PSP buttons in both layouts (arrows, W A S D, Z X C E F R Q, Space, Backspace, Tab, Shift, Ctrl) |
+| `add_slider(title, unit, min, max, def, get, set)` (v3) | accepted so older plugins still load, but it shows nothing: the game window has no menu bar any more. Keep settings in the mod's `config.ini` (the launcher's Mods page) |
+| `add_toggle(title, vk, get, set)` (v4) | register an on/off setting switched by an in-game key (Windows virtual-key code, e.g. `VK_F6`); each press shows "<title>: on/off" on screen. There is no menu item any more, so a toggle without a key can only be changed by the plugin itself. Keys that are already taken are refused (the toggle gets no key): the window's keys (F3, F4, F5, F7, F8, F9, F11 and P; the `kHotkeys` table in `runtime/ui/display.cpp`), F10, Esc, Enter, the keyboard keys of the PSP buttons in both layouts (arrows, W A S D, Z X C E F R Q, Space, Backspace, Tab, Shift, Ctrl) and any key an earlier toggle already has (the built-in cheats use F1, F2, F6 and F12) |
 | `panel(corner, title, lines, n)` (v4) | information panel in a corner of the screen (0 top-left, 1 top-right, 2 bottom-left, 3 bottom-right); call it every frame it should stay visible; it never blocks the game. Plain text works; an optional markup (documented in `tfmod.h`) gives section headers with counters (`"#Hand\t5"`), colored card rows (`"@ed{M4}Drillago\t*4\tATK\|1600\tDEF\|1100"`: frame color, attribute dot, badge, table-aligned columns, level star) and a title icon/right text (`"@eOpponent\tLP 8000"`) |
 | `sprite(id, rgba, w, h, x, y, dw, dh, alpha)` (v5) | RGBA image over the game (GPU renderers only), in 480x272 PSP pixels; call every frame it should stay; redrawn on a thread (1-3 frames of latency). Example: `plugins/src/MonstersOnField` |
 | `set_speed(n)` (v6) | game speed, 1 = normal, 2..8 = n times faster (frame limiter at n times the normal rate; the music is time-stretched, same pitch). The plugin owns the setting: call it again on load (Cheats starts at 1x). |
 | `quad_near(x, y, tol, wmin, wmax)` (v5) | 1 if the game drew a textured 3D quad (a card on the field...) centered near (x, y) in the frame on screen — tells whether a field slot is really visible (not hidden by a cut-in) |
-| `use_menu(menu)` (v4) | which window menu the following `add_slider`/`add_toggle` go to: `TFMOD_MENU_MODS` (default) or `TFMOD_MENU_CHEATS` (the **Cheats** menu, separate from Mods) |
+| `use_menu(menu)` (v4) | kept for compatibility; no effect since the window menu bar was removed |
+| `set_bgm(wav_path)` (v7) | replace the next looping music the game starts with a WAV file (PCM 16-bit stereo 44100 Hz, looped); `NULL` goes back to the game's music. Example: `plugins/src/Yugi` |
 
 The API only grows: a plugin built for version N runs on runtimes with version ≥ N. Use `api->version >= N` before calling
 newer functions. Everything runs on the game thread inside the frame: never block or wait.
