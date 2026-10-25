@@ -1,5 +1,6 @@
 /* Texturas substitutas (mods): ver texrepl.h. Indice por hash dos dados; PNGs decodificados por varias threads de fundo (WIC) e guardados
  * num cache em RAM (voltar a uma cena nao rele os PNGs). */
+#include <atomic>
 #include "texrepl.h"
 #include "xxh.h"
 #include "imgio.h"
@@ -7,6 +8,7 @@
 #include "mods.h"
 #include "util.h"
 #include <windows.h>
+#include <atomic>
 #include <unordered_map>
 #include <unordered_set>
 #include <deque>
@@ -307,6 +309,27 @@ static void build_mips(TexReplImg &img) {   /* mesmos tamanhos do Vulkan (max(1,
         src = dst; dst += (size_t)dw * dh; sw = dw; sh = dh;
     }
 }
+/* Cold-open warm-up. The first open of each cache file costs ~5 ms (real-time antivirus scan / metadata), reading it only ~0.3 ms; a re-open is ~0.25 ms and
+ * parallel first opens are ~5x faster. A new scene asks for ~24 textures one by one on the game thread (~130 ms: an audio gap). So a few background threads
+ * open every cached .bc7 once after the start (low priority, I/O included); by the first duel the opens are warm. */
+static DWORD WINAPI warm_cache(LPVOID) {
+    Sleep(4000);
+    std::vector<std::wstring> files; WIN32_FIND_DATAW fd;
+    HANDLE h = FindFirstFileW((g_cdir + L"/*.bc7").c_str(), &fd);
+    if (h == INVALID_HANDLE_VALUE) return 0;
+    do files.push_back(g_cdir + L"/" + fd.cFileName); while (FindNextFileW(h, &fd));
+    FindClose(h);
+    static std::atomic<size_t> next; static std::atomic<int> live; const uint64_t t0 = GetTickCount64();
+    const int nt = 3; live = nt;
+    for (int i = 0; i < nt; i++) CreateThread(nullptr, 0, [](LPVOID p) -> DWORD {
+        auto *fl = (std::vector<std::wstring> *)p;
+        SetThreadPriority(GetCurrentThread(), THREAD_MODE_BACKGROUND_BEGIN);
+        for (size_t k; (k = next++) < fl->size();) { HANDLE f = CreateFileW((*fl)[k].c_str(), GENERIC_READ, FILE_SHARE_READ | FILE_SHARE_WRITE | FILE_SHARE_DELETE, nullptr, OPEN_EXISTING, FILE_ATTRIBUTE_NORMAL, nullptr); if (f != INVALID_HANDLE_VALUE) CloseHandle(f); }
+        live--; return 0; }, &files, 0, nullptr);
+    while (live > 0) Sleep(200);
+    fprintf(stderr, "[texturas] cache BC7 aquecido: %zu arquivo(s) abertos em %llu ms (3 threads de fundo)%c", files.size(), (unsigned long long)(GetTickCount64() - t0), 10);
+    return 0;
+}
 static int g_nthreads;
 static void start_loaders(void) {   /* varias threads de leitura (nucleos - 2, de 2 a 8; TF_TEX_THREADS) */
     if (g_ready_up) return;
@@ -317,6 +340,7 @@ static void start_loaders(void) {   /* varias threads de leitura (nucleos - 2, d
     g_bg_max = std::max(1, std::min(2, g_nthreads / 2));
     g_bg_from = GetTickCount64() + 30000;
     CreateThread(nullptr, 0, [](LPVOID) -> DWORD { Sleep(30500); SetEvent(g_ev); return 0; }, nullptr, 0, nullptr);   /* acorda a fila de fundo quando a espera acaba */   /* 2 no maximo: com 4 a 1a execucao (pacote inteiro) atrasava o jogo (sessao 192436: quadros chegando em 11-20 ms em vez de ~5) */
+    if (g_bc_on && !getenv("TF_TEX_NO_WARM")) CreateThread(nullptr, 0, warm_cache, nullptr, 0, nullptr);
     g_ready_up = true; g_ready_any = true;
 }
 static void add_dir_ini(const std::wstring &dir, const std::wstring &ini, size_t *count) {
