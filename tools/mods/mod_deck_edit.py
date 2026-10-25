@@ -377,6 +377,7 @@ def tab_head(t):
     edge = [px(t, 15, W - 2), px(t, 16, W - 2), px(t, 17, W - 2)]
     bx1 = int(np.nonzero(t[0, :, 3])[0].max()) + 1
     f0, f1 = white_box(t)
+    body_band = lambda j: [outer, light, dark][j]
 
     def inside(X, Y):
         col = np.empty(X.shape + (4,), np.float32)
@@ -391,10 +392,23 @@ def tab_head(t):
     c[18:, 3:] = cream
     for i in range(3):
         c[15 + i, 3:bx1 - 3] = stripes[i]
-        c[15 + i, bx1 - 3:] = edge[i]
+        c[15 + i, bx1:] = edge[i]
+    for i in range(3):                                # right side: the three bands turn the corner into the panel border (mitred L)
+        for j in range(3):
+            c[15 + i, bx1 - 1 - j] = edge[max(i, j)]
     low = depixel.render(c, K)                       # straight rectangles: no smoothing
     out = low.copy()
     out[:15 * K] = body[:15 * K]
+    x0, x1 = bx1 - 4, bx1 + 2                         # the corner is made of exact texel blocks: no smoothing, no seam specks
+    blk = np.zeros((4, x1 - x0, 4), np.uint8)
+    blk[0, 0] = fill
+    blk[0, 1:4] = [body_band(j) for j in (2, 1, 0)]
+    for i in range(3):
+        blk[1 + i, 0] = stripes[i]
+        for jj in range(3):
+            blk[1 + i, 1 + jj] = edge[max(i, 2 - jj)]
+        blk[1 + i, 4:] = edge[i]
+    out[14 * K:18 * K, x0 * K:x1 * K] = np.repeat(np.repeat(blk, K, 0), K, 1)
     return out
 
 
