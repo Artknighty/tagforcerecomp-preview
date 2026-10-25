@@ -208,6 +208,69 @@ def marble_strips(out, t):
         out[iy0 * K:iy1 * K, ix0 * K:ix1 * K] = np.asarray(img)
 
 
+def aa(depth):
+    """Coverage 0..1 of a signed depth in texels, antialiased over one output pixel."""
+    return np.clip(depth * K + 0.5, 0.0, 1.0)
+
+
+def over(dst, rgb, alpha):
+    """Composite a flat colour with per-pixel alpha (0..1) over the RGBA float image dst (in place)."""
+    a0 = dst[..., 3:4] / 255.0
+    a1 = alpha[..., None]
+    ao = a1 + a0 * (1 - a1)
+    col = (np.asarray(rgb, np.float32)[None, None, :3] * a1 + dst[..., :3] * a0 * (1 - a1)) / np.maximum(ao, 1e-6)
+    dst[..., :3] = col
+    dst[..., 3:4] = ao * 255.0
+
+
+def grid(x0, y0, x1, y1):
+    """Texel coordinates of the output pixel centres of the region [x0, x1) x [y0, y1) (texels)."""
+    xs = x0 + (np.arange((x1 - x0) * K) + 0.5) / K
+    ys = y0 + (np.arange((y1 - y0) * K) + 0.5) / K
+    return np.meshgrid(xs, ys)
+
+
+def small_parts(out, t):
+    """Small marble strips and the white number windows of the list rows, from geometry: rounded body, soft offset shadow, no stair-stepped corners."""
+    for x0, y0, x1, y1 in components(t[:, :210], 40):
+        w, h = x1 - x0 + 1, y1 - y0 + 1
+        if 70 <= w <= 75 and 12 <= h <= 14:                            # small marble strip: body one texel smaller than the blob (shadow column / row)
+            bx1, by1 = x1, y1
+            X, Y = grid(x0, y0, x1 + 1, y1 + 1)
+            reg = np.zeros(X.shape + (4,), np.float32)
+            over(reg, (0, 0, 0), 0.47 * aa(rr_depth(X, Y, (x0 + 1, y0 + 1, bx1 + 1, by1 + 1), 2.6)))
+            body = np.asarray(Image.fromarray(np.ascontiguousarray(t[y0:by1, x0:bx1])).resize(((bx1 - x0) * K, (by1 - y0) * K), Image.BICUBIC), np.float32)
+            full = np.zeros(X.shape + (4,), np.float32)
+            full[:(by1 - y0) * K, :(bx1 - x0) * K] = body
+            cov = aa(rr_depth(X, Y, (x0, y0, bx1, by1), 2.6))
+            full[..., 3] = cov * 255.0
+            a0 = reg[..., 3:4] / 255.0
+            a1 = cov[..., None]
+            ao = a1 + a0 * (1 - a1)
+            res = np.zeros_like(reg)
+            res[..., :3] = (full[..., :3] * a1 + reg[..., :3] * a0 * (1 - a1)) / np.maximum(ao, 1e-6)
+            res[..., 3:4] = ao * 255.0
+            out[y0 * K:(y1 + 1) * K, x0 * K:(x1 + 1) * K] = np.clip(res + 0.5, 0, 255).astype(np.uint8)
+        elif w == 24 and h == 24:                                      # plain bevelled square: dark top-left edge, light bottom-right edge
+            d = 1 if t[y0, x0 + 12, 0] > 130 else 2
+            dark, light = tuple(t[y0 + 12, x0]), tuple(t[y1 - 12, x1])
+            lightc = tuple(t[y1 - 12, x1 - (d - 1)])
+            fill = tuple(t[y0 + 12, x0 + 12])
+            X, Y = grid(x0, y0, x1 + 1, y1 + 1)
+            reg = np.zeros(X.shape + (4,), np.float32)
+            base = aa(rr_depth(X, Y, (x0, y0, x1 + 1, y1 + 1), 1.4))
+            over(reg, dark[:3], base)
+            over(reg, light[:3], base * aa(rr_depth(X, Y, (x0 + d, y0 + d, x1 + 1 + d, y1 + 1 + d), 1.4)))
+            over(reg, fill[:3], aa(rr_depth(X, Y, (x0 + d, y0 + d, x1 + 1 - d, y1 + 1 - d), 0.9)))
+            out[y0 * K:(y1 + 1) * K, x0 * K:(x1 + 1) * K] = np.clip(reg + 0.5, 0, 255).astype(np.uint8)
+        elif 13 <= w <= 21 and h == 13 and t[y0 + 5, x0 + 6, 3] == 255 and (t[y0 + 5, x0 + 6, :3] > 240).all():   # white number window
+            X, Y = grid(x0, y0, x1 + 1, y1 + 1)
+            reg = np.zeros(X.shape + (4,), np.float32)
+            over(reg, (0, 0, 0), 0.47 * aa(rr_depth(X, Y, (x0, y0, x1 + 1, y1 + 1), 3.4)))
+            over(reg, (255, 255, 255), aa(rr_depth(X, Y, (x0 + 2, y0 + 1, x1, y1), 2.8)))
+            out[y0 * K:(y1 + 1) * K, x0 * K:(x1 + 1) * K] = np.clip(reg + 0.5, 0, 255).astype(np.uint8)
+
+
 def rr_depth(X, Y, rect, r):
     """Depth inside the rounded rectangle rect = (x0, y0, x1, y1) (texels, negative outside) at the continuous points X, Y."""
     x0, y0, x1, y1 = rect
@@ -298,11 +361,15 @@ def tab_head(t):
 
 
 def cursor_frame(out):
-    """9-slice of the yellow cursor: the game stretches a single texel row/column of each edge."""
-    depixel.flat_row(out, 213, 219, 128)
-    depixel.flat_row(out, 250, 256, 128)
-    depixel.flat_col(out, 219, 122, 128)
-    depixel.flat_col(out, 219, 159, 165)
+    """The yellow list cursor from geometry: gold ring with a thin yellow line and a soft inner shadow, rounded corners; the game 9-slices it, so the straight edges stay constant."""
+    x0, y0, x1, y1 = 213, 122, 255, 164
+    X, Y = grid(x0 - 1, y0 - 1, x1 + 1, y1 + 2)
+    reg = np.zeros(X.shape + (4,), np.float32)
+    d = rr_depth(X, Y, (x0, y0, x1, y1), 4.6)
+    over(reg, (0, 0, 0), 0.5 * aa(d - 3.0) * (1 - aa(d - 4.0)))
+    over(reg, (214, 181, 0), aa(d) * (1 - aa(d - 3.0)))
+    over(reg, (252, 255, 1), aa(d - 1.0) * (1 - aa(d - 2.0)))
+    out[(y0 - 1) * K:(y1 + 2) * K, (x0 - 1) * K:(x1 + 1) * K] = np.clip(reg + 0.5, 0, 255).astype(np.uint8)
 
 
 def redraw(t, h=None):
@@ -311,6 +378,7 @@ def redraw(t, h=None):
     if h == '8e3f02b7':
         out = tiled(t, sigma=SIGMA)
         marble_strips(out, t)
+        small_parts(out, t)
         cursor_frame(out)
         return out
     if h in HARD:
