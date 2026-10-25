@@ -58,7 +58,7 @@ static Glyph &glyph(uint32_t code) {
 
 /* O mesmo glifo desenhado em HDS x o tamanho (fonte em alta resolucao, ver hdfont.h). FONT_HD_FACE troca so a fonte HD (padrao: a mesma do nativo). */
 static HFONT g_latin_hd, g_cjk_hd;
-constexpr float kDigitWiden = 1.25f;
+constexpr float kDigitX = 1.1f, kDigitY = 0.88f;   /* digit glyph scale (width, height) */
 static int g_hd_lift;   /* HD px que o glifo sobe: encolher ancorado na linha de base deixaria o texto colado embaixo; mantem o centro das maiusculas (~0,35 em) no mesmo lugar */
 bool font_hd_glyph(uint32_t code, int *w, int *h, int *top, std::vector<uint8_t> *a8) {
     init_gdi();
@@ -81,13 +81,17 @@ bool font_hd_glyph(uint32_t code, int *w, int *h, int *top, std::vector<uint8_t>
         if (GetGlyphOutlineW(g_dc, code, GGO_GRAY8_BITMAP, &gm, sz, raw.data(), &m) != GDI_ERROR) {
             *w = gm.gmBlackBoxX; *h = gm.gmBlackBoxY; *top = gm.gmptGlyphOrigin.y + g_hd_lift; uint32_t pitch = (*w + 3) & ~3u; a8->assign((size_t)*w * *h, 0);
             for (int y = 0; y < *h; y++) for (int x = 0; x < *w; x++) (*a8)[(size_t)y * *w + x] = (uint8_t)std::min(255u, raw[y * pitch + x] * 255u / 64u);
-            if (code >= '0' && code <= '9') {   /* the native digits fill their 8 px cell; Segoe's are narrower and leave gaps in tabular counters ("4 2"): widen them to the native width */
-                int nw = (int)(*w * kDigitWiden + 0.5f); std::vector<uint8_t> src = *a8; a8->assign((size_t)nw * *h, 0);
-                for (int y = 0; y < *h; y++) for (int x = 0; x < nw; x++) {
-                    float fx = (x + 0.5f) / kDigitWiden - 0.5f; int x0 = (int)floorf(fx); float t = fx - x0; int xa = std::max(0, x0), xb = std::min(*w - 1, x0 + 1);
-                    (*a8)[(size_t)y * nw + x] = (uint8_t)(src[(size_t)y * *w + xa] * (1 - t) + src[(size_t)y * *w + xb] * t + 0.5f);
+            if (code >= '0' && code <= '9') {   /* the native digits fill their 8 px cell; Segoe's are narrower and leave gaps in tabular counters ("4 2"): widen them, and shrink a little so counters sit inside their boxes */
+                int nw = (int)(*w * kDigitX + 0.5f), nh = (int)(*h * kDigitY + 0.5f); std::vector<uint8_t> src = *a8; a8->assign((size_t)nw * nh, 0);
+                for (int y = 0; y < nh; y++) {
+                    float fy = (y + 0.5f) / kDigitY - 0.5f; int y0 = (int)floorf(fy); float ty = fy - y0; int ya = std::max(0, y0), yb = std::min(*h - 1, y0 + 1);
+                    for (int x = 0; x < nw; x++) {
+                        float fx = (x + 0.5f) / kDigitX - 0.5f; int x0 = (int)floorf(fx); float tx = fx - x0; int xa = std::max(0, x0), xb = std::min(*w - 1, x0 + 1);
+                        float v = (src[(size_t)ya * *w + xa] * (1 - tx) + src[(size_t)ya * *w + xb] * tx) * (1 - ty) + (src[(size_t)yb * *w + xa] * (1 - tx) + src[(size_t)yb * *w + xb] * tx) * ty;
+                        (*a8)[(size_t)y * nw + x] = (uint8_t)(v + 0.5f);
+                    }
                 }
-                *w = nw;
+                *w = nw; *h = nh; *top = (int)(*top * kDigitY + 0.5f);
             }
             ok = true;
         }
