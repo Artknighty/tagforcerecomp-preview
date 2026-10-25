@@ -58,7 +58,9 @@ static Glyph &glyph(uint32_t code) {
 
 /* O mesmo glifo desenhado em HDS x o tamanho (fonte em alta resolucao, ver hdfont.h). FONT_HD_FACE troca so a fonte HD (padrao: a mesma do nativo). */
 static HFONT g_latin_hd, g_cjk_hd;
-constexpr float kDigitX = 1.2f, kDigitY = 0.8f;   /* digit glyph scale (width, height) */
+constexpr int kDigitBold = 1;   /* HD px added on each side of a digit */
+constexpr int kDigitLift = 9;   /* HD px: digits sit slightly high so they centre in the white counter boxes */
+constexpr float kDigitX = 1.3f, kDigitY = 0.76f;   /* digit glyph scale (width, height) */
 static int g_hd_lift;   /* HD px que o glifo sobe: encolher ancorado na linha de base deixaria o texto colado embaixo; mantem o centro das maiusculas (~0,35 em) no mesmo lugar */
 bool font_hd_glyph(uint32_t code, int *w, int *h, int *top, std::vector<uint8_t> *a8) {
     init_gdi();
@@ -91,7 +93,15 @@ bool font_hd_glyph(uint32_t code, int *w, int *h, int *top, std::vector<uint8_t>
                         (*a8)[(size_t)y * nw + x] = (uint8_t)(v + 0.5f);
                     }
                 }
-                *w = nw; *h = nh; *top = (int)(*top * kDigitY + 0.5f);
+                if (kDigitBold > 0) {   /* embolden sideways: the game spaces counter digits 8 px apart whatever their width, so fatter strokes are what close the gap */
+                    int bw = nw + 2 * kDigitBold; std::vector<uint8_t> fat((size_t)bw * nh, 0);
+                    for (int y = 0; y < nh; y++) for (int x = 0; x < bw; x++) {
+                        uint8_t m = 0; for (int k = -kDigitBold; k <= kDigitBold; k++) { int sx = x - kDigitBold + k; if (sx >= 0 && sx < nw) m = std::max(m, (*a8)[(size_t)y * nw + sx]); }
+                        fat[(size_t)y * bw + x] = m;
+                    }
+                    *a8 = fat; nw = bw;
+                }
+                *w = nw; *h = nh; *top = (int)(*top * kDigitY + 0.5f) + kDigitLift;
             }
             ok = true;
         }
