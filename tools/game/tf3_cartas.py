@@ -75,16 +75,19 @@ def genero_para_tf1(g3):
 
 
 RAIZ = os.path.dirname(os.path.dirname(os.path.dirname(os.path.abspath(__file__))))
-PASTA = os.environ.get("TF3_CARDINFO") or os.path.join(RAIZ, "ref", "tf3", "cardinfo")
+PASTAS = {"e": "cardinfo", "f": "cardinfo_fra", "g": "cardinfo_ger", "i": "cardinfo_ita", "s": "cardinfo_spa"}   # language letter -> folder of ref/tf3
 
 
-def _ler(n):
-    return open(os.path.join(PASTA, n), "rb").read()
+def _ler(n, lang="e"):
+    """member n of the TF3 card database of the language (extracted with ehp.py); TF3_CARDINFO overrides the English folder"""
+    pasta = (os.environ.get("TF3_CARDINFO") if lang == "e" else None) or os.path.join(RAIZ, "ref", "tf3", PASTAS[lang])
+    return open(os.path.join(pasta, n), "rb").read()
 
 
-def carregar():
-    prop, ix, nm = _ler("CARD_Prop.bin"), _ler("CARD_Indx_E.bin"), _ler("CARD_Name_E.bin")
-    tx = Texto(_ler("CARD_Huff_E.bin"), _ler("DICT_E.bin"), _ler("CARD_Desc_E.bin"))
+def carregar(lang="e"):
+    L = lang.upper()
+    prop, ix, nm = _ler("CARD_Prop.bin", lang), _ler("CARD_Indx_%s.bin" % L, lang), _ler("CARD_Name_%s.bin" % L, lang)
+    tx = Texto(_ler("CARD_Huff_%s.bin" % L, lang), _ler("DICT_%s.bin" % L, lang), _ler("CARD_Desc_%s.bin" % L, lang))
     cartas = {}
     for i in range(len(prop) // 8):
         w0, w1 = struct.unpack_from("<II", prop, i * 8)
