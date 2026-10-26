@@ -120,19 +120,35 @@ static int hk_prepare_duel(TfCpu *c) {
     return 0;
 }
 static void randomize_player_slot(TfCpu *c, uint32_t out) {
-    if (!g_setup_pending) return;
-    g_setup_pending = false;
+    if (!g_setup_pending) return;   /* stays pending until a slot validates: the first reads can come before the other slots are filled (Tag Duel) */
+    /* Tag Duel: the player's saved deck (slot deck index +0x124 >= 0x15f) sits in any of the four slots, not only slot 0; `out` is one of the slots'
+     * buffers (the one being read), so every block alignment is tried. The copy at the start of the block equals the player's buffer. */
+    for (int k = 0; k < 4; k++) {
+        const uint32_t base = out - 0x1a4 - (uint32_t)k * 0x18c;
+        if (base < 0x08000000u || base > 0x0a000000u - 0x4000) continue;
+        for (int m = 0; m < 4; m++) {
+            const uint32_t slot = base + (uint32_t)m * 0x18c;
+            if (*(uint16_t *)A->mem(slot + 0x124) < 0x15f) continue;
+            const uint32_t *h0 = (const uint32_t *)A->mem(base), *h1 = (const uint32_t *)A->mem(slot + 0x1a4);
+            if (h1[0] < 1 || h1[0] > 80 || memcmp(h0, h1, 12)) continue;
+            g_setup_pending = false;
+            A->log("Card Randomizer: player's deck found at %08x (slot %d, %u cards)", slot + 0x1a4, m, h1[0]);
+            randomize_buffer(c, slot + 0x1a4, 0x1000);
+            memcpy(A->mem(base), A->mem(slot + 0x1a4), 0x108);
+            return;
+        }
+    }
     for (int j = 1; j <= 4; j++) {   /* `out` is slot j's deck buffer (base + j * 0x18c + 0x1a4); the player's is slot 0 */
         const uint32_t base = out - 0x1a4 - (uint32_t)(j % 4) * 0x18c;
         if (base < 0x08000000u || base > 0x0a000000u - 0x300) continue;
         const uint32_t *h0 = (const uint32_t *)A->mem(base), *h1 = (const uint32_t *)A->mem(base + 0x1a4);
         if (h0[0] < 1 || h0[0] > 80 || memcmp(h0, h1, 12)) continue;
+        g_setup_pending = false;
         A->log("Card Randomizer: player's deck found at %08x (%u cards)", base + 0x1a4, h1[0]);
         randomize_buffer(c, base + 0x1a4, 0x1000);
         memcpy(A->mem(base), A->mem(base + 0x1a4), 0x108);   /* the second copy at the start of the block stays equal */
         return;
     }
-    A->log("Card Randomizer: player's deck not found (reader output %08x)", out);
 }
 
 static int hk_read_deck(TfCpu *c) {   /* libehsys_85A292D7(rcp_index, out): the opponent's deck (the player's deck is handled by randomize_player_slot) */

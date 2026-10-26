@@ -84,6 +84,21 @@ static int pick_random(TfCpu *c, uint32_t name, uint32_t salt) {
 static int hk_prepare_duel(TfCpu *c) { (void)c; g_setup_pending = !g_off; return 0; }
 static void replace_player_slot(TfCpu *c, uint32_t out) {
     if (!g_setup_pending) return;   /* stays pending until a slot validates: the other mod's pool scan also goes through this hook (its buffer is no slot) */
+    for (int k = 0; k < 4; k++) {   /* Tag Duel: the player's saved deck (slot deck index +0x124 >= 0x15f) sits in any of the four slots, not only slot 0 */
+        const uint32_t base = out - 0x1a4 - (uint32_t)k * 0x18c;
+        if (base < 0x08800000u || base > 0x0a000000u - 0x4000) continue;
+        for (int m = 0; m < 4; m++) {
+            const uint32_t slot = base + (uint32_t)m * 0x18c;
+            if (*(uint16_t *)A->mem(slot + 0x124) < 0x15f) continue;
+            const uint32_t *h0 = (const uint32_t *)A->mem(base), *h1 = (const uint32_t *)A->mem(slot + 0x1a4);
+            if (h1[0] < 1 || h1[0] > 80 || memcmp(h0, h1, 12)) continue;
+            g_setup_pending = false;
+            const int r = pick_random(c, slot + 0x162, 0x1000);
+            if (r >= 0 && read_deck(c, r, slot + 0x1a4)) memcpy(A->mem(base), A->mem(slot + 0x1a4), 0x108);
+            A->log(DECKRAND_NAME ": player's deck -> RCP%03d (slot %d at %08x)", r, m, slot);
+            return;
+        }
+    }
     for (int j = 1; j <= 4; j++) {
         const uint32_t base = out - 0x1a4 - (uint32_t)(j % 4) * 0x18c;
         if (base < 0x08800000u || base > 0x0a000000u - 0x300) continue;
