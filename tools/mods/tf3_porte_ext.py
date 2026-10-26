@@ -28,6 +28,9 @@ from tf3_porte_carta import EFEITO, JOGO, LANGS, _ler, _utf16  # noqa: E402
 BASE_INTID = 4000
 FIRST_ID, LAST_ID = 6958, 8191       # ids of the new cards (the TF1 game uses 4007..6957)
 TF1_CARDS = 2480                      # indices 0..2479 exist in the game
+MAX_CARDS = 72                        # the deck editor loads the whole cardh_<l>.cip into a fixed buffer of libdeck (0x0901e3b0..0x09a46000): the file
+                                      # may not pass 0xa2e000 bytes, which leaves room for 72 more cards (2 units of 0x800 each). More needs a lazy art
+                                      # provider (docs/internal/registro/tf3-estudo.md, "Limite de memoria da arte")
 
 
 def _nomes(m, L):
@@ -99,6 +102,7 @@ def montar_mod(pasta, ids):
     base = os.path.join(pasta, "PSP_GAME", "USRDIR")
     for sub in ("duelsys", "card", "deck"):
         os.makedirs(os.path.join(base, sub), exist_ok=True)
+    assert len(ids) <= MAX_CARDS, "at most %d cards fit the game's art buffer (cardh_<l>.cip); got %d" % (MAX_CARDS, len(ids))
     gids = {cid: FIRST_ID + k for k, cid in enumerate(ids)}
     tf3_card = os.path.join(RAIZ, "ref", "tf3", "card")
     atlas = None

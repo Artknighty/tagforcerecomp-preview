@@ -46,6 +46,8 @@ uint32_t k_alloc(uint32_t size, int type, uint32_t addr, const char *name) {
         for (auto &b : g_blocks) { if (s + size <= b.start) break; s = std::max(s, (b.start + b.size + 0xff) & ~0xffu); }
         if (region_free(s, size)) at = s;
     }
+    static const bool log_blocks = getenv("TF_BLOCKLOG") != nullptr;
+    if (log_blocks) fprintf(stderr, "[kalloc] %s type %d size %08x -> %08x (%s)\n", at ? "ok" : "FAIL", type, size, at, name ? name : "");
     if (!at) return 0;
     Block b{at, size, new_uid(), name ? name : ""};
     g_blocks.insert(std::upper_bound(g_blocks.begin(), g_blocks.end(), b, [](const Block &x, const Block &y) { return x.start < y.start; }), b);

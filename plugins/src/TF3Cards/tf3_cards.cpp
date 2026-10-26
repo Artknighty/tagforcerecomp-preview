@@ -84,10 +84,16 @@ static const uint32_t F_TRUNK_LIST = 0x08efcb68, F_DK_COPIES = 0x08f18d84, F_DK_
 static uint32_t g_trunk_obj, g_trunk_n0, g_trunk_n;
 static int hk_trunk_list(TfCpu *c) {
     const uint32_t list = A->reg(c, 4), ra = A->reg(c, 31);
+    /* the game's buffers hold the 2451 cards of the table (+ a little): give the list room for the new cards too (never freed, reused on every call) */
+    static uint32_t recs, order;
+    if (!recs) { recs = A->guest_alloc(6 * (3000 + g_ext_n)); order = A->guest_alloc(2 * (3000 + g_ext_n)); }
+    *(uint32_t *)A->mem(list + 4) = recs; *(uint32_t *)A->mem(list + 16) = order;
     A->call_original(c, F_TRUNK_LIST);
     uint32_t n = A->reg(c, 2) & 0xffff;
     const uint32_t n0 = n;
-    for (uint32_t id = EXT_FIRST_ID; id < EXT_FIRST_ID + g_ext_n; id++) {
+    if (getenv("TF3_DEBUG_TRUNK")) { const uint32_t *w = (const uint32_t *)A->mem(list); A->log("TF3 Cards: trunk object %08x: %08x %08x %08x %08x %08x %08x", list, w[0], w[1], w[2], w[3], w[4], w[5]); }
+    const uint32_t lim = getenv("TF3_TRUNK_MAX") ? (uint32_t)atoi(getenv("TF3_TRUNK_MAX")) : g_ext_n;
+    for (uint32_t id = EXT_FIRST_ID; id < EXT_FIRST_ID + g_ext_n && id < EXT_FIRST_ID + lim; id++) {
         A->set_reg(c, 4, id); A->call(c, F_DK_COPIES);
         const int32_t copies = (int32_t)A->reg(c, 2);
         A->set_reg(c, 4, id); A->call(c, F_DK_VISIBLE);
@@ -348,6 +354,21 @@ static int hk_effect_record(TfCpu *c) {   /* looks the record up as the card it 
 
 /* research aid (TF3_DEBUG_STREAM=1): dumps the card-art stream object when the game queues a read far beyond the file (BOOT 0882ead0:
  * a1 = stream object, a3 = file position; the object keeps the .cip header at +172, the index entries {unit, state} follow at +0x30) */
+static int hk_debug_obj(TfCpu *c) {   /* TF3_DEBUG_OBJ: first request of each .cip stream object (slot ring of the preloader) */
+    static uint32_t seen[8]; static int ns;
+    const uint32_t obj = A->reg(c, 5);
+    if (obj < 0x08000000u || obj > 0x0a000000u - 0x8000) return 0;
+    const uint32_t magic = *(const uint32_t *)A->mem(obj + 172);
+    if (magic != 0x1a4d5043u && magic != 0x1a504943u) return 0;
+    for (int i = 0; i < ns; i++) if (seen[i] == obj) return 0;
+    if (ns < 8) seen[ns++] = obj;
+    const uint32_t *w = (const uint32_t *)A->mem(obj);
+    A->log("cip stream obj %08x: size field %08x lo %u hi %u", obj, w[(172 + 4) / 4], w[(172 + 20) / 4], w[(172 + 24) / 4]);
+    A->log("  +128 %08x +132 %08x +136 %08x +140 %08x +144 %08x +148 base %08x +152 slots %u +156 next %u +160 %08x +164 %08x +188 %u +192 %08x +196 %08x +200 %u +204 chunk-units %u",
+           w[32], w[33], w[34], w[35], w[36], w[37], w[38], w[39], w[40], w[41], w[47], w[48], w[49], w[50], w[51]);
+    return 0;
+}
+
 static int hk_debug_stream(TfCpu *c) {
     static int n;
     const uint32_t obj = A->reg(c, 5), pos = A->reg(c, 7);
@@ -398,6 +419,7 @@ extern "C" __declspec(dllexport) int tfmod_init(const TfModApi *api) {
     A->hook(F_EFFECT_DRIVER, hk_effect_driver);
     A->hook(F_TARGET_ALL, hk_target_all);
     if (getenv("TF3_DEBUG_STREAM")) A->hook(0x0882ead0, hk_debug_stream);
+    if (getenv("TF3_DEBUG_OBJ")) A->hook(0x0882ead0, hk_debug_obj);
     if (getenv("TF3_DEBUG_REQ")) A->hook(0x0882ead0, hk_debug_req);
     for (const auto &a : PORTED) A->log("TF3 Cards: card %u (%s) plays as id %u%s", a.tf3, a.name.c_str(), a.slot, a.like ? ", effect of another card" : "");
     A->log("TF3 Cards: force_card=%d force_copies=%d", g_card, g_copies);
