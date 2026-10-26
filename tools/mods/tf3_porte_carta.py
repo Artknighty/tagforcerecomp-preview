@@ -32,7 +32,8 @@ TF3_CARD = os.path.join(RAIZ, "ref", "tf3", "card")
 BASE_INTID = 4000
 # ported card -> TF1 card whose effect it plays exactly like (the plugin lends the effect record; a card not listed here has no effect yet).
 # tools/game/tf3_efeitos.py lists, for a TF3 card, the TF3 cards sharing its handler and their TF1 records: pick a TF1 card from that list.
-EFEITO = {6746: 5983,      # No Entry!! = Earthquake (TF3 gives both the same handler; only the target filter differs, and the outcome is the same)
+EFEITO = {3734: 4342,      # Suit of Sword X = the Dark Hole driver; the plugin tosses the coin and picks the target side (see tf3_cards.cpp)
+          6746: 5983,      # No Entry!! = Earthquake (TF3 gives both the same handler; only the target filter differs, and the outcome is the same)
           7234: 4353}      # Gift Card = the record of Tremendous Fire (TF3 gives Gift Card the same plain LP handler, no extra word); the amount comes from the plugin
 
 

@@ -173,6 +173,51 @@ static int hk_lp_amounts(TfCpu *c) {
     return 0;
 }
 
+/* Suit of Sword X (TF3 3734): "toss a coin; heads: destroy all monsters your opponent controls; tails: destroy all monsters you control".
+ * Built from what the game already has: it borrows the record of Dark Hole (driver 09ee3b7c walks every monster zone and asks the target filter 09ebbbe8 of the
+ * record whether the monster is hit, then destroys the chosen ones). The driver hook tosses the coin with the game's own random (09eb30b8) and shows the coin
+ * (animation command 09e998a0, as Fiend Comedian does); the filter hook then narrows Dark Hole's "every monster" to one side while that effect resolves. */
+static const uint16_t TF3_SUIT_OF_SWORD_X = 3734;
+static const uint32_t F_EFFECT_DRIVER = 0x09ee3b7c, F_TARGET_ALL = 0x09ebbbe8, F_RANDOM = 0x09eb30b8, F_COIN_ANIM = 0x09e998a0;
+static int g_coin = -1;                                       /* -1 = not resolving; 1 = heads (opponent's side), 0 = tails (own side) */
+
+static uint16_t slot_of(uint16_t tf3) { for (const auto &p : PORTED) if (p.tf3 == tf3) return p.slot; return 0; }
+
+static uint32_t call_game(TfCpu *c, uint32_t fn, uint32_t a0, uint32_t a1, uint32_t a2, uint32_t a3) {   /* keeps every caller register */
+    uint32_t s[32]; for (int i = 1; i < 32; i++) s[i] = A->reg(c, i);
+    A->set_reg(c, 4, a0); A->set_reg(c, 5, a1); A->set_reg(c, 6, a2); A->set_reg(c, 7, a3); A->call(c, fn);
+    const uint32_t r = A->reg(c, 2);
+    for (int i = 1; i < 32; i++) if (i != 26 && i != 27) A->set_reg(c, i, s[i]);
+    return r;
+}
+
+static bool is_card(uint32_t obj, uint16_t tf3) {
+    if (obj < 0x08000000u || obj > 0x0a000000u - 0x20) return false;
+    const uint16_t slot = slot_of(tf3);
+    return slot && *(const uint16_t *)A->mem(obj) == slot;
+}
+
+static int hk_effect_driver(TfCpu *c) {
+    const uint32_t obj = A->reg(c, 4);
+    if (!is_card(obj, TF3_SUIT_OF_SWORD_X)) return 0;
+    const uint8_t b2 = A->mem(obj)[2];
+    static const char *force = getenv("TF3_FORCE_COIN");   /* test aid: 0 = tails, 1 = heads */
+    g_coin = force ? atoi(force) & 1 : (int)(call_game(c, F_RANDOM, 2, 0, 0, 0) & 1);
+    call_game(c, F_COIN_ANIM, b2 & 1, (b2 >> 1) & 31, 1, (uint32_t)g_coin);
+    A->log("Suit of Sword X: coin %s", g_coin ? "heads" : "tails");
+    A->call_original(c, F_EFFECT_DRIVER);
+    g_coin = -1;
+    return 1;
+}
+
+static int hk_target_all(TfCpu *c) {   /* a0 = effect object, a1 = side, a2 = zone; false for the monsters the coin spares */
+    if (!is_card(A->reg(c, 4), TF3_SUIT_OF_SWORD_X)) return 0;
+    if (g_coin < 0) { A->set_reg(c, 2, 1); return 1; }         /* the activation check: the card can always be played, the coin decides afterwards */
+    const uint32_t own = A->mem(A->reg(c, 4))[2] & 1, side = A->reg(c, 5) & 1;
+    if ((g_coin == 0) != (side == own)) { A->set_reg(c, 2, 0); return 1; }
+    return 0;
+}
+
 static int hk_effect_record(TfCpu *c) {   /* looks the record up as the card it plays like, then puts the key back */
     const uint32_t p = A->reg(c, 4);
     if (p < 0x08000000u || p > 0x0a000000u - 8) return 0;
@@ -231,6 +276,8 @@ extern "C" __declspec(dllexport) int tfmod_init(const TfModApi *api) {
     A->hook(F_EFFECT_RECORD, hk_effect_record);
     A->hook(F_FRAME, hk_frame);
     A->hook(F_LP_AMOUNTS, hk_lp_amounts);
+    A->hook(F_EFFECT_DRIVER, hk_effect_driver);
+    A->hook(F_TARGET_ALL, hk_target_all);
     if (getenv("TF3_DEBUG_STREAM")) A->hook(0x0882ead0, hk_debug_stream);
     if (getenv("TF3_DEBUG_REQ")) A->hook(0x0882ead0, hk_debug_req);
     for (const auto &a : PORTED) A->log("TF3 Cards: card %u (%s) plays as id %u%s", a.tf3, a.name.c_str(), a.slot, a.like ? ", effect of another card" : "");

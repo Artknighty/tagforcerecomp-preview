@@ -22,7 +22,7 @@ def registros(caminho):
     d = open(caminho, "rb").read()
     n = len(d) // 4
     w = struct.unpack_from("<%dI" % n, d, 0)
-    ok = lambda i: 4000 <= w[i] < 7400
+    ok = lambda i: 3000 <= w[i] < 7400
     out = {}
     i = 0
     while i < n - 6 * 4:
