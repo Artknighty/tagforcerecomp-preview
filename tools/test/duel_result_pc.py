@@ -5,7 +5,7 @@ Cobre o que a tela tem de textura: o fundo xadrez (results_background), as capsu
 (sheet `duel_result`, so os pixels sem cor: o resto da folha - WIN/DRAW/LOSE, icones - fica como esta) e a tabela inteira (folha b602d300,
 regiao u0..35 x v0..47 em texels do PSP; medida com o comando texdump do tf.py).
 
-Saida: textures/duelresult_pc/*.png + chaves do textures.ini apontando para eles (idempotente; a 1a execucao guarda o ini em
+Saida: textures/duel/pc/*.png + chaves do textures.ini apontando para eles (idempotente; a 1a execucao guarda o ini em
 textures.ini.bak_resultado; se o pacote for regerado, apague o .bak antes de rodar de novo). Testes: python tools/test/test_duel_result_pc.py
 Uso: python tools/test/duel_result_pc.py [--desfazer]
 """
@@ -19,7 +19,7 @@ from PIL import Image
 
 RAIZ = os.path.normpath(os.path.join(os.path.dirname(__file__), "..", ".."))
 TEX = os.path.join(RAIZ, "gen", "mods", "EnhancedTextures", "textures")
-SAIDA = "duelresult_pc"
+SAIDA = "duel/pc"
 INI = os.path.join(TEX, "textures.ini")
 BAK = INI + ".bak_resultado"
 
@@ -35,15 +35,15 @@ PAINEL_U, PAINEL_V, ESCALA = 35, 47, 8                 # regiao da folha b602d30
 
 # nome do PNG de origem (relativo a textures/) -> chaves de dados (hash) do textures.ini
 ALVOS = {
-    "mikeymk/ui/duels/results_background.png": ("fundo", ["20b3dd72"]),
-    "mikeymk/ui/oval/oval_tall_left.png": ("oval", ["85169591"]),
-    "mikeymk/ui/oval/oval_tall_center.png": ("oval", ["1320facf"]),
-    "mikeymk/ui/oval/oval_tall_right.png": ("oval", ["87f4af60"]),
-    "mikeymk/ui/oval/oval_transparent_tall_left.png": ("oval_t", ["59cfec77"]),
-    "mikeymk/ui/oval/oval_transparent_tall_center.png": ("oval_t", ["b441d53d"]),
-    "mikeymk/ui/oval/oval_transparent_tall_right.png": ("oval_t", ["9d15ec20"]),
-    "mikeymk/ui/text/duel_result.png": ("titulo", ["f6f6c44f"]),
-    "mikeymk/extras/00000000658d9d5fb602d300.png": ("painel", ["b602d300"]),   # folha da tabela (painel, cabecalho, linhas)
+    "_unreferenced/mikeymk__ui__duels__results_background.png": ("fundo", ["20b3dd72"]),
+    "_unreferenced/mikeymk__ui__oval__oval_tall_left.png": ("oval", ["85169591"]),
+    "_unreferenced/mikeymk__ui__oval__oval_tall_center.png": ("oval", ["1320facf"]),
+    "_unreferenced/mikeymk__ui__oval__oval_tall_right.png": ("oval", ["87f4af60"]),
+    "_unreferenced/mikeymk__ui__oval__oval_transparent_tall_left.png": ("oval_t", ["59cfec77"]),
+    "_unreferenced/mikeymk__ui__oval__oval_transparent_tall_center.png": ("oval_t", ["b441d53d"]),
+    "_unreferenced/mikeymk__ui__oval__oval_transparent_tall_right.png": ("oval_t", ["9d15ec20"]),
+    "_unreferenced/mikeymk__ui__text__duel_result.png": ("titulo", ["f6f6c44f"]),
+    "_unreferenced/mikeymk__extras__00000000658d9d5fb602d300.png": ("painel", ["b602d300"]),   # folha da tabela (painel, cabecalho, linhas)
 }
 
 
@@ -141,7 +141,7 @@ def gerar():
         elif modo == "oval_t": o = oval(a, True)
         elif modo == "painel": o = painel(a)
         else: o = titulo(a)
-        nome = SAIDA + "/" + os.path.basename(src)
+        nome = SAIDA + "/" + os.path.basename(src).split("__")[-1]
         Image.fromarray(np.clip(o, 0, 255).astype(np.uint8), "RGBA").save(os.path.join(TEX, nome), optimize=True)
         for h in hashes:   # todas as chaves (com e sem paleta) desse hash de dados
             ini, n = re.subn(r"(?m)^([0-9a-f]{16}" + h + r") = (?:" + re.escape(src) + "|" + re.escape(nome) + r")$", lambda m: m.group(1) + " = " + nome, ini)

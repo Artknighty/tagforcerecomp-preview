@@ -10,7 +10,7 @@ portrait backdrops (32x32 vertical gradients, red and blue palettes) become smoo
 
 Inputs: the original textures dumped with TF_TEX_DUMP (gen/dump_tex/rps/<hash>.png) and, for the red backdrop palette, the
 existing MikeyMK 8x file in the mod.
-Output: textures/menu_namebars_hd/<name>.png; --register repoints the textures.ini / origem.tsv rows of those hashes.
+Output: textures/menus/pc/<name>.png; --register repoints the textures.ini / origem.tsv rows of those hashes.
 
 Usage: python tools/mods/mod_menu_namebars.py [--register]
 """
@@ -26,7 +26,7 @@ from mod_menu_plates import over, person_icon                                 # 
 ROOT = os.path.normpath(os.path.join(os.path.dirname(os.path.abspath(__file__)), '..', '..'))
 DUMP = os.path.join(ROOT, 'gen', 'dump_tex', 'rps')
 MODS = [os.path.join(ROOT, 'mods', 'EnhancedTextures'), os.path.join(ROOT, 'gen', 'mods', 'EnhancedTextures')]
-OUTDIR = 'menu_namebars_hd'
+OUTDIR = 'menus/pc'
 K, S = 8, 2
 N = K * S
 RADIUS = 2.4
@@ -37,8 +37,8 @@ PLATE_Y0, PLATE_Y1 = 5, 27          # rows of the plate (rings included), the sh
 CAP = 16                            # piece width in texels
 FRAME_HASH = 'e14be8d3'
 BACK_HASH = 'd86a2519'
-BACK_RED = 'mikeymk/extras/000000000fa77384d86a2519.png'
-BACK_BLUE = 'mikeymk/extras/000000006f7932d5d86a2519.png'
+BACK_RED = '_unreferenced/mikeymk__extras__000000000fa77384d86a2519.png'
+BACK_BLUE = '_unreferenced/mikeymk__extras__000000006f7932d5d86a2519.png'
 
 
 def load(h):

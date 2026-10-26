@@ -7,7 +7,7 @@ Instead of upscaling them this script draws the same shapes analytically at 2048
 the gloss layer inside it, and the labels in Arial Black fitted into the face box of the originals (black face with a light
 bevel, white outline). Geometry is in the originals' 256x32 grid: pill x 17..239, y 1..30 (outline included).
 
-Output: textures/pills_hd/<hash>.png (+ --register repoints every textures.ini / origem.tsv row of the four hashes).
+Output: textures/menus/pc/<hash>.png (+ --register repoints every textures.ini / origem.tsv row of the four hashes).
 Usage: python tools/mods/mod_menu_pills.py [--register]
 """
 import os
@@ -19,7 +19,7 @@ ROOT = os.path.normpath(os.path.join(os.path.dirname(os.path.abspath(__file__)),
 FONT = 'C:/Windows/Fonts/ariblk.ttf'
 K = 8
 W, H = 256 * K, 32 * K
-OUTDIR = 'pills_hd'
+OUTDIR = 'menus/pc'
 # stadium in the 256x32 grid
 X0, X1, Y0, Y1 = 17.0, 239.0, 1.0, 30.0
 CY, R = (Y0 + Y1) / 2, (Y1 - Y0) / 2

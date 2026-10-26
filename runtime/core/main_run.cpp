@@ -9,6 +9,7 @@
 #include <string>
 #include "util.h"
 #include "gameid.h"
+#include "texrepl.h"
 
 void display_init(void);
 void display_set_iso(const char *utf8);
@@ -16,6 +17,7 @@ void display_set_data(const wchar_t *dir);
 void mods_init(void);
 void texrepl_init(void);
 void ffmpeg_preload(void);
+void mpeg_prewarm(void);
 void plugins_load(void);
 void decomp_init(void);
 std::string launcher_pick_iso(std::wstring *data);   /* ISO (jogar direto) ou, em *data, a pasta instalada */
@@ -64,6 +66,11 @@ int main() {
         else if ((!wcscmp(argv[i], L"--install") || !wcscmp(argv[i], L"--verify") || !wcscmp(argv[i], L"--instalar") || !wcscmp(argv[i], L"--verificar")) && i + 1 < argc) { cli = argv[i][2] == L'i' ? 1 : 2; cli_iso = argv[++i]; if (i + 1 < argc && wcsncmp(argv[i + 1], L"--", 2)) cli_dest = argv[++i]; }
     }
     LocalFree(argv);
+    if (const wchar_t *cl = wcsstr(GetCommandLineW(), L"--prepare-textures")) { (void)cl;   /* no window: fills the BC7 cache of mods/EnhancedTextures (the launcher does the same after installing) */
+        std::wstring err; texrepl_prewarm((exe_dir() + L"mods\\EnhancedTextures\\textures").c_str(), exe_dir().c_str(), 0, cli_progress, nullptr, &err);
+        if (!err.empty()) fprintf(stderr, "%ls\n", err.c_str());
+        diag_flush(); return err.empty() ? 0 : 1;
+    }
     if (const wchar_t *e = _wgetenv(L"TF_DATA")) if (*e && data.empty()) data = e;   /* testes: usa a pasta instalada */
     if (cli) {   /* sem janela: instala/verifica a pasta jogo/ e sai */
         if (cli_dest.empty()) { std::string gid = game_id_iso(cli_iso); cli_dest = exe_dir() + game_data_dir_name(gid.empty() ? game_id_built() : gid); }
@@ -95,7 +102,7 @@ started:
     if (!acquire_save_lock()) { diag_flush(); return 1; }
     diag_start_game();
     if (!jit_init()) { tf_msgbox(nullptr, L"Could not compile the translated game code (see the log in the logs folder). Delete the gen folder and start again; if it keeps failing, please report it.", L"Tag Force Recomp", MB_ICONERROR); diag_flush(); return 1; }
-    ffmpeg_preload(); host_create(); k_init(); mods_init(); texrepl_init(); plugins_load(); decomp_init(); display_init(); display_set_iso(iso.c_str()); if (!data.empty()) display_set_data(data.c_str());
+    ffmpeg_preload(); host_create(); k_init(); mods_init(); mpeg_prewarm(); texrepl_init(); plugins_load(); decomp_init(); display_init(); display_set_iso(iso.c_str()); if (!data.empty()) display_set_data(data.c_str());
     bool ok; module_load("SYSDIR/BOOT.BIN", &ok);
     const GenModule *boot = nullptr;
     { unsigned nm; const GenModule *gm = gen_modules(&nm); for (unsigned i = 0; i < nm; i++) if (!strcmp(gm[i].name, "BOOT")) boot = &gm[i]; }

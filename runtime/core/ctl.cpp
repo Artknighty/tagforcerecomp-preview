@@ -25,6 +25,8 @@ volatile bool g_ctl_texdump_arm = false;
 volatile bool g_ctl_nodraw;
 bool ctl_active(void) { return dir() != nullptr; }
 uint32_t ctl_buttons(void) { return g_mask; }
+static uint32_t g_analog = 0x8080;   /* ly << 8 | lx, 128 = centre */
+uint32_t ctl_analog(void) { return g_analog; }
 const char *ctl_shot_path(void) { return g_shot_pending ? g_shot.c_str() : nullptr; }
 
 static void reply(const std::string &id, uint64_t frame, const std::string &txt) {
@@ -58,6 +60,7 @@ bool ctl_frame(uint64_t frame) {
         if (!strcmp(cmd, "quit")) { reply(id, frame, ""); return true; }
         if (!strcmp(cmd, "nodraw")) { g_ctl_nodraw = atoi(args) != 0; reply(id, frame, ""); continue; }
         if (!strcmp(cmd, "texdump")) { g_ctl_texdump_arm = true; fprintf(stderr, "[ctl] texdump armado no quadro %llu\n", (unsigned long long)frame); reply(id, frame, ""); continue; }   /* proximo quadro desenhado: despeja texturas (gen/tex_*.bmp) e lista os PRIMs ([prim]) */
+        if (!strcmp(cmd, "analog")) { unsigned x = 128, y = 128; sscanf(args, "%u %u", &x, &y); g_analog = ((y & 255) << 8) | (x & 255); reply(id, frame, ""); continue; }
         if (!strcmp(cmd, "hold")) { g_mask = (uint32_t)strtoul(args, nullptr, 16); reply(id, frame, ""); continue; }
         if (!strcmp(cmd, "step")) { long long k = atoll(args); if (k < 1) k = 1; g_run = k; g_pend_id = id; return false; }
         if (!strcmp(cmd, "shot")) {

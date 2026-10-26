@@ -1,7 +1,7 @@
 """Puts a cut-out of Yugi's head (from reference art supplied by the user) into the face of the Yugi mod's character slot.
 
 The list/duel/versus face of every filler duelist is one cell of a 256x128 sheet; the EnhancedTextures pack has the sheet at 8x
-(mikeymk/extras/00000000979e93bf9b6b639f.png is the variant the slot uses). Picture 116 belongs to the slot only (checked against the game's
+(extras/00000000979e93bf9b6b639f.png is the variant the slot uses). Picture 116 belongs to the slot only (checked against the game's
 class table), so replacing its cell (the 2nd of the top row) changes nobody else. The script starts from the untouched pack file (copied once to
 gen/backup_enhanced/yugi/), clears the cell, cuts the head out of the reference (white background -> transparent) and pastes it into the cell.
 
@@ -17,7 +17,7 @@ from PIL import Image, ImageFilter
 
 ROOT = os.path.dirname(os.path.dirname(os.path.dirname(os.path.abspath(__file__))))
 NAME = '00000000979e93bf9b6b639f.png'
-TARGET = os.path.join(ROOT, 'mods', 'EnhancedTextures', 'textures', 'mikeymk', 'extras', NAME)
+TARGET = os.path.join(ROOT, 'mods', 'EnhancedTextures', 'textures', 'extras', NAME)
 BACKUP = os.path.join(ROOT, 'gen', 'backup_enhanced', 'yugi', NAME)
 PORTRAIT_RGBA = os.path.join(ROOT, 'mods', 'Yugi', 'portrait.rgba')
 VERSUS_BOX = (128, 0, 472, 344)     # square part of the reference shown in the versus frame

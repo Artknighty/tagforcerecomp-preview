@@ -2,7 +2,7 @@
 LANGUAGE SETTINGS) at 8x for the EnhancedTextures mod instead of upscaling it.
 
 Input: the original texture dumped with TF_TEX_DUMP (gen/dump_tex/mainmenu/faltam/1d377d3b.png).
-Output: textures/menu_titles_hd/1d377d3b.png in the mod (the textures.ini / origem.tsv rows are repointed by --register).
+Output: textures/menus/pc/1d377d3b.png in the mod (the textures.ini / origem.tsv rows are repointed by --register).
 Each line is drawn with Arial Black (upright), fitted exactly into the ink box of the original line
 (same position, cap height and width), yellow face with a light vertical shading and a dark offset shadow.
 
@@ -22,7 +22,7 @@ SHADOW = np.array([120, 118, 30], np.float32) / 255
 SHEAR = 0.0   # the original letters are upright
 TOP = np.array([255, 255, 135], np.float32) / 255      # light vertical shading of the face, per line
 BOTTOM = np.array([238, 236, 52], np.float32) / 255
-REL = 'menu_titles_hd/1d377d3b.png'
+REL = 'menus/pc/1d377d3b.png'
 
 
 def line_boxes(a):

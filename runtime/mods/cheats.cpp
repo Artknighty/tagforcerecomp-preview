@@ -24,7 +24,7 @@
  *      the game writes to DATA0 on its next save). It adds every card to the collection (3 copies, marked as seen), makes every card pack
  *      available in the shop and gives every duelist all of his real decks in the Free Duel opponent list. Nothing else (story progress, DP,
  *      level and the save flags) is touched. Save layout (BOOT functions save_*, carta_*, pacote_*, and decomp/libtitle):
- *        +0x0068 + character*0x12: duelist record (u16 state, u16 count, u16 deck[6] unlocked decks, u16 ...); characters 2..151
+ *        +0x0068 + character*0x12: duelist record (u16 state (CardState, 3 = character fully owned: set by the unlock), u16 count, u16 deck[6] unlocked decks, u16 ...); characters 2..151
  *                                  (the Free Duel opponent list shows the characters whose count is not zero: libcharalist BuildLists)
  *        +0x0EC4 + character*8:    duel record against that duelist (u16 wins, u16 losses, u16 draws, u16 pad); not touched
  *        +0x155C + card_index*4:   card entry (byte0 bit0 flag, bits 1-2 status 0 unseen / 1 new / 2 seen, byte1 bit7 flag + bits 0-6 copies)
@@ -258,7 +258,7 @@ static void speed_quadro(void) {   /* L + R + LEFT/RIGHT on any screen */
 
 /* ------------------------------------------------------------------ 4. Unlock everything */
 static const uint32_t SAVE = 0x08a65418, SAVE_VERSION = 0x10002, F_COLECAO_ENTRADA = 0x0883de3c;
-static const uint32_t SAVE_DUELIST_RECORDS = 0x68, DUELIST_RECORD_SIZE = 0x12, DUELIST_RECORD_DECKS = 6;
+static const uint32_t SAVE_DUELIST_RECORDS = 0x68, DUELIST_RECORD_SIZE = 0x12, DUELIST_RECORD_DECKS = 6, DUELIST_STATE_COMPLETE = 3;
 static const uint32_t SAVE_PACKS = 0x8ff4, PACK_SIZE = 0x2a, PACK_COUNT = 0x30, PACK_AVAILABLE = 2;
 static const uint32_t CARD_ID_LAST = 0x2000, CARD_COPIES = 3, CARD_STATUS_SEEN = 2;
 static bool g_unlock_pending;
@@ -300,19 +300,24 @@ static int unlock_duelists(void) {
         const int count = duelist_real_decks(ch, decks);
         if (!count) continue;
         const uint32_t rec = SAVE + SAVE_DUELIST_RECORDS + ch * DUELIST_RECORD_SIZE;
+        *(uint16_t *)A->mem(rec) = DUELIST_STATE_COMPLETE;   /* the character's card and recipes (Recipe Viewer, Character Album) */
         *(uint16_t *)A->mem(rec + 2) = (uint16_t)count;
         for (uint32_t i = 0; i < DUELIST_RECORD_DECKS; i++) *(uint16_t *)A->mem(rec + 4 + 2 * i) = i < (uint32_t)count ? decks[i] : 0;
         n++;
     }
     return n;
 }
+static const int32_t DP_MAX = 999999999;   /* the game's cap */
 static void unlock_all(TfCpu *c) {
     const int cards = unlock_cards(c), packs = unlock_packs(), duelists = unlock_duelists();
-    A->log("Unlock everything: %d cards, %d packs newly available, %d duelists", cards, packs, duelists);
-    wchar_t l1[64], l2[64], l3[64]; swprintf(l1, 64, L"Cards in the collection: %d (3 copies each)", cards);
+    const int32_t dp_before = (int32_t)chama(c, F_DP, 0);
+    if (dp_before < DP_MAX) chama(c, F_DP_SOMAR, (uint32_t)(DP_MAX - dp_before));   /* player_dp_add respects the cap */
+    A->log("Unlock everything: %d cards, %d packs newly available, %d duelists, DP %d -> %d", cards, packs, duelists, dp_before, (int32_t)chama(c, F_DP, 0));
+    wchar_t l1[64], l2[64], l3[64], l4[64]; swprintf(l1, 64, L"Cards in the collection: %d (3 copies each)", cards);
     swprintf(l2, 64, L"Packs made available: %d", packs); swprintf(l3, 64, L"Duelists with all their decks: %d", duelists);
-    const wchar_t *lines[3] = {l1, l2, l3};
-    A->message_box(L"Everything unlocked", lines, 3, L"Save the game to keep it");
+    swprintf(l4, 64, L"DP: %d", (int)chama(c, F_DP, 0));
+    const wchar_t *lines[4] = {l1, l2, l3, l4};
+    A->message_box(L"Everything unlocked", lines, 4, L"Save the game to keep it");
 }
 static int unlock_get(void) { return 0; }   /* a one-shot menu item: always shown unchecked */
 static void unlock_set(int v) { if (v) g_unlock_pending = true; }

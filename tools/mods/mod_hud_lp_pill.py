@@ -9,7 +9,7 @@ centres (no dither), a gloss spot on the left cap, darker rims on the caps and t
 Only the box x 53..79, y 18..26 of the existing 16x sheet is replaced; everything else on the sheet is kept.
 
 Input: gen/dump_tex/<dump>/ee0c44c3.png (TF_TEX_DUMP) and the existing 16x sheet of the mod.
-Output: textures/menu_hud_pill_hd/ee0c44c3.png; --register repoints the textures.ini / origem.tsv rows of the hash.
+Output: textures/menus/pc/ee0c44c3.png; --register repoints the textures.ini / origem.tsv rows of the hash.
 
 Usage: python tools/mods/mod_hud_lp_pill.py [--register]
 """
@@ -23,8 +23,8 @@ H = 'ee0c44c3'
 DUMP = next((p for p in (os.path.join(ROOT, 'gen', 'dump_tex', d, H + '.png') for d in ('duel', 'hand', 'fd', 'dk', 'pre', 'rps'))
              if os.path.exists(p)), None)
 MODS = [os.path.join(ROOT, 'mods', 'EnhancedTextures'), os.path.join(ROOT, 'gen', 'mods', 'EnhancedTextures')]
-BASE = 'mikeymk/extras/0000000042538387ee0c44c3.png'
-OUTDIR = 'menu_hud_pill_hd'
+BASE = '_unreferenced/mikeymk__extras__0000000042538387ee0c44c3.png'
+OUTDIR = 'menus/pc'
 K, S = 16, 4
 N = K * S
 X0, X1, Y0, Y1 = 54.0, 77.0, 18.0, 25.0          # pill body in texels

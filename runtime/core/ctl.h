@@ -9,5 +9,6 @@ bool ctl_active(void);
 /* chamado no inicio de cada quadro; devolve true se o cliente pediu para sair */
 bool ctl_frame(uint64_t frame);
 uint32_t ctl_buttons(void);
+uint32_t ctl_analog(void);
 /* captura pedida para o quadro em andamento (caminho do .bmp) ou nullptr */
 const char *ctl_shot_path(void);

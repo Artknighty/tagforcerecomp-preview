@@ -1,13 +1,13 @@
 """Redraws the Duel Result screen for EnhancedTextures instead of upscaling it (original colours, no recolour).
 
-Pieces (game texture hash -> output in textures/duel_result_hd/):
+Pieces (game texture hash -> output in textures/duel/pc/):
   20b3dd72  checkered background: 8x8 flat squares, each one exactly the colour of the centre of the pack cell (no wavy edges).
   f6f6c44f  title sheet (DUEL RESULT, DUEL BONUS, NEW HIGH SCORE BONUS, CHALLENGE COMPLETE BONUS, INTERMEDIATE RESULT, FINAL RESULT):
             every line is drawn with Arial Black fitted into the ink box of the original line; the white-to-grey vertical shading of the
             face is sampled row by row from the original, plus a soft dark drop shadow.
   b602d300  table sheet: the flat bands of the frame (stretched columns/rows, row strips) are rebuilt as exact flat texels with hard straight
             edges, and the dotted ends of the line above Total are replaced by the plain line; colours are the original ones.
-  tall pill pieces (the palette-specific rows of this screen): the same analytic pill as the menus (oval_hd/, see mod_menu_oval.py).
+  tall pill pieces (the palette-specific rows of this screen): the same analytic pill as the menus (menus/pc/, see mod_menu_oval.py).
 
 Usage: python tools/mods/mod_duel_result.py [--register]
 """
@@ -19,14 +19,14 @@ from PIL import Image, ImageDraw, ImageFont, ImageFilter
 
 ROOT = os.path.normpath(os.path.join(os.path.dirname(os.path.abspath(__file__)), '..', '..'))
 MODS = [os.path.join(ROOT, 'mods', 'EnhancedTextures'), os.path.join(ROOT, 'gen', 'mods', 'EnhancedTextures')]
-OUT = 'duel_result_hd'
+OUT = 'duel/pc'
 FONT = 'C:/Windows/Fonts/ariblk.ttf'
 K = 8
 LINES = ['DUEL RESULT', 'DUEL BONUS', 'NEW HIGH SCORE BONUS', 'CHALLENGE COMPLETE BONUS', 'INTERMEDIATE RESULT', 'FINAL RESULT']
 
-SRC_BG = 'mikeymk/ui/duels/results_background.png'
-SRC_TITLE = 'mikeymk/ui/text/duel_result.png'
-SRC_TABLE = 'mikeymk/extras/00000000658d9d5fb602d300.png'
+SRC_BG = '_unreferenced/mikeymk__ui__duels__results_background.png'
+SRC_TITLE = '_unreferenced/mikeymk__ui__text__duel_result.png'
+SRC_TABLE = '_unreferenced/mikeymk__extras__00000000658d9d5fb602d300.png'
 # parts of the sheet that are flat bands (stretched or tiled by the game; measured with the tf.py texdump command), in PSP texels:
 # (u0, u1, v0, v1) half-open. Each texel becomes an exact flat 8x8 block (median of its inner 4x4), so every band edge is a hard straight line.
 FLAT = [(10, 11, 0, 47),    # header / bottom stretch column
@@ -37,12 +37,12 @@ TARGETS = {
     'b602d300': OUT + '/table_sheet.png',
     '20b3dd72': OUT + '/results_background.png',
     'f6f6c44f': OUT + '/duel_result.png',
-    '85169591': 'oval_hd/oval_tall_left.png',
-    '1320facf': 'oval_hd/oval_tall_center.png',
-    '87f4af60': 'oval_hd/oval_tall_right.png',
-    '59cfec77': 'oval_hd/oval_transparent_tall_left.png',
-    'b441d53d': 'oval_hd/oval_transparent_tall_center.png',
-    '9d15ec20': 'oval_hd/oval_transparent_tall_right.png',
+    '85169591': 'menus/pc/oval_tall_left.png',
+    '1320facf': 'menus/pc/oval_tall_center.png',
+    '87f4af60': 'menus/pc/oval_tall_right.png',
+    '59cfec77': 'menus/pc/oval_transparent_tall_left.png',
+    'b441d53d': 'menus/pc/oval_transparent_tall_center.png',
+    '9d15ec20': 'menus/pc/oval_transparent_tall_right.png',
 }
 
 JOINTS = [(23, 16), (33, 16), (23, 26), (33, 26)]   # (u, v) of the four corner joints of the row area

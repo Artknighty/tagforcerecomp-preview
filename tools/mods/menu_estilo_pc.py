@@ -25,8 +25,8 @@ import numpy as np
 from PIL import Image, ImageDraw, ImageFilter
 
 RAIZ = os.path.normpath(os.path.join(os.path.dirname(__file__), "..", ".."))
-MOD = os.path.join(RAIZ, "gen", "mods", "EnhancedTextures")
-ATLAS = os.path.join(MOD, "textures", "mikeymk", "ui", "menu_text_boxes.png")
+MOD = os.path.join(RAIZ, "mods", "EnhancedTextures")
+ATLAS = os.path.join(MOD, "textures", "menus", "menu_text_boxes.png")
 ORIGINAL = os.path.join(RAIZ, "gen", "backup_enhanced", "menu_text_boxes_esrgan.png")
 ESC = 8          # pixels do atlas de saida por pixel do PSP
 SS = 4           # supersampling

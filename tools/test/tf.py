@@ -121,6 +121,7 @@ def run(script):
         elif t in ('viva', 'amarelo'): espera_tela(t)   # waits for the picture to leave black / for a yellow menu header (+60 frames)
         elif t == 'texdump': send('texdump')   # o proximo quadro desenhado despeja gen/tex_*.bmp e os [prim] no log do jogo
         elif t == 'release': send('hold 0')
+        elif t.startswith('analog:'): send('analog ' + t[7:].replace(':', ' '))   # analog:X:Y (0-255, 128 = centre) held until the next analog token
         else:
             n = 6
             if '*' in t: t, n = t.split('*'); n = int(n)
@@ -189,8 +190,10 @@ def start(args):
     dados = os.path.join(pkg, 'jogo')
     if not os.path.isdir(dados) and not os.path.isfile(iso): raise SystemExit('sem dados instalados em %s: rode tools/install_dev.sh ou defina TF_ISO' % dados)
     # save de teste = copia do save do usuario (ou vazio com --fresh); nunca escreve em gen/ms0
+    src = save_source()   # pick the source BEFORE deleting pkg/ms0: with --exe pointing at the root exe, pkg/ms0 IS the player's live save
+    if os.path.normcase(os.path.abspath(pkg)) == os.path.normcase(os.path.abspath(ROOT)):
+        raise SystemExit('refusing to run the test inside the repo root: ./ms0 there is the live save of the user. Use the dev package (gen/pkg/TagForceRecomp) as --exe.')
     shutil.rmtree(os.path.join(pkg, 'ms0'), ignore_errors=True)
-    src = save_source()
     if '--fresh' not in args and src: shutil.copytree(src, os.path.join(pkg, 'ms0'))
     mods = os.path.join(ROOT, 'gen', 'plugins_teste'); shutil.rmtree(mods, ignore_errors=True); os.makedirs(mods)
     for d in glob.glob(os.path.join(os.environ.get('TF_MODS_FROM') or os.path.join(ROOT, 'gen', 'mods'), '*')):   # TF_MODS_FROM=folder: test with only those mods
@@ -198,7 +201,7 @@ def start(args):
             shutil.copytree(d, os.path.join(mods, os.path.basename(d)), ignore=shutil.ignore_patterns('llm'))
     if '--texturas' in args:   # liga o EnhancedTextures real (so leitura; mod.txt textures= aponta para a pasta dele) em GPU Vulkan 2x
         d = os.path.join(mods, 'EnhancedTextures'); os.makedirs(d)
-        src = os.path.join(ROOT, 'gen', 'mods', 'EnhancedTextures')
+        src = os.path.join(ROOT, 'mods', 'EnhancedTextures')
         with open(os.path.join(d, 'mod.txt'), 'w') as f: f.write('name=Enhanced Textures' + chr(10) + 'textures=' + os.path.join(src, 'textures') + chr(10))
         if os.path.exists(os.path.join(src, 'menu_estilo_pc.txt')): shutil.copyfile(os.path.join(src, 'menu_estilo_pc.txt'), os.path.join(d, 'menu_estilo_pc.txt'))
     logs = os.path.join(ROOT, 'gen', 'logs_teste'); shutil.rmtree(logs, ignore_errors=True)

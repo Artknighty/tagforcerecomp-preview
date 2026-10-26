@@ -2,7 +2,7 @@
 
 The pieces live in the 128x128 attribute/race icon sheet (data hash 4f371dfc), in its right-hand strip (x >= 118). The icons are kept
 exactly as the EnhancedTextures sheet has them; only the strip pieces the Deck Edit list draws are replaced.
-Output: textures/deck_edit_hd/4f371dfc_0.png (16 px per original texel) + its textures.ini row.
+Output: textures/deck/pc/4f371dfc_0.png (16 px per original texel) + its textures.ini row.
 Usage: python tools/mods/mod_deck_scroll.py [--register]
 """
 import os
@@ -16,7 +16,7 @@ import mod_deck_edit as de  # noqa: E402
 
 K = 16
 HASH = '4f371dfc'
-SRC = os.path.join(de.ROOT, 'mods', 'EnhancedTextures', 'textures', 'mikeymk', 'cards', 'frame', 'icons_attribute_race.png')
+SRC = os.path.join(de.ROOT, 'mods', 'EnhancedTextures', 'textures', '_unreferenced', 'mikeymk__cards__frame__icons_attribute_race.png')
 
 
 def grid(x0, y0, x1, y1):

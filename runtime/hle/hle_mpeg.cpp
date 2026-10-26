@@ -54,21 +54,56 @@ static void hd_close(void) {
     H.data.clear(); H.data.shrink_to_fit(); H.aus.clear(); H.cur.clear(); H.cur.shrink_to_fit(); H.prox.clear(); H.prox.shrink_to_fit();
 }
 static std::wstring g_hd_file;
+static void hd_load_file(const std::wstring &file, std::vector<uint8_t> &data, std::vector<size_t> &aus) {   /* le o arquivo (centenas de MB) e acha os access units */
+    if (FILE *f = _wfopen(file.c_str(), L"rb")) {
+        _fseeki64(f, 0, SEEK_END); long long n = _ftelli64(f); _fseeki64(f, 0, SEEK_SET); if (n < 0) n = 0; data.resize((size_t)n);   /* 64 bits: video de mod pode passar de 2 GB */
+        if (fread(data.data(), 1, (size_t)n, f) != (size_t)n) data.clear();
+        fclose(f);
+    }
+    for (size_t i = 0; i + 4 < data.size(); i++) if (data[i] == 0 && data[i + 1] == 0 && data[i + 2] == 1 && data[i + 3] == 9) aus.push_back((i > 0 && data[i - 1] == 0) ? i - 1 : i);
+}
+/* Pre-aquecimento da abertura: sem ele a leitura do arquivo + o 1o quadro HD so comecavam quando o jogo abria o filme, e o quadro original (borrado)
+ * aparecia por alguns quadros antes do HD. Na inicializacao uma thread le o arquivo, abre o decodificador e deixa os primeiros quadros prontos. */
+static struct Pre {
+    std::wstring file; std::thread th;
+    std::vector<uint8_t> data; std::vector<size_t> aus; AvcDec *dec = nullptr; std::deque<std::vector<uint32_t>> frames; size_t next = 0;
+} P;
+static void pre_run(void) {
+    hd_load_file(P.file, P.data, P.aus);
+    if (P.aus.empty() || !(P.dec = avcdec_open())) return;
+    while (P.next < P.aus.size() && P.frames.size() < 6) {
+        size_t s = P.aus[P.next], e = P.next + 1 < P.aus.size() ? P.aus[P.next + 1] : P.data.size(); P.next++;
+        std::vector<uint32_t> px((size_t)1920 * 1088);
+        if (avcdec_decode(P.dec, P.data.data() + s, (int)(e - s), (uint8_t *)px.data(), 1920, 4, 1920, 1088) == 1) P.frames.push_back(std::move(px));
+    }
+}
+void mpeg_prewarm(void) {   /* chamado depois de mods_init */
+    if (getenv("TF_NO_MOVIES")) return;
+    std::vector<std::wstring> files; mods_movie_hd_files(files);
+    for (auto &f : files) {
+        size_t a = f.find_last_of(L"\\/") + 1;
+        if (!_wcsnicmp(f.c_str() + a, L"opening", 7)) { P.file = f; P.th = std::thread(pre_run); return; }
+    }
+}
 static void hd_worker(void) {
-    {   /* le o arquivo (centenas de MB) e acha os access units aqui, fora da thread do jogo */
-        std::vector<uint8_t> data; std::vector<size_t> aus;
-        if (FILE *f = _wfopen(g_hd_file.c_str(), L"rb")) {
-            _fseeki64(f, 0, SEEK_END); long long n = _ftelli64(f); _fseeki64(f, 0, SEEK_SET); if (n < 0) n = 0; data.resize((size_t)n);   /* 64 bits: video de mod pode passar de 2 GB */
-            if (fread(data.data(), 1, (size_t)n, f) != (size_t)n) data.clear();
-            fclose(f);
+    size_t first = 0; AvcDec *dec = nullptr;
+    if (!P.file.empty() && P.file == g_hd_file && (P.th.joinable() || P.dec)) {   /* abertura pre-aquecida: usa o que ja esta pronto */
+        if (P.th.joinable()) P.th.join();
+        if (P.dec) {
+            { std::lock_guard<std::mutex> lk(H.mu); H.data = std::move(P.data); H.aus = std::move(P.aus); H.ready = std::move(P.frames); }
+            dec = P.dec; P.dec = nullptr; first = P.next; P.file.clear();
+            fprintf(stderr, "[mpeg] video substituto HD (pre-aquecido): %zu quadros (%ls)\n", H.aus.size(), g_hd_file.c_str());
         }
-        for (size_t i = 0; i + 4 < data.size(); i++) if (data[i] == 0 && data[i + 1] == 0 && data[i + 2] == 1 && data[i + 3] == 9) aus.push_back((i > 0 && data[i - 1] == 0) ? i - 1 : i);
+    }
+    if (!dec) {
+        std::vector<uint8_t> data; std::vector<size_t> aus; hd_load_file(g_hd_file, data, aus);
         { std::lock_guard<std::mutex> lk(H.mu); H.data = std::move(data); H.aus = std::move(aus); }
         fprintf(stderr, "[mpeg] video substituto HD: %zu quadros (%ls)\n", H.aus.size(), g_hd_file.c_str());
+        dec = H.aus.empty() ? nullptr : avcdec_open();
     }
-    AvcDec *dec = H.aus.empty() ? nullptr : avcdec_open(); if (!dec) { std::lock_guard<std::mutex> lk(H.mu); H.done = true; H.cv.notify_all(); return; }
+    if (!dec) { std::lock_guard<std::mutex> lk(H.mu); H.done = true; H.cv.notify_all(); return; }
     std::vector<uint32_t> px;
-    for (size_t i = 0; i < H.aus.size(); i++) {
+    for (size_t i = first; i < H.aus.size(); i++) {
         { std::unique_lock<std::mutex> lk(H.mu); H.cv.wait(lk, [] { return H.quit || H.ready.size() < 6; }); if (H.quit) break; }
         size_t s = H.aus[i], e = i + 1 < H.aus.size() ? H.aus[i + 1] : H.data.size();
         px.resize((size_t)1920 * 1088);

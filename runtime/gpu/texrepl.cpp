@@ -411,6 +411,43 @@ static void queue_pack(void) {
     LeaveCriticalSection(&g_cs);
     fprintf(stderr, "[texturas] %zu PNG(s) do pacote na fila de compressao BC7 em segundo plano (os que ja estao no cache passam direto)\n", n);
 }
+/* Launcher, first run: compresses the whole pack into the BC7 disk cache before the game starts (all cores, no game running), so the first
+ * session has no stutter. Standalone: needs no mods_init/GPU. card_style 1 also covers textures_anime.ini. Returns false only on a missing pack folder. */
+struct PrepCtx { std::vector<std::wstring> files; std::atomic<size_t> next{0}, done{0}; std::atomic<bool> stop{false}; };
+bool texrepl_prewarm(const wchar_t *pack_dir, const wchar_t *app_dir, int card_style, TexPrepProgress cb, void *ctx, std::wstring *err) {
+    if (!g_bc_on) return true;
+    const std::wstring dir = pack_dir; std::wstring ini = dir + L"\\textures.ini";
+    if (GetFileAttributesW(dir.c_str()) == INVALID_FILE_ATTRIBUTES) { if (err) *err = L"Texture pack folder not found."; return false; }
+    if (!getenv("TF_TEX_CACHE_DIR")) g_cdir = std::wstring(app_dir) + L"texcache";
+    CreateDirectoryW(g_cdir.c_str(), nullptr);
+    g_idx.clear(); size_t n = 0;
+    if (GetFileAttributesW(ini.c_str()) != INVALID_FILE_ATTRIBUTES) add_dir_ini(dir, ini, &n); else scan_pngs(dir, &n);
+    if (card_style == 1) { std::wstring an = dir + L"\\textures_anime.ini"; if (GetFileAttributesW(an.c_str()) != INVALID_FILE_ATTRIBUTES) add_dir_ini(dir, an, &n); }
+    PrepCtx pc; std::unordered_set<std::wstring> seen;
+    for (auto &kv : g_idx) for (auto &en : kv.second) if (seen.insert(en.path).second) { std::wstring cf; if (disk_key(en.path, cf) && GetFileAttributesW(cf.c_str()) == INVALID_FILE_ATTRIBUTES) pc.files.push_back(en.path); }
+    g_idx.clear();
+    const size_t total = pc.files.size(); if (!total) return true;
+    SYSTEM_INFO si; GetSystemInfo(&si); const int nt = std::max(1, std::min(16, (int)si.dwNumberOfProcessors - 1));
+    static std::atomic<int> live; live = nt;
+    for (int i = 0; i < nt; i++) CreateThread(nullptr, 0, [](LPVOID p) -> DWORD {
+        auto *c = (PrepCtx *)p;
+        for (size_t k; !c->stop && (k = c->next++) < c->files.size();) {
+            std::wstring cf; TexReplImg src;
+            if (disk_key(c->files[k], cf) && img_load(to_utf8(c->files[k]).c_str(), &src.w, &src.h, src.px) && bc_fits(src.w, src.h)) {
+                if (disk_low()) { c->stop = true; break; }
+                src.sig = texrepl_color(src.px.data(), src.px.size()); disk_write(cf, *compress(src));
+            }
+            c->done++;
+        }
+        live--; return 0; }, &pc, 0, nullptr);
+    while (live > 0) {
+        Sleep(250);
+        wchar_t m[96]; swprintf(m, 96, L"Preparing textures (%zu of %zu)", std::min(pc.done.load(), total), total);
+        if (cb) cb((double)pc.done / (double)total, m, ctx);
+    }
+    if (pc.stop && err) *err = L"The drive is nearly full: the texture cache was not finished (the game still works).";
+    return true;
+}
 static void build_index(void) {   /* indice das pastas de texturas dos mods ligados */
     std::vector<std::wstring> dirs; mods_texture_dirs(dirs);
     for (auto &d : dirs) {

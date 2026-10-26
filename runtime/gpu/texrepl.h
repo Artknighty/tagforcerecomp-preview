@@ -26,6 +26,8 @@ void texrepl_save_recent(void);   /* grava texturas_recentes.txt (pre-carregamen
 uint64_t texrepl_prefetched(void);   /* quantas o pre-carregamento ja colocou no cache */
 void texrepl_bc_stats(uint64_t *done, uint64_t *ms, size_t *pending, uint64_t *disk_mb, uint64_t *sync);   /* compressao BC7: feitas, tempo total, fila de fundo, tamanho do cache em disco, lidas direto no pedido */
 void texrepl_no_bc(void);                      /* a GPU recusou uma textura BC7: volta a ler os PNGs (RGBA) */
+typedef void (*TexPrepProgress)(double frac, const wchar_t *msg, void *ctx);
+bool texrepl_prewarm(const wchar_t *pack_dir, const wchar_t *app_dir, int card_style, TexPrepProgress cb, void *ctx, std::wstring *err);   /* launcher: fills the BC7 disk cache for the whole pack before the first run */
 bool texrepl_active(void);                     /* ha substituicoes indexadas? */
 uint32_t texrepl_hash(const void *data, size_t n);
 /* 0 = sem substituicao; 1 = carregando (use o original e pergunte de novo depois); 2 = pronta (out; consumida: pedir de novo recarrega) */

@@ -25,6 +25,7 @@
 #include "imgio.h"
 #include "mods.h"
 
+#include "texrepl.h"
 typedef void (*InstProgress)(double frac, const wchar_t *msg, void *ctx);
 bool iso_install(const wchar_t *iso, const wchar_t *dest, InstProgress cb, void *ctx, std::wstring *err);
 
@@ -212,16 +213,28 @@ static bool pick(HWND owner) {
 }
 static void start_install(bool install = true) {
     if (g_thr.joinable()) g_thr.join();
+    /* Enhanced Textures next to the program: also fill the BC7 cache now (no stutter on the first run). A pack that is switched off is only prepared if the user agrees */
+    const std::wstring packdir = exe_dir() + L"mods\\EnhancedTextures\\textures";
+    bool tex = dir_exists(packdir);
+    if (tex && file_exists(pack_marker(L"EnhancedTextures"))) {
+        tex = install && tf_msgbox(g_wnd, L"The Enhanced Textures package was found. Prepare it now and switch to Enhanced textures?\n\nThis takes a few extra minutes and uses about 5 GB of disk space for the texture cache, but the game then starts smooth, without stutter. You can change Textures later on the Graphics page.", L"Tag Force Recomp", MB_YESNO | MB_ICONQUESTION) == IDYES;
+        if (tex) { pack_set(true); opt_load(); for (int i = 0; i < N_OPT; i++) { SetWindowTextW(g_sel[i], kOpts[i].names[g_cur[i]]); InvalidateRect(g_sel[i], nullptr, FALSE); } }
+    }
+    const int card_style = (int)GetPrivateProfileIntW(L"graficos", L"estilo_cartas", 0, ini_path().c_str());
     g_installing = true; g_inst_done = false; g_inst_ok = false; g_prog = 0; { std::lock_guard<std::mutex> lk(g_mu); g_err.clear(); g_msg = L"preparing..."; }
-    g_thr = std::thread([install] {
+    g_thr = std::thread([install, tex, packdir, card_style] {
         std::wstring err; bool ok = true;
         auto prog = [](double f, const wchar_t *m, void *c) { double lo = c ? *(double *)c : 0, hi = c ? ((double *)c)[1] : 1; g_prog = (int)((lo + f * (hi - lo)) * 1000); std::lock_guard<std::mutex> lk(g_mu); g_msg = m; };
-        double inst[2] = {0, 0.4}, code[2] = {install ? 0.4 : 0, 1};
+        double inst[2] = {0, tex ? 0.25 : 0.4}, code[2] = {install ? inst[1] : 0, tex ? 0.55 : 1}, tx[2] = {0.55, 1};
         if (install) ok = iso_install(g_path.c_str(), g_data.c_str(), prog, inst, &err);
         if (ok) {   /* the release has no game code: translate it from the installed files (a few minutes, only once) */
             std::string id = game_id_dir(g_data); if (id.empty()) id = game_id_built();
             game_id_set_built(id);
             ok = code_prepare(id, g_data, prog, code, &err);
+        }
+        if (ok && tex) {   /* texture cache (best effort: a failure here never blocks playing) */
+            std::wstring terr; texrepl_prewarm(packdir.c_str(), exe_dir().c_str(), card_style, prog, tx, &terr);
+            if (!terr.empty()) err = terr;
         }
         { std::lock_guard<std::mutex> lk(g_mu); g_err = err; } g_inst_ok = ok; g_inst_done = true;
     });
@@ -463,7 +476,7 @@ static void paint(HWND h) {
         if (busy) {
             text(dc, g_fSmall, C_DIM, RECT{ix, card.top + S(32), iw, card.top + S(52)}, msg.c_str(), DT_LEFT | DT_SINGLELINE | DT_VCENTER | DT_PATH_ELLIPSIS);
             draw_progress(dc, RECT{ix, card.top + S(58), iw, card.top + S(70)});
-            wchar_t pc[64]; swprintf(pc, 64, L"%d%%  \x2014  this only happens once", g_prog / 10); text(dc, g_fSmall, C_DIM, RECT{ix, card.top + S(72), iw, card.bottom - S(4)}, pc);
+            wchar_t pc[64]; swprintf(pc, 64, L"%d%%  \x2014  this can take a while, but only happens once", g_prog / 10); text(dc, g_fSmall, C_DIM, RECT{ix, card.top + S(72), iw, card.bottom - S(4)}, pc);
         } else {
             std::wstring t = g_installed ? g_data : g_path.empty() ? L"No ISO selected" : g_path;
             text(dc, g_fText, (g_installed || iso_ok()) ? C_TXT : C_WARN, RECT{ix, card.top + S(32), iw, card.top + S(58)}, t.c_str(), DT_LEFT | DT_SINGLELINE | DT_VCENTER | DT_PATH_ELLIPSIS);
@@ -471,7 +484,7 @@ static void paint(HWND h) {
             if (!err.empty()) text(dc, g_fSmall, C_ERR, w, err.c_str(), DT_LEFT | DT_WORDBREAK);
             else if (g_installed) text(dc, g_fSmall, C_OK, w, L"\x2713 Ready to play \x2014 the ISO is no longer needed");
             else if (!g_path.empty() && !iso_ok()) text(dc, g_fSmall, C_WARN, w, L"File not found \x2014 choose the ISO again.");
-            else if (iso_ok()) text(dc, g_fSmall, C_DIM, w, L"First run: copies the game files (about 760 MB) and prepares the game. A few minutes, only once.");
+            else if (iso_ok()) text(dc, g_fSmall, C_DIM, w, L"First run: copies the game files (about 760 MB) and prepares the game (and the texture cache, if the Enhanced Textures package is present). It can take several minutes, only once.");
         }
     } else if (g_page == PG_MODS) {
         draw_mods_page(dc, cx, cw);

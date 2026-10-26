@@ -3,7 +3,7 @@ SEND RECIPE, SEND CARD, SEND DUEL PUZZLE, FREE DUEL, NORMAL DUEL, TAG DUEL) at 8
 upscaling it.
 
 Input: the original texture dumped with TF_TEX_DUMP (gen/dump_tex/fd/b97cf0ce.png).
-Output: textures/menu_duel_titles_hd/b97cf0ce.png in the mod (the textures.ini / origem.tsv rows are repointed by --register).
+Output: textures/menus/pc/b97cf0ce.png in the mod (the textures.ini / origem.tsv rows are repointed by --register).
 Each line is drawn with a heavy font, fitted into the ink box of the original line (same position, cap height and width).
 The face keeps the original vertical shading (white on top, grey at the bottom, sampled from the original) and the soft dark
 drop shadow to the lower right.
@@ -23,7 +23,7 @@ LINES = ['GROUP LIST', 'MAKE NEW GROUP', 'ENTRY LIST', 'DUEL', 'CARD TRADE', 'SE
          'SEND DUEL PUZZLE', 'FREE DUEL', 'NORMAL DUEL', 'TAG DUEL']
 SHADOW_DX, SHADOW_DY = 1.5, 1.5     # PSP pixels, to the lower right
 SHADOW_ALPHA = 0.5
-REL = 'menu_duel_titles_hd/b97cf0ce.png'
+REL = 'menus/pc/b97cf0ce.png'
 
 
 def line_boxes(a):

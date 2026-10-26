@@ -100,8 +100,8 @@ def leia(caminho):
 class Ini(unittest.TestCase):
     def test_gerar_e_idempotente_e_repontam_todas_as_chaves(self):
         with tempfile.TemporaryDirectory() as t:
-            tex = os.path.join(t, "textures"); os.makedirs(os.path.join(tex, "mikeymk/ui/duels"))
-            src = "mikeymk/ui/duels/results_background.png"
+            tex = os.path.join(t, "textures"); os.makedirs(os.path.join(tex, "_unreferenced"))
+            src = "_unreferenced/mikeymk__ui__duels__results_background.png"
             from PIL import Image
             Image.fromarray(rgba(4, 4, (255, 212, 0))).save(os.path.join(tex, src))
             ini = os.path.join(tex, "textures.ini")
@@ -115,9 +115,9 @@ class Ini(unittest.TestCase):
             finally:
                 d.TEX, d.INI, d.BAK, d.ALVOS = antigos
             self.assertEqual(primeiro, segundo)
-            self.assertEqual(primeiro.count("duelresult_pc/results_background.png"), 2)
+            self.assertEqual(primeiro.count("duel/pc/results_background.png"), 2)
             self.assertIn("aaaaaaaa = outra.png", primeiro)
-            self.assertTrue(os.path.exists(os.path.join(tex, "duelresult_pc", "results_background.png")))
+            self.assertTrue(os.path.exists(os.path.join(tex, "duel/pc", "results_background.png")))
 
 
 if __name__ == "__main__":

@@ -1,0 +1,4 @@
+name=Mouse Menus
+author=Tag Force Recomp
+version=0.1
+description=Experimental native mouse for the game's menu lists: hovering a row moves the cursor to it, a click selects it. Throwaway prototype.

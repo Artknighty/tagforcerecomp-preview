@@ -6,7 +6,7 @@ scaled uniformly to fit the box of the matching hand of the current sheet and ce
 keep working. A soft drop shadow is added under every hand.
 
 Usage: python tools/mods/mod_duel_hands_sheet.py SHEET.png|jpg [--out PREVIEW.png] [--register]
-Without --out the result is written to textures/duel_hands_hd/0a13d88f.png of the mod.
+Without --out the result is written to textures/duel/pc/0a13d88f.png of the mod.
 """
 import os
 import sys
@@ -15,8 +15,8 @@ from PIL import Image
 
 ROOT = os.path.normpath(os.path.join(os.path.dirname(os.path.abspath(__file__)), '..', '..'))
 MODS = [os.path.join(ROOT, 'mods', 'EnhancedTextures'), os.path.join(ROOT, 'gen', 'mods', 'EnhancedTextures')]
-OLD = 'textures/mikeymk/ui/duels/hands.png'
-OUTDIR = 'duel_hands_hd'
+OLD = 'textures/_unreferenced/mikeymk__ui__duels__hands.png'
+OUTDIR = 'duel/pc'
 HASH = '0a13d88f'
 SIZE = (1024, 2048)
 

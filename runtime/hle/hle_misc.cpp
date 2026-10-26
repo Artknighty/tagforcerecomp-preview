@@ -27,10 +27,11 @@ HLE(sceUmdGetDriveStat) { RET(0x32); }   /* PRESENT | INITED | READY */
 
 /* ---- sceCtrl ---- */
 uint32_t display_buttons(void);
+uint32_t display_analog(void);
 HLE(sceCtrlSetSamplingMode) { RET(0); }
 static void ctrl_read(CPU *c) {
     uint32_t p = ARG(0), n = ARG(1) ? ARG(1) : 1;
-    for (uint32_t i = 0; i < n; i++) { uint32_t q = p + i * 16; memset(mem_ptr(q), 0, 16); wr32(q, (uint32_t)k_now_us()); wr32(q + 4, display_buttons()); mem_ptr(q)[8] = 128; mem_ptr(q)[9] = 128; }
+    for (uint32_t i = 0; i < n; i++) { uint32_t q = p + i * 16; memset(mem_ptr(q), 0, 16); wr32(q, (uint32_t)k_now_us()); wr32(q + 4, display_buttons()); const uint32_t an = display_analog(); mem_ptr(q)[8] = an & 255; mem_ptr(q)[9] = (an >> 8) & 255; }
     RET(n);
 }
 HLE(sceCtrlReadBufferPositive) { ctrl_read(c); }

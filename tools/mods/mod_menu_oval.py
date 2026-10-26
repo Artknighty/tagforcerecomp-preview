@@ -5,7 +5,7 @@ this script draws the same shape analytically (signed distance of a stadium) at 
 a glossy rim (thick highlight along the top that thins out around the caps, a thin bright line near the bottom, a faint dark side rim).
 Geometry is in the pack's 256 grid: body y 24..200 (radius 88), left cap arc centre x=128, right cap arc centre x=135.
 
-Output: textures/oval_hd/oval_short_{left,center,right}.png (+ --register repoints textures.ini / origem.tsv rows of the 3 originals).
+Output: textures/menus/pc/oval_short_{left,center,right}.png (+ --register repoints textures.ini / origem.tsv rows of the 3 originals).
 Usage: python tools/mods/mod_menu_oval.py [--register]
 """
 import os
@@ -19,9 +19,9 @@ GEO = {
     'short': (2, 112.0, 88.0, 128.0, 135.0, 1.0),
     'tall': (1, 127.5, 112.0, 192.0, 63.0, 1.25),   # 32x32 in the game (8x); the pill behind the menu titles, e.g. MAIN MENU
 }
-ORIG = 'mikeymk/ui/oval/oval_short_%s.png'
-NEW = 'oval_hd/oval_short_%s.png'
-NEW_TALL = 'oval_hd/oval_%s.png'
+ORIG = '_unreferenced/mikeymk__ui__oval__oval_short_%s.png'
+NEW = 'menus/pc/oval_short_%s.png'
+NEW_TALL = 'menus/pc/oval_%s.png'
 # game texture hashes of the tall pieces (the same ones the duel result screen uses; that screen has its own palette-specific rows)
 TALL_HASH = {'tall_left': '85169591', 'tall_center': '1320facf', 'tall_right': '87f4af60',
              'transparent_tall_left': '59cfec77', 'transparent_tall_center': 'b441d53d', 'transparent_tall_right': '9d15ec20'}

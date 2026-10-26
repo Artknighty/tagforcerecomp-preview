@@ -85,7 +85,7 @@ game data and no game code**: the game's code is translated from your copy on yo
 kept in `gen/jitcache/`) and loaded in memory each time the game starts.
 
 **Controls.** Keyboard and mouse (default PC layout): WASD or arrows; Space, E or left click = ✕; Backspace, C or right click = ○;
-F = □; R = △; Q / Tab = L / R; Enter = START; Ctrl = SELECT; Shift = run; mouse wheel = up/down. The classic layout (arrows, Z = ✕,
+F = □; R = △; Q / Tab = L / R; Enter = START; Ctrl = SELECT; Shift = run; mouse wheel = up/down (over the card text box in duels it scrolls the text); PageUp / PageDown or the right stick also scroll the card text. The classic layout (arrows, Z = ✕,
 X = ○, A = □, S = △, Q/W = L/R, Shift = SELECT) is used when **View > PC keyboard and mouse** is off. XInput controllers work too.
 F11 / Alt+Enter: fullscreen · F3: FPS counter · F4: frame rate 30 / 60 / 120 · F5: textures Original / Enhanced · F9: graphics diagnostic capture on/off · F8 (or F7): report a problem (asks for a note, then saves full-size screenshots, the last ~1.5 s of frames and the duel state; Esc or an empty note discards it) · controller quick marks (no note): L3 = graphics glitch, R3 = performance, Start + Select = audio (saves the last 8 s as a WAV) ·
 Esc: leave fullscreen / asks before closing. The launcher's **Game** page lists the options; the window has no menu bar.

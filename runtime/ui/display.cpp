@@ -1034,6 +1034,7 @@ static uint32_t g_latched;
 struct XPad { WORD buttons; BYTE lt, rt; SHORT lx, ly, rx, ry; };
 struct XState { DWORD packet; XPad pad; };
 typedef DWORD (WINAPI *XGetState)(DWORD, XState *);
+static int g_pad_ry;   /* right stick Y (XInput, up = +): scrolls the card text in duels */
 static uint32_t read_pad(void) {
     static XGetState get; static bool tried;
     if (!tried) {
@@ -1044,7 +1045,7 @@ static uint32_t read_pad(void) {
     if (!get) return 0;
     /* XInputGetState numa porta sem controle e lenta (ate ~1 ms): portas vazias so sao consultadas de novo a cada ~2 s */
     static uint64_t retry[4];
-    uint32_t b = 0; bool achou = false;
+    uint32_t b = 0; bool achou = false; int ry_max = 0;
     for (DWORD i = 0; i < 4; i++) {
         if (g_frames < retry[i]) { continue; }
         XState s = {}; if (get(i, &s) != 0) { retry[i] = g_frames + 120; continue; }
@@ -1071,10 +1072,12 @@ static uint32_t read_pad(void) {
         if (s.pad.ly < -dz) b |= 0x40;
         if (s.pad.lx < -dz) b |= 0x80;
         if (s.pad.lx > dz) b |= 0x20;
+        if (abs(s.pad.ry) > abs(ry_max)) ry_max = s.pad.ry;
         if (s.pad.lt > 100) b |= 0x100;
         if (s.pad.rt > 100) b |= 0x200;
     }
     g_pad_connected = achou;
+    g_pad_ry = ry_max;
     return b;
 }
 static uint32_t read_keys(void);
@@ -1111,13 +1114,15 @@ bool display_mouse_menus(void) {
 void display_set_mouse_menus(bool on) {
     mouse_menus_cfg = on; WritePrivateProfileStringW(L"controles", L"mouse_nos_menus", on ? L"1" : L"0", app_ini_path().c_str());
 }
-static uint32_t wheel_bits(void) {
-    if (g_wheel_ph == 0 && g_wheel_pend) { g_wheel_dir = g_wheel_pend > 0 ? 1 : -1; g_wheel_pend -= g_wheel_dir; g_wheel_ph = 4; }
+static int g_wheel_analog, g_ay = 128;   /* analog Y sent to the game (0 = up, 255 = down): PSP games read the stick; the card text scrolls with it */
+static uint32_t wheel_bits(bool over_text) {
+    if (g_wheel_ph == 0 && g_wheel_pend) { g_wheel_dir = g_wheel_pend > 0 ? 1 : -1; g_wheel_pend -= g_wheel_dir; g_wheel_ph = 4; g_wheel_analog = over_text; }
     uint32_t b = 0;
-    if (g_wheel_ph > 2) b = g_wheel_dir > 0 ? 0x10 : 0x40;
+    if (g_wheel_ph > 2) { if (g_wheel_analog) g_ay = g_wheel_dir > 0 ? 0 : 255; else b = g_wheel_dir > 0 ? 0x10 : 0x40; }
     if (g_wheel_ph) g_wheel_ph--;
     return b;
 }
+uint32_t display_analog(void) { return ctl_active() ? ctl_analog() : (uint32_t)(0x80 | (g_ay << 8)); }
 /* Teclado + mouse de PC: WASD/setas = direcional; Espaco, E ou clique esquerdo = X(cross); Backspace, C ou clique direito = O(circle);
  * F = quadrado; R ou clique do meio = triangulo; Q = L, Tab = R (ou botoes laterais do mouse); Enter = START; Shift = correr (O segurado); Ctrl = SELECT.
  * Z e X continuam valendo como X(cross) e O(circle). */
@@ -1139,10 +1144,10 @@ static uint32_t read_keys_pc(void) {
     if (k(VK_CONTROL)) b |= 0x1;
     POINT p; RECT cr; GetCursorPos(&p); GetClientRect(g_wnd, &cr);
     const bool in_client = ScreenToClient(g_wnd, &p) && PtInRect(&cr, p);   /* cliques so contam sobre a area do jogo (a barra de menu e as bordas ficam do Windows) */
-    bool eat_cross = false; static bool l_prev;
+    bool eat_cross = false; static bool l_prev; bool over_text = false;
     {   /* mouse nos menus (mouse_ui.cpp): leva o mouse a coordenadas 480x272 e deixa o modulo apertar direcional/X ate a barra sob o mouse */
         int ix, iy, iw, ih, mx = 0, my = 0; bool inside = false;
-        if (in_client) { gfx_dest_rect(cr.right, cr.bottom, &ix, &iy, &iw, &ih); if (iw > 0 && ih > 0 && p.x >= ix && p.x < ix + iw && p.y >= iy && p.y < iy + ih) { inside = true; mx = (p.x - ix) * 480 / iw; my = (p.y - iy) * 272 / ih; } }
+        if (in_client) { gfx_dest_rect(cr.right, cr.bottom, &ix, &iy, &iw, &ih); if (iw > 0 && ih > 0 && p.x >= ix && p.x < ix + iw && p.y >= iy && p.y < iy + ih) { inside = true; mx = (p.x - ix) * 480 / iw; my = (p.y - iy) * 272 / ih; over_text = mx < 160 && my > 160; } }
         const bool l_down = in_client && k(VK_LBUTTON);
         if (display_mouse_menus()) b |= mui_update(g_frames, inside, mx, my, l_down && !l_prev, l_down, b & 0xf0, &eat_cross);
         l_prev = l_down;
@@ -1154,12 +1159,19 @@ static uint32_t read_keys_pc(void) {
         if (k(VK_XBUTTON1)) b |= 0x100;
         if (k(VK_XBUTTON2)) b |= 0x200;
     }
-    return b | wheel_bits();
+    /* card text: wheel over the text box (left-bottom), PageUp/PageDown or the right stick = analog Y */
+    g_ay = 128;
+    if (k(VK_PRIOR)) g_ay = 0; if (k(VK_NEXT)) g_ay = 255;
+    if (g_pad_ry > 16000) g_ay = 0; else if (g_pad_ry < -16000) g_ay = 255;
+    return b | wheel_bits(over_text);
 }
 static uint32_t read_keys(void) {
     if (display_pc_input()) return read_keys_pc();
     auto k = [](int vk) { return (GetAsyncKeyState(vk) & 0x8000) != 0; };
     uint32_t b = 0;
+    g_ay = 128;
+    if (k(VK_PRIOR)) g_ay = 0; if (k(VK_NEXT)) g_ay = 255;
+    if (g_pad_ry > 16000) g_ay = 0; else if (g_pad_ry < -16000) g_ay = 255;
     if (k(VK_UP)) b |= 0x10;
     if (k(VK_RIGHT)) b |= 0x20;
     if (k(VK_DOWN)) b |= 0x40;

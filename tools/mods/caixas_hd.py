@@ -22,7 +22,7 @@ import numpy as np
 from PIL import Image
 
 RAIZ = os.path.normpath(os.path.join(os.path.dirname(__file__), "..", ".."))
-SAIDA = os.path.join(RAIZ, "gen", "mods", "EnhancedTextures", "textures", "mikeymk", "ui", "text_boxes.png")
+SAIDA = os.path.join(RAIZ, "mods", "EnhancedTextures", "textures", "menus", "text_boxes.png")
 BACKUP = os.path.join(RAIZ, "gen", "backup_enhanced", "text_boxes_esrgan.png")
 ORIGEM = os.path.join(RAIZ, "gen", "tex_088951f0_5_64x128.bmp")
 ESC = 8

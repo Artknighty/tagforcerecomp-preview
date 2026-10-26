@@ -7,7 +7,7 @@ sampled from the original; the icons are redrawn as small vector shapes. Everyth
 outline frames) is kept from the existing 8x sheet of the mod.
 
 Inputs: gen/dump_tex/<dump>/905aa050.png (TF_TEX_DUMP) and the existing 8x sheet of the mod.
-Output: textures/menu_plates_hd/905aa050.png; --register repoints the textures.ini / origem.tsv rows of the hash.
+Output: textures/menus/pc/905aa050.png; --register repoints the textures.ini / origem.tsv rows of the hash.
 
 Usage: python tools/mods/mod_menu_plates.py [--register]
 """
@@ -24,8 +24,8 @@ DUMP = os.path.join(ROOT, 'gen', 'dump_tex', 'dk', '905aa050.png')
 if not os.path.exists(DUMP):
     DUMP = os.path.join(ROOT, 'gen', 'dump_tex', 'pre', '905aa050.png')
 MODS = [os.path.join(ROOT, 'mods', 'EnhancedTextures'), os.path.join(ROOT, 'gen', 'mods', 'EnhancedTextures')]
-BASE = 'mikeymk/extras/0000000041bc211d905aa050.png'
-OUTDIR = 'menu_plates_hd'
+BASE = '_unreferenced/mikeymk__extras__0000000041bc211d905aa050.png'
+OUTDIR = 'menus/pc'
 H = '905aa050'
 K, S = 8, 2
 N = K * S

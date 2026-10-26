@@ -8,7 +8,7 @@ construction, so there is no banding or seam at any size.
 
 Inputs: the original textures dumped with TF_TEX_DUMP (gen/dump_tex/fd/<hash>.png) and the existing 8x sheet of the mod
 (the pieces that are not redrawn here are kept as they are).
-Output: textures/menu_frames_hd/<hash>.png; --register repoints the textures.ini / origem.tsv rows of those hashes.
+Output: textures/menus/pc/<hash>.png; --register repoints the textures.ini / origem.tsv rows of those hashes.
 
 Usage: python tools/mods/mod_menu_frames.py [--register]
 """
@@ -22,12 +22,12 @@ DUMP = os.path.join(ROOT, 'gen', 'dump_tex', 'fd')
 MODS = [os.path.join(ROOT, 'mods', 'EnhancedTextures'), os.path.join(ROOT, 'gen', 'mods', 'EnhancedTextures')]
 K = 8      # output texels per game texel
 S = 2      # supersampling on top of K
-OUTDIR = 'menu_frames_hd'
+OUTDIR = 'menus/pc'
 
 # sheet hash -> source sheet in the mod (8x) used as the base for the pieces that are not redrawn
 BASE = {
-    '76bc9800': 'mikeymk/ui/misc/00000000836977a003b3d6f2.png',
-    'b8f61dd4': 'mikeymk/ui/other_ui.png',
+    '76bc9800': 'menus/misc__00000000836977a003b3d6f2.png',
+    'b8f61dd4': '_unreferenced/mikeymk__ui__other_ui.png',
 }
 
 

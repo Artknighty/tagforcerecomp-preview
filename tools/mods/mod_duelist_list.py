@@ -1,6 +1,6 @@
 """Redraws the pieces of the "List of Duelists" screen for EnhancedTextures instead of upscaling them (original colours).
 
-Pieces (game texture data hash -> output in textures/duelist_list_hd/):
+Pieces (game texture data hash -> output in textures/menus/pc/):
   5e8560c1  frame sheet (128x128 texels, four colour rows): tab caps / stretch columns of the three tabs, the cream rounded panel and the
             right-hand panel piece with the scroll gutter. Every used piece is redrawn from the original texels with tools/mods/depixel.py.
   5c77e7d0  misc sheet (256x128): scroll bar track, thumb and arrow icons (same redraw).
@@ -22,14 +22,14 @@ import depixel as dp
 
 ROOT = os.path.normpath(os.path.join(os.path.dirname(os.path.abspath(__file__)), '..', '..'))
 MODS = [os.path.join(ROOT, 'mods', 'EnhancedTextures'), os.path.join(ROOT, 'gen', 'mods', 'EnhancedTextures')]
-OUT = 'duelist_list_hd'
+OUT = 'menus/pc'
 K = dp.K
 SIGMA = 0.65   # smoothing of the stair-stepped chamfers of the frame (texels)
 
 # data hash -> (EnhancedTextures image the unused parts come from, new file)
 SHEETS = {
-    '5e8560c1': ('mikeymk/shop/card_pack_results_ui.png', OUT + '/frame_sheet.png'),
-    '5c77e7d0': ('mikeymk/ui/misc/00000000fa54e5155c77e7d0.png', OUT + '/misc_sheet.png'),
+    '5e8560c1': ('_unreferenced/mikeymk__shop__card_pack_results_ui.png', OUT + '/frame_sheet.png'),
+    '5c77e7d0': ('_unreferenced/mikeymk__ui__misc__00000000fa54e5155c77e7d0.png', OUT + '/misc_sheet.png'),
 }
 
 

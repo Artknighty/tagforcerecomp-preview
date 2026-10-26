@@ -2,14 +2,21 @@
 
 Format: [Keep a Changelog](https://keepachangelog.com/en/1.1.0/). Versioning: [SemVer](https://semver.org/).
 
-## [Unreleased]
+## [0.5.1] - 2026-10-25
 
 ### Added
-- **Recipe Viewer tabs redrawn**: the "User" and "Character" tabs are are now drawn from scratch at 8x in Enhanced Textures (tab outline and bevels from geometry, a simple sheet-of-paper icon, new lettering), not upscaled.
+- **Mouse Menus** mod (experimental, `MouseMenus`): hover a row of the game's own menu lists to move the cursor, click to confirm. Switched off by default.
+- The card text box in duels scrolls with the mouse wheel (over the box), PageUp / PageDown or the right stick.
+- Cheats: "Unlock everything" also fills the DP to the game's cap and marks the duelists as fully owned, so the Recipe Viewer and Character Album show them.
+- **Recipe Viewer tabs redrawn**: the "User" and "Character" tabs are now drawn from scratch at 8x in Enhanced Textures (tab outline and bevels from geometry, a simple sheet-of-paper icon, new lettering), not upscaled.
 - **Texture cache is prepared on the first install**: when the Enhanced Textures pack is next to the program, "Install and play" also fills the BC7 texture cache (about 5 GB, a few minutes) so the first session starts without stutter. A pack that is switched off is only prepared if you agree. `TagForceRecomp.exe --prepare-textures` does the same from the command line.
 
 ### Fixed
 - The HD opening movie no longer appears a moment late: the file is read and the first frames are decoded at startup, so the blurry original frame is not shown first.
+- Weaker PCs: texture budgets are sized to the hardware, Vulkan pipelines are compiled ahead of time and the automatic resolution is capped.
+- Audio no longer stutters while an HD texture loads; the BC7 texture cache is also warmed in the background to avoid stalls on the first open.
+- Stability: GPU fallback state after a lost device, a clean exit on fatal errors, and clashes between plugin hotkeys.
+- Deck randomizers find your deck in any Tag Duel slot.
 
 ### Changed
 - The Enhanced Textures pack is regrouped by theme (`cards`, `characters`, `menus`, `duel`, `deck`, `text`, `world`, `intro`, `extras`) instead of ~120 folders; redraws live in a `pc/` sub-folder of their theme. `tools/mods/reorganizar_texturas.py` migrates an old layout.

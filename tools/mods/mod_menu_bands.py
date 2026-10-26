@@ -9,7 +9,7 @@ alpha with a thin bright rim like the original. Everything else (flat steps, axi
 the original. The strip is the same step profile as the band without the diagonal.
 
 Inputs: gen/dump_tex/rps/80dcc5b8.png and 681677a8.png (TF_TEX_DUMP).
-Output: textures/menu_bands_hd/<hash>.png; --register repoints the textures.ini / origem.tsv rows of those hashes.
+Output: textures/menus/pc/<hash>.png; --register repoints the textures.ini / origem.tsv rows of those hashes.
 
 Usage: python tools/mods/mod_menu_bands.py [--register]
 """
@@ -24,7 +24,7 @@ from mod_menu_frames import depth_in   # noqa: E402
 ROOT = os.path.normpath(os.path.join(os.path.dirname(os.path.abspath(__file__)), '..', '..'))
 DUMP = os.path.join(ROOT, 'gen', 'dump_tex', 'rps')
 MODS = [os.path.join(ROOT, 'mods', 'EnhancedTextures'), os.path.join(ROOT, 'gen', 'mods', 'EnhancedTextures')]
-OUTDIR = 'menu_bands_hd'
+OUTDIR = 'menus/pc'
 K = 8
 SIGMA = 1.1                       # label smoothing, in source texels
 ZONE = (60, 130, 0, 56)           # x0, x1, y0, y1 of the diagonal zone (source texels)
