@@ -81,10 +81,12 @@ static int hk_collection_entry(TfCpu *c) {
 static const uint32_t F_TRUNK_LIST = 0x08efcb68, F_DK_COPIES = 0x08f18d84, F_DK_VISIBLE = 0x08f1926c, F_DK_NEW = 0x08f18c4c,
                       F_DK_SORT_TABLE = 0x08f06498, F_DK_SORT_KEY = 0x08f0dd90, NEW_COUNTER = 0x09ccb168;
 
+static uint32_t g_trunk_obj, g_trunk_n0, g_trunk_n;
 static int hk_trunk_list(TfCpu *c) {
     const uint32_t list = A->reg(c, 4), ra = A->reg(c, 31);
     A->call_original(c, F_TRUNK_LIST);
     uint32_t n = A->reg(c, 2) & 0xffff;
+    const uint32_t n0 = n;
     for (uint32_t id = EXT_FIRST_ID; id < EXT_FIRST_ID + g_ext_n; id++) {
         A->set_reg(c, 4, id); A->call(c, F_DK_COPIES);
         const int32_t copies = (int32_t)A->reg(c, 2);
@@ -93,6 +95,7 @@ static int hk_trunk_list(TfCpu *c) {
             A->set_reg(c, 4, 0x8031); A->call(c, F_DK_SORT_TABLE);
             A->set_reg(c, 5, A->reg(c, 2)); A->set_reg(c, 4, id); A->call(c, F_DK_SORT_KEY);
             const uint32_t key = A->reg(c, 2) & 0xffff;
+            A->log("TF3 Cards: trunk id %u key %u table %08x", id, key, A->reg(c, 5));
             uint8_t *rec = A->mem(*(uint32_t *)A->mem(list + 4) + n * 6);
             *(uint16_t *)rec = (uint16_t)id; *(uint16_t *)(rec + 2) = (uint16_t)key;
             rec[4] = (uint8_t)(copies & 0x7f); rec[5] &= 0xfe;
@@ -102,6 +105,8 @@ static int hk_trunk_list(TfCpu *c) {
         A->set_reg(c, 4, id); A->call(c, F_DK_NEW);
         if ((int32_t)A->reg(c, 2) > 0) (*(uint16_t *)A->mem(NEW_COUNTER))++;
     }
+    g_trunk_obj = list; g_trunk_n0 = n0; g_trunk_n = n;
+    A->log("TF3 Cards: trunk list %u cards + %u beyond the table", n0, n - n0);
     A->set_reg(c, 31, ra); A->set_reg(c, 2, n);
     return 1;
 }
@@ -230,6 +235,13 @@ static uint32_t collection_entry(TfCpu *c, uint32_t id) {
 /* grant_copies: a ported card the player does not own yet is added to the collection (marked "new") so it shows up in the trunk. The game reloads
  * the save when Continue is pressed, so this runs every half second once a save is in memory; it only touches cards with 0 copies. */
 static int hk_frame(TfCpu *c) {
+    static uint64_t dbg_next;
+    if (g_trunk_n && getenv("TF3_DEBUG_TRUNK") && A->frame() >= dbg_next) {
+        dbg_next = A->frame() + 300;
+        const uint16_t *ord = (const uint16_t *)A->mem(*(uint32_t *)A->mem(g_trunk_obj + 16)), *base = nullptr;
+        (void)base;
+        for (uint32_t i = 0; i < g_trunk_n; i++) if (ord[i] >= g_trunk_n0) A->log("TF3 Cards: trunk position %u shows entry %u", i, ord[i]);
+    }
     static uint64_t next, ext_next;
     if (g_ext_n && A->frame() >= ext_next) { ext_next = A->frame() + 60; ext_save(); }
     if (g_grant <= 0 || A->frame() < next) return 0;
