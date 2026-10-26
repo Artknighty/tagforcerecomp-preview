@@ -31,6 +31,7 @@ To find a new one, run the game with `TF_HOOK_TRACE=addr,addr` (logs frame and a
 | `09f626dc` | `libduel_eng_5A41E0A6(player, type)`: the duelist's control type (human or CPU) | CPU vs CPU |
 | `09eb14f4` / `09e9ccb8` | duel start (writes the default 8000 LP) / monster selection | CPU vs CPU, Story Duel LP (start only) |
 | `09f62d88` | engine -> duel manager callback `(event, player, value, 0)`; event 13 = LP | Story Duel LP |
+| `09eb4574` | `libduel_eng`: finds the **effect record** of a card (6 words `{id, handlers}`; ~765 cards have one) from a key whose u16 at `+0` is the card id; binary search in tables sorted by id | TF3 Cards (lets a ported card borrow the record of an equivalent card by swapping the id while the lookup runs) |
 | `09f56da8` | stats of a monster slot (ATK at `+20`, DEF at `+24` of the buffer) | Better AI |
 | `09f5060c` | `libduel_eng_43595669(player, slot, 1)`: can this monster attack now | Better AI |
 | `09e74f60` / `09e762e0` / `09e76a14` | AI: attack / hand / spell decision | Better AI |

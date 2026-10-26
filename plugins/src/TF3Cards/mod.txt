@@ -1,0 +1,4 @@
+name=TF3 Cards
+author=Tag Force Recomp contributors
+version=0.1
+description=Cards ported from Yu-Gi-Oh! GX Tag Force 3. Test aid in config.ini: force copies of a card into your starting deck.

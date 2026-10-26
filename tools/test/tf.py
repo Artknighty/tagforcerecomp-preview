@@ -197,7 +197,7 @@ def start(args):
     if '--fresh' not in args and src: shutil.copytree(src, os.path.join(pkg, 'ms0'))
     mods = os.path.join(ROOT, 'gen', 'plugins_teste'); shutil.rmtree(mods, ignore_errors=True); os.makedirs(mods)
     for d in glob.glob(os.path.join(os.environ.get('TF_MODS_FROM') or os.path.join(ROOT, 'gen', 'mods'), '*')):   # TF_MODS_FROM=folder: test with only those mods
-        if os.path.isfile(os.path.join(d, 'plugin.dll')) and not os.path.exists(os.path.join(d, 'disabled')):
+        if (os.path.isfile(os.path.join(d, 'plugin.dll')) or os.path.isdir(os.path.join(d, 'PSP_GAME'))) and not os.path.exists(os.path.join(d, 'disabled')):
             shutil.copytree(d, os.path.join(mods, os.path.basename(d)), ignore=shutil.ignore_patterns('llm'))
     if '--texturas' in args:   # liga o EnhancedTextures real (so leitura; mod.txt textures= aponta para a pasta dele) em GPU Vulkan 2x
         d = os.path.join(mods, 'EnhancedTextures'); os.makedirs(d)
