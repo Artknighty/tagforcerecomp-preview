@@ -44,7 +44,7 @@ void swap_AnimateObject(SwapCtx &x) {
     const Vec3 shadow = *(Vec3 *)x.mem(scratch.addr());
     datum<float>(x, kShadowOffset + 12) = 0;
     datum<Vec3>(x, kShadowOffset) = shadow;
-    if (object.shadow != 0) x.callLocal(fn::DrawShadow);
+    if (object.shadow != 0) x.callLocal(fn::DrawShadow, object.shadow);   /* the original leaves the shadow handle in a0; DrawShadow reads it (it also places the balloon above the player) */
 }
 SwapReg reg_AnimateObject({"libfield.AnimateObject", MODULE, offsetOf(0x091C59EC), swap_AnimateObject});
 
