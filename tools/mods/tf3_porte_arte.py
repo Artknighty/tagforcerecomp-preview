@@ -41,6 +41,57 @@ def slots_ok(tf1, slot):
     return bool(v) and not v & 0x80000000
 
 
+def extend(tf1, tf3, gids):
+    """adds art for NEW ids (above the id range of the file): gids {TF3 id: new game id}. The index grows, so the lists and the art blocks move
+    to later units (every unit number of the file is shifted); the new blocks go at the end. Returns the bytes of the new file."""
+    end = struct.unpack_from("<I", tf1, 0x10)[0]
+    lo, hi = struct.unpack_from("<II", tf1, 0x14)
+    blocks = 1 if bytes(tf1[:4]) == b"CPM" + bytes([0x1a]) else 2
+    lo3 = struct.unpack_from("<I", tf3, 0x14)[0]
+    new_hi = max(gids.values())
+    assert min(gids.values()) > hi, "new ids must be above the ids of the file"
+    n_old, n_new = hi - lo + 1, new_hi - lo + 1
+    old_list, new_list = 0x30 + n_old * 8, 0x30 + n_new * 8
+    lists = tf1[old_list:end - 8]
+    assert tf1[end - 8:end] == bytes([255]) * 8, "no terminator where the header says the index ends"
+    new_end = new_list + len(lists) + 8
+    u0 = max(-(-new_end // UNIT), 0xc)
+    shift = u0 - 0xc
+
+    def unit(u):
+        return u + shift if u else 0
+    out = bytearray(tf1[:0x30])
+    for i in range(n_old):
+        e = struct.unpack_from("<I", tf1, 0x30 + i * 8)[0]
+        e = 0x80000000 | (e & 0x7fffffff) - old_list + new_list if e & 0x80000000 else unit(e)
+        out += struct.pack("<II", e, 0)
+    data = bytes(tf1[0xc * UNIT:])
+    assert len(data) % UNIT == 0
+    cursor = u0 + len(data) // UNIT
+    extra = bytearray()
+    entries = {}
+    for tf3id, gid in sorted(gids.items(), key=lambda x: x[1]):
+        v3 = struct.unpack_from("<I", tf3, 0x30 + (tf3id - lo3) * 8)[0]
+        assert v3 and not v3 & 0x80000000, "TF3 has no plain art for %d" % tf3id
+        extra += tf3[v3 * UNIT:(v3 + blocks) * UNIT]
+        entries[gid] = cursor
+        cursor += blocks
+    for gid in range(hi + 1, new_hi + 1):
+        out += struct.pack("<II", entries.get(gid, 0), 0)
+    for i in range(0, len(lists), 8):
+        u, f = struct.unpack_from("<II", lists, i)
+        out += struct.pack("<II", (u & 0x80000000) | unit(u & 0x7fffffff), f)
+    out += bytes([255]) * 8
+    assert len(out) == new_end
+    out += bytes(u0 * UNIT - len(out))
+    out += data + extra
+    struct.pack_into("<I", out, 4, len(out))
+    struct.pack_into("<I", out, 0x10, new_end)
+    struct.pack_into("<I", out, 0x18, new_hi)
+    out += bytes(UNIT)                                   # the last block's data runs a little past its units
+    return bytes(out)
+
+
 if __name__ == "__main__":
     if len(sys.argv) < 5:
         sys.exit(__doc__)

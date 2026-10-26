@@ -28,8 +28,50 @@ struct Ported { uint16_t slot, tf3, like; std::string name; };
 static std::vector<Ported> PORTED;
 /* collection records, copy limits and the save format are per card index: see tf3_porte_carta.py */
 static const uint32_t F_LP_AMOUNTS = 0x09ee3efc, F_FRAME = 0x08833fc4, F_COLLECTION_ENTRY = 0x0883de3c, SAVE = 0x08a65418, SAVE_VERSION = 0x10002;
+static std::vector<int> g_cards;   /* force_cards=a,b,c: several cards, force_copies copies of each */
 static int g_card = 7234, g_copies, g_deck_size, g_grant = 3, g_opponent;   /* g_card: a TF1 slot id or a TF3 id of ported.txt */
 static bool g_setup_pending;
+
+/* Cards beyond the 2480 indices of the game (tools/mods/tf3_porte_ext.py, ids from 6958 on): the save has no room for their collection records, so the
+ * plugin keeps them in PSP memory (4 bytes per card like the game's: byte 0 bits 1-2 = status, byte 1 bits 0-6 = copies, byte 2 bits 0-1 = copy limit),
+ * hands one out when the game asks for the record of such an id (BOOT 0883de3c) and keeps them in collection_ext.bin in the mod folder. */
+static const uint32_t EXT_FIRST_ID = 6958;
+static uint32_t g_ext, g_ext_n;
+static std::vector<uint8_t> g_ext_saved;
+
+static std::wstring ext_path(void) { return std::wstring(A->mod_dir) + L"\\collection_ext.bin"; }
+
+static void ext_init(void) {
+    for (const auto &p : PORTED)
+        if (p.slot >= EXT_FIRST_ID && p.slot - EXT_FIRST_ID + 1 > g_ext_n) g_ext_n = p.slot - EXT_FIRST_ID + 1;
+    if (!g_ext_n) return;
+    g_ext = A->guest_alloc(4 * g_ext_n);
+    uint8_t *r = A->mem(g_ext);
+    for (uint32_t i = 0; i < g_ext_n; i++) { r[i * 4] = 0x02; r[i * 4 + 1] = 3; r[i * 4 + 2] = 3; r[i * 4 + 3] = 0; }   /* new, 3 copies, limit 3 */
+    if (FILE *f = _wfopen(ext_path().c_str(), L"rb")) {
+        std::vector<uint8_t> b(4 * g_ext_n);
+        const size_t n = fread(b.data(), 1, b.size(), f);
+        fclose(f);
+        if (n == b.size()) memcpy(r, b.data(), b.size());
+    }
+    g_ext_saved.assign(r, r + 4 * g_ext_n);
+    A->log("TF3 Cards: %u cards beyond the game's table (ids %u..%u), collection kept in collection_ext.bin", g_ext_n, EXT_FIRST_ID, EXT_FIRST_ID + g_ext_n - 1);
+}
+
+static void ext_save(void) {
+    if (!g_ext_n) return;
+    const uint8_t *r = A->mem(g_ext);
+    if (memcmp(r, g_ext_saved.data(), g_ext_saved.size()) == 0) return;
+    g_ext_saved.assign(r, r + 4 * g_ext_n);
+    if (FILE *f = _wfopen(ext_path().c_str(), L"wb")) { fwrite(r, 1, 4 * g_ext_n, f); fclose(f); }
+}
+
+static int hk_collection_entry(TfCpu *c) {
+    const uint32_t id = A->reg(c, 4) & 0xffff;
+    if (id < EXT_FIRST_ID || id - EXT_FIRST_ID >= g_ext_n) return 0;
+    A->set_reg(c, 2, g_ext + (id - EXT_FIRST_ID) * 4);
+    return 1;
+}
 
 static void ported_load(void) {
     const std::wstring p = std::wstring(A->mod_dir) + L"\\ported.txt";
@@ -54,6 +96,10 @@ static void cfg_load(void) {
             else if (sscanf(l, "force_copies=%d", &v) == 1) g_copies = v;
             else if (sscanf(l, "force_deck_size=%d", &v) == 1) g_deck_size = v;
             else if (sscanf(l, "grant_copies=%d", &v) == 1) g_grant = v;
+            else if (strncmp(l, "force_cards=", 12) == 0) {
+                g_cards.clear();
+                for (const char *q = l + 12; *q;) { char *e; const long id = strtol(q, &e, 10); if (e == q) break; g_cards.push_back((int)id); q = *e ? e + 1 : e; }
+            }
         }
         fclose(f);
     }
@@ -61,6 +107,12 @@ static void cfg_load(void) {
     if (const char *e = getenv("TF3_FORCE_CARD")) g_card = atoi(e);
     if (const char *e = getenv("TF3_FORCE_OPP")) g_opponent = atoi(e);   /* 1: force the copies into the opponent's deck instead of yours */
     for (const auto &a : PORTED) if (a.tf3 == g_card) g_card = a.slot;   /* the TF3 id of a ported card is its slot's id in the deck */
+    if (const char *e = getenv("TF3_FORCE_CARDS")) {
+        g_cards.clear();
+        for (const char *q = e; *q;) { char *x; const long id = strtol(q, &x, 10); if (x == q) break; g_cards.push_back((int)id); q = *x ? x + 1 : x; }
+    }
+    if (g_cards.empty()) g_cards.push_back(g_card);
+    for (auto &id : g_cards) for (const auto &a : PORTED) if (a.tf3 == id) { id = a.slot; break; }
     if (const char *e = getenv("TF3_FORCE_DECK")) g_deck_size = atoi(e);
 }
 
@@ -70,9 +122,10 @@ static void force_cards(uint32_t out) {
     if (nm < 1 || nm > 80) return;
     uint16_t *main = (uint16_t *)(o + 0x0c);
     if (g_deck_size > 0 && (uint32_t)g_deck_size < nm) ((uint32_t *)o)[0] = nm = (uint32_t)g_deck_size;   /* a tiny deck puts the copies in the opening hand */
-    const uint32_t n = (uint32_t)g_copies < nm ? (uint32_t)g_copies : nm;
-    for (uint32_t i = 0; i < n; i++) main[i] = (uint16_t)g_card;
-    A->log("TF3 Cards: %u copies of card %d forced into the deck at %08x (%u cards)", n, g_card, out, nm);
+    uint32_t n = 0;
+    for (const int id : g_cards)
+        for (int k = 0; k < g_copies && n < nm; k++) main[n++] = (uint16_t)id;
+    A->log("TF3 Cards: %u forced cards (%u kinds, %d copies each) put in the deck at %08x (%u cards)", n, (unsigned)g_cards.size(), g_copies, out, nm);
 }
 
 static int hk_prepare_duel(TfCpu *c) {
@@ -130,12 +183,14 @@ static uint32_t collection_entry(TfCpu *c, uint32_t id) {
 /* grant_copies: a ported card the player does not own yet is added to the collection (marked "new") so it shows up in the trunk. The game reloads
  * the save when Continue is pressed, so this runs every half second once a save is in memory; it only touches cards with 0 copies. */
 static int hk_frame(TfCpu *c) {
-    static uint64_t next;
+    static uint64_t next, ext_next;
+    if (g_ext_n && A->frame() >= ext_next) { ext_next = A->frame() + 60; ext_save(); }
     if (g_grant <= 0 || A->frame() < next) return 0;
     next = A->frame() + 30;
     if (*(uint32_t *)A->mem(SAVE) != SAVE_VERSION) return 0;
     for (const auto &pc : PORTED) {
         const uint16_t id = pc.slot;
+        if (id >= EXT_FIRST_ID) continue;                  /* the plugin owns those records */
         const uint32_t e = collection_entry(c, id);
         if (!e) continue;
         uint8_t &flags = *A->mem(e), &copies = *A->mem(e + 1);
@@ -270,11 +325,13 @@ static int hk_debug_req(TfCpu *c) {
 extern "C" __declspec(dllexport) int tfmod_init(const TfModApi *api) {
     A = api;
     ported_load();
+    ext_init();
     cfg_load();
     A->hook(F_READ_DECK, hk_read_deck);
     A->hook(F_PREPARE_DUEL, hk_prepare_duel);
     A->hook(F_EFFECT_RECORD, hk_effect_record);
     A->hook(F_FRAME, hk_frame);
+    A->hook(F_COLLECTION_ENTRY, hk_collection_entry);
     A->hook(F_LP_AMOUNTS, hk_lp_amounts);
     A->hook(F_EFFECT_DRIVER, hk_effect_driver);
     A->hook(F_TARGET_ALL, hk_target_all);

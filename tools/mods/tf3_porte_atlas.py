@@ -164,3 +164,77 @@ if __name__ == "__main__":
     os.makedirs(os.path.join(raiz, "gen", "ctl"), exist_ok=True)
     m.save(os.path.join(raiz, "gen", "ctl", "atlas_check.png"))
     print("round trip of the untouched atlas:", Atlas(gim).bytes() == gim)
+
+
+_MARK = bytes([1, 0, 3, 0])      # [.., 1, 3, pages] precedes the table of frame offsets in the header of both blocks
+
+
+def _gim_blocks(gim, n, pix, pal):
+    """a GIM file like `gim` (the game's atlas) with n pages: the headers of its image and palette blocks are patched (page count, frame
+    offsets, end offsets); the header grows to 0x60 bytes when n > 7"""
+    blocks, p = {}, 0x30
+    while p < len(gim):
+        bid, _, size = struct.unpack_from("<HHI", gim, p)
+        blocks[bid] = (p, size)
+        p += size
+    out = []
+    for bid, frame, body in ((5, 0x400, pal), (4, PAGE * PAGE, pix)):
+        p0, size0 = blocks[bid]
+        old = gim[p0:p0 + size0]
+        tab = old.index(_MARK) - 2
+        hdr = (tab - 0x10 + 8 + 4 * n + 15) & ~15
+        head = bytearray(old[:tab + 8])
+        struct.pack_into("<H", head, tab + 6, n)
+        struct.pack_into("<I", head, 0x2c, hdr)                        # [0x30, header length, end, 0] at +0x28
+        struct.pack_into("<I", head, 0x30, hdr + n * frame)
+        head += b"".join(struct.pack("<I", hdr + k * frame) for k in range(n))
+        head += bytes(0x10 + hdr - len(head))
+        size = len(head) + len(body)
+        struct.pack_into("<I", head, 4, size)
+        struct.pack_into("<I", head, 8, size)
+        out.append(bytes(head) + body)
+    total = 0x30 + len(out[0]) + len(out[1])
+    top = bytearray(gim[:0x30])
+    struct.pack_into("<I", top, 0x14, total - 0x10)
+    struct.pack_into("<I", top, 0x24, total - 0x20)
+    return bytes(top) + out[0] + out[1]
+
+
+def extend(gim, filetbl, cardm_tf3, gids):
+    """appends the faces of TF3 cards to the atlas: cells go after the last one, in the order of gids (TF3 id -> new game id, ascending);
+    pages that receive faces get a new palette (median cut of old and new colors). Returns (cis_all.gim, fileTbl.dat)"""
+    a = Atlas(gim)
+    ids = list(struct.unpack_from("<%dH" % (len(filetbl) // 2 - 2), filetbl, 4))
+    count0, n_new = len(ids), len(gids)
+    total = count0 + n_new
+    pages = -(-total // PER_PAGE)
+    rgb = []
+    for p in range(a.n):
+        page = np.frombuffer(bytes(a.lin[p]), np.uint8).reshape(PAGE, PAGE)
+        rgb.append(a.pal[p][page].astype(np.uint8))
+    while len(rgb) < pages:
+        rgb.append(np.zeros((PAGE, PAGE, 3), np.uint8))
+    touched = set()
+    for k, (tf3, gid) in enumerate(sorted(gids.items(), key=lambda x: x[1])):
+        cell = count0 + k
+        p, x, y = divmod(cell, PER_PAGE)[0], (cell % PER_PAGE % COLS) * CW, (cell % PER_PAGE // COLS) * CH
+        rgb[p][y + 2:y + CH, x:x + CW] = a.squeeze(face(cardm_tf3, tf3)).astype(np.uint8)
+        touched.add(p)
+        ids.append(gid)
+    lin, pal = [], []
+    for p in range(pages):
+        if p in touched:
+            q = Image.fromarray(rgb[p]).quantize(256, method=Image.Quantize.MEDIANCUT, dither=Image.Dither.NONE)
+            pl = np.array(q.getpalette()[:768], np.uint8).reshape(256, 3)
+            lin.append(bytes(np.array(q, np.uint8).tobytes()))
+        else:
+            if p < a.n:
+                lin.append(bytes(a.lin[p]))
+                pl = a.pal[p].astype(np.uint8)
+            else:
+                lin.append(bytes(PAGE * PAGE))
+                pl = np.zeros((256, 3), np.uint8)
+        pal.append(np.concatenate([pl, np.full((256, 1), 255, np.uint8)], axis=1).tobytes())
+    pix = b"".join(_swizzle(l, PAGE, PAGE) for l in lin)
+    ft = struct.pack("<HH", len(ids), 0) + struct.pack("<%dH" % len(ids), *ids)
+    return _gim_blocks(gim, pages, pix, b"".join(pal)), ft

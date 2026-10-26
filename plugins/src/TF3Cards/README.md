@@ -24,6 +24,7 @@ kind, with the closest name (the trunk list keeps the slot's alphabetical place)
 - Test aid `force_card` / `force_copies` / `force_deck_size` (env `TF3_FORCE_CARD`, `TF3_FORCE_COPIES`, `TF3_FORCE_DECK`; `force_card` takes the TF3 id
   of a ported card): puts copies of the card in your opening hand. More than 3 copies of one card hang the duel start. Off by default.
 - `TF3_FORCE_OPP=1` puts the forced copies into the opponent's deck instead (the CPU does not use ported cards: its AI only knows the cards of the game).
+- `force_cards=a,b,c` (TF3 ids) with `force_copies` copies each (and `force_deck_size`) puts the cards in the opening hand: 2 copies of 3 cards in a 6-card deck always shows all three. `TF3_FORCE_CARDS` overrides it.
 - Research aids: `TF3_DEBUG_STREAM=1` and `TF3_DEBUG_REQ=1` log the card-art stream (BOOT `0882ead0`); `TF3_DEBUG_LP=1` logs the LP amounts the game computes for its own cards (the Gift Card formula was checked against Ookazi and Dian Keto this way).
 
 ## Making your own build
