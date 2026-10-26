@@ -10,6 +10,7 @@ the slot's alphabetical rank, so the new card lands about where its name belongs
   CARD_Pass / CARD_Genre  entry replaced (passcode, bits remapped from TF3)
   CARD_Name_E / CARD_Desc_E: the new text at the end (UTF-16, 4-aligned); CARD_Indx_E points the index at it
   card/cardm_e.cip, card/cardh_e.cip: the new art written over the slot's block (tf3_porte_arte.py)
+  deck/all_<l>.ehp: the thumbnail atlas of the trunk grid with the new card face in the slot's cell (tf3_porte_atlas.py)
   ported.txt: one line per card, "<slot id> <TF3 id> <TF1 id whose effect it uses or 0> <name>" (read by the TF3Cards plugin)
 Whatever other mods or hooks know about the slot card by its old id now meets the new card.
 
@@ -26,6 +27,7 @@ sys.path.insert(0, os.path.dirname(os.path.abspath(__file__)))
 import ehp  # noqa: E402
 import tf3_cartas  # noqa: E402
 import tf3_porte_arte  # noqa: E402
+import tf3_porte_atlas  # noqa: E402
 
 JOGO = os.environ.get("TF_JOGO") or os.path.join(RAIZ, "gen", "jogo", "PSP_GAME", "USRDIR")
 TF3_CARD = os.path.join(RAIZ, "ref", "tf3", "card")
@@ -125,6 +127,16 @@ def montar_mod(pasta, ids, replace=None):
             f = "%s_%s.cip" % (k, lang)
             out = tf3_porte_arte.porta(_ler("card/" + f), open(os.path.join(TF3_CARD, f), "rb").read(), slots)
             open(os.path.join(base, "card", f), "wb").write(out)
+    # the trunk grid of the deck editor draws small card faces from the atlas deck/all_<l>.ehp -> cis_all.gim (the same image in every language)
+    os.makedirs(os.path.join(base, "deck"), exist_ok=True)
+    atlas = None
+    for lang, nome in LANGS.items():
+        tag, mem = ehp.ler(_ler("deck/all_%s.ehp" % lang))
+        if atlas is None:
+            atlas = tf3_porte_atlas.porta(dict(mem)["cis_all.gim"], _ler("card/cardm_e.cip"),
+                                          open(os.path.join(TF3_CARD, "cardm_e.cip"), "rb").read(), slots)
+        mem = [(n, atlas if n == "cis_all.gim" else d) for n, d in mem]
+        open(os.path.join(base, "deck", "all_%s.ehp" % lang), "wb").write(ehp.montar(mem, tag))
     with open(os.path.join(pasta, "ported.txt"), "w", encoding="utf-8", newline="\n") as f:
         for cid in ids:
             f.write("%d %d %d %s\n" % (slots[cid], cid, EFEITO.get(cid, 0), novas[cid]["nome"]))
