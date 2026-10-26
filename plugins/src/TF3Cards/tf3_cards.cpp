@@ -18,6 +18,9 @@
 #include <vector>
 
 static const TfModApi *A;
+static uint32_t g_pos;      /* TF3_FORCE_POS: first deck position of the forced cards (the duel start runs without shuffling when the deck is kept whole) */
+static bool g_in_start;
+static const uint32_t F_DUEL_START = 0x09eb14f4, F_RANDOM = 0x09eb30b8;
 static const uint32_t F_READ_DECK = 0x0884a694, F_PREPARE_DUEL = 0x0883f4f8;
 /* libduel_eng 09eb4574: finds the effect record (6 words {id, handlers...}, one per card with special rules) of the card whose key is at a0
  * (u16 id at +0, the record kind in the low 6 bits of the byte at +3); binary search in tables sorted by id, returns the record or 0. */
@@ -73,6 +76,36 @@ static int hk_collection_entry(TfCpu *c) {
     return 1;
 }
 
+/* Deck editor trunk list (libdeck 08efcb68(list)): the game walks the ids 4007..6957 and writes one 6-byte record per owned card
+ * {id, sort key, copies} plus an index array at +0x10; it returns the count. After it, add the same records for the ids beyond the table. */
+static const uint32_t F_TRUNK_LIST = 0x08efcb68, F_DK_COPIES = 0x08f18d84, F_DK_VISIBLE = 0x08f1926c, F_DK_NEW = 0x08f18c4c,
+                      F_DK_SORT_TABLE = 0x08f06498, F_DK_SORT_KEY = 0x08f0dd90, NEW_COUNTER = 0x09ccb168;
+
+static int hk_trunk_list(TfCpu *c) {
+    const uint32_t list = A->reg(c, 4), ra = A->reg(c, 31);
+    A->call_original(c, F_TRUNK_LIST);
+    uint32_t n = A->reg(c, 2) & 0xffff;
+    for (uint32_t id = EXT_FIRST_ID; id < EXT_FIRST_ID + g_ext_n; id++) {
+        A->set_reg(c, 4, id); A->call(c, F_DK_COPIES);
+        const int32_t copies = (int32_t)A->reg(c, 2);
+        A->set_reg(c, 4, id); A->call(c, F_DK_VISIBLE);
+        if (A->reg(c, 2) && copies > 0) {
+            A->set_reg(c, 4, 0x8031); A->call(c, F_DK_SORT_TABLE);
+            A->set_reg(c, 5, A->reg(c, 2)); A->set_reg(c, 4, id); A->call(c, F_DK_SORT_KEY);
+            const uint32_t key = A->reg(c, 2) & 0xffff;
+            uint8_t *rec = A->mem(*(uint32_t *)A->mem(list + 4) + n * 6);
+            *(uint16_t *)rec = (uint16_t)id; *(uint16_t *)(rec + 2) = (uint16_t)key;
+            rec[4] = (uint8_t)(copies & 0x7f); rec[5] &= 0xfe;
+            *(uint16_t *)A->mem(*(uint32_t *)A->mem(list + 16) + n * 2) = (uint16_t)n;
+            n++;
+        }
+        A->set_reg(c, 4, id); A->call(c, F_DK_NEW);
+        if ((int32_t)A->reg(c, 2) > 0) (*(uint16_t *)A->mem(NEW_COUNTER))++;
+    }
+    A->set_reg(c, 31, ra); A->set_reg(c, 2, n);
+    return 1;
+}
+
 static void ported_load(void) {
     const std::wstring p = std::wstring(A->mod_dir) + L"\\ported.txt";
     if (FILE *f = _wfopen(p.c_str(), L"r")) {
@@ -113,6 +146,7 @@ static void cfg_load(void) {
     }
     if (g_cards.empty()) g_cards.push_back(g_card);
     for (auto &id : g_cards) for (const auto &a : PORTED) if (a.tf3 == id) { id = a.slot; break; }
+    if (const char *e = getenv("TF3_FORCE_POS")) g_pos = (uint32_t)atoi(e);
     if (const char *e = getenv("TF3_FORCE_DECK")) g_deck_size = atoi(e);
 }
 
@@ -126,6 +160,19 @@ static void force_cards(uint32_t out) {
     for (const int id : g_cards)
         for (int k = 0; k < g_copies && n < nm; k++) main[n++] = (uint16_t)id;
     A->log("TF3 Cards: %u forced cards (%u kinds, %d copies each) put in the deck at %08x (%u cards)", n, (unsigned)g_cards.size(), g_copies, out, nm);
+}
+
+/* A whole deck with the forced cards in it: the duel start shuffles with the game random, so make that random return 0 while it runs (the order is
+ * then fixed and the forced cards are placed where the opening hand takes them). The first-turn draw is the same call, so it also becomes fixed. */
+static int hk_duel_start(TfCpu *c) {
+    if (g_copies <= 0 || g_deck_size > 0) return 0;
+    g_in_start = true; A->call_original(c, F_DUEL_START); g_in_start = false;
+    return 1;
+}
+static int hk_random(TfCpu *c) {
+    if (!g_in_start) return 0;
+    A->set_reg(c, 2, 0);
+    return 1;
 }
 
 static int hk_prepare_duel(TfCpu *c) {
@@ -233,7 +280,7 @@ static int hk_lp_amounts(TfCpu *c) {
  * record whether the monster is hit, then destroys the chosen ones). The driver hook tosses the coin with the game's own random (09eb30b8) and shows the coin
  * (animation command 09e998a0, as Fiend Comedian does); the filter hook then narrows Dark Hole's "every monster" to one side while that effect resolves. */
 static const uint16_t TF3_SUIT_OF_SWORD_X = 3734;
-static const uint32_t F_EFFECT_DRIVER = 0x09ee3b7c, F_TARGET_ALL = 0x09ebbbe8, F_RANDOM = 0x09eb30b8, F_COIN_ANIM = 0x09e998a0;
+static const uint32_t F_EFFECT_DRIVER = 0x09ee3b7c, F_TARGET_ALL = 0x09ebbbe8, F_COIN_ANIM = 0x09e998a0;
 static int g_coin = -1;                                       /* -1 = not resolving; 1 = heads (opponent's side), 0 = tails (own side) */
 
 static uint16_t slot_of(uint16_t tf3) { for (const auto &p : PORTED) if (p.tf3 == tf3) return p.slot; return 0; }
@@ -332,6 +379,9 @@ extern "C" __declspec(dllexport) int tfmod_init(const TfModApi *api) {
     A->hook(F_EFFECT_RECORD, hk_effect_record);
     A->hook(F_FRAME, hk_frame);
     A->hook(F_COLLECTION_ENTRY, hk_collection_entry);
+    A->hook(F_DUEL_START, hk_duel_start);
+    A->hook(F_RANDOM, hk_random);
+    if (g_ext_n) A->hook(F_TRUNK_LIST, hk_trunk_list);
     A->hook(F_LP_AMOUNTS, hk_lp_amounts);
     A->hook(F_EFFECT_DRIVER, hk_effect_driver);
     A->hook(F_TARGET_ALL, hk_target_all);
