@@ -17,6 +17,7 @@ Format: [Keep a Changelog](https://keepachangelog.com/en/1.1.0/). Versioning: [S
 - Audio no longer stutters while an HD texture loads; the BC7 texture cache is also warmed in the background to avoid stalls on the first open.
 - Stability: GPU fallback state after a lost device, a clean exit on fatal errors, and clashes between plugin hotkeys.
 - Deck randomizers find your deck in any Tag Duel slot.
+- The interaction balloon above the player and NPCs (Room 204, Store) is drawn again.
 
 ### Changed
 - The Enhanced Textures pack is regrouped by theme (`cards`, `characters`, `menus`, `duel`, `deck`, `text`, `world`, `intro`, `extras`) instead of ~120 folders; redraws live in a `pc/` sub-folder of their theme. `tools/mods/reorganizar_texturas.py` migrates an old layout.
