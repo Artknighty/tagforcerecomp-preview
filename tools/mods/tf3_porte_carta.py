@@ -30,9 +30,10 @@ import tf3_porte_arte  # noqa: E402
 JOGO = os.environ.get("TF_JOGO") or os.path.join(RAIZ, "gen", "jogo", "PSP_GAME", "USRDIR")
 TF3_CARD = os.path.join(RAIZ, "ref", "tf3", "card")
 BASE_INTID = 4000
-# ported card -> TF1 card whose effect it plays exactly like (the plugin lends the effect record; a card not listed here has no effect yet)
-EFEITO = {6746: 5983,      # No Entry!! = Earthquake
-          7234: 4352}      # Gift Card: the record of Ookazi (damage to the opponent) with the amount and sign changed by the plugin
+# ported card -> TF1 card whose effect it plays exactly like (the plugin lends the effect record; a card not listed here has no effect yet).
+# tools/game/tf3_efeitos.py lists, for a TF3 card, the TF3 cards sharing its handler and their TF1 records: pick a TF1 card from that list.
+EFEITO = {6746: 5983,      # No Entry!! = Earthquake (TF3 gives both the same handler; only the target filter differs, and the outcome is the same)
+          7234: 4353}      # Gift Card = the record of Tremendous Fire (TF3 gives Gift Card the same plain LP handler, no extra word); the amount comes from the plugin
 
 
 def _utf16(s):

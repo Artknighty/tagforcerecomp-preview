@@ -14,7 +14,7 @@ kind, with the closest name (the trunk list keeps the slot's alphabetical place)
 | Card | Slot | Effect |
 |---|---|---|
 | No Entry!! (TF3 6746) | Non Aggression Area (5549) | Plays like *Earthquake*: the plugin hooks the effect-record lookup (`09eb4574`) and looks the slot's record up as the equivalent card. |
-| Gift Card (TF3 7234) | Generation Shift (6621) | Opponent gains 3000 Life Points: lends the record of *Ookazi* (LP damage to the opponent) and hooks the LP amounts (`09ee3efc`) to write +3000 for the opponent. |
+| Gift Card (TF3 7234) | Generation Shift (6621) | Opponent gains 3000 Life Points: lends the record of *Tremendous Fire* (the same plain LP handler TF3 gives it, no extra word) and hooks the LP amounts (`09ee3efc`) to write +3000 for the opponent. |
 
 ## Settings (`config.ini` in the mod folder)
 
