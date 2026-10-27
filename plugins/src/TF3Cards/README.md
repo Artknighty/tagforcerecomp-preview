@@ -59,4 +59,5 @@ that plays the same way (`like`, the third column of `ported.txt`) and lists whi
 `{"monster": true, "level_max": 4, "name_has": "Gladiator Beast"}`). The game keeps one small function per card that scans a zone and queues the cards the effect accepts;
 for the cards of the file the plugin runs a scan against the id set instead (hooks `09f243c8` / `09f24428`). First zone supported: the Deck ("Add 1 ... from your Deck to your hand").
 Checked in a duel: Gladiator Proving Ground opens the card list with only Gladiator Beast monsters of Level 4 or lower and adds the chosen card to the hand.
-
+Zones: the Deck, the Graveyard (add to the hand), Special Summon from the hand and Special Summon from the Graveyard. `tools/mods/tf3_efeitos_texto.py` writes the specs of the cards whose text matches one of these patterns.
+Checked in duels: Deck, hand and Graveyard (Special Summon from the Graveyard is built the same way but not yet checked).

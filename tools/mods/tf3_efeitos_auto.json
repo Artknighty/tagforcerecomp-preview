@@ -1,0 +1,79 @@
+{
+ "6935": {
+  "like": 5330,
+  "zone": "grave",
+  "filter": {
+   "monster": true,
+   "name_has": "Ancient Gear"
+  },
+  "name": "Ancient Gear Workshop"
+ },
+ "6995": {
+  "like": 6572,
+  "zone": "hand",
+  "filter": {
+   "monster": true,
+   "level_min": 5,
+   "normal": true
+  },
+  "name": "Ancient Rules"
+ },
+ "7013": {
+  "like": 4989,
+  "zone": "grave_summon",
+  "filter": {
+   "monster": true,
+   "normal": true
+  },
+  "name": "Birthright"
+ },
+ "7220": {
+  "like": 5328,
+  "zone": "deck",
+  "filter": {
+   "monster": true,
+   "level_min": 5,
+   "normal": true
+  },
+  "name": "Summoner's Art"
+ },
+ "7453": {
+  "like": 5330,
+  "zone": "grave",
+  "filter": {
+   "monster": true,
+   "attribute": "dark",
+   "atk_max": 1500
+  },
+  "name": "Dark Eruption"
+ },
+ "7460": {
+  "like": 5328,
+  "zone": "deck",
+  "filter": {
+   "monster": true,
+   "level_max": 4,
+   "name_has": "Gladiator Beast"
+  },
+  "name": "Gladiator Proving Ground"
+ },
+ "7754": {
+  "like": 4989,
+  "zone": "grave_summon",
+  "filter": {
+   "monster": true,
+   "level_max": 2
+  },
+  "name": "Graceful Revival"
+ },
+ "7902": {
+  "like": 6572,
+  "zone": "hand",
+  "filter": {
+   "monster": true,
+   "level_max": 2,
+   "type": "plant"
+  },
+  "name": "Seed of Deception"
+ }
+}

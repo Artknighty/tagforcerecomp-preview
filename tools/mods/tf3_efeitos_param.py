@@ -17,7 +17,8 @@ import sys
 
 RAIZ = os.path.dirname(os.path.dirname(os.path.dirname(os.path.abspath(__file__))))
 sys.path.insert(0, os.path.join(RAIZ, "tools", "game"))
-SPEC = os.path.join(os.path.dirname(os.path.abspath(__file__)), "tf3_efeitos.json")
+SPEC = os.path.join(os.path.dirname(os.path.abspath(__file__)), "tf3_efeitos.json")             # written by hand (and by the card editor)
+SPEC_AUTO = os.path.join(os.path.dirname(os.path.abspath(__file__)), "tf3_efeitos_auto.json")   # written by tf3_efeitos_texto.py from the card texts
 ZONAS = {"deck": 1, "grave": 2, "grave_summon": 3, "hand": 4}
 TIPOS = {"dragon": 1, "zombie": 2, "fiend": 3, "pyro": 4, "sea serpent": 5, "rock": 6, "machine": 7, "fish": 8, "dinosaur": 9, "insect": 10,
          "beast": 11, "beast-warrior": 12, "plant": 13, "aqua": 14, "warrior": 15, "winged beast": 16, "fairy": 17, "spellcaster": 18,
@@ -73,7 +74,9 @@ def combina(p, f):
 
 def resolver(gids, spec=None):
     """-> (effects.bin bytes, {TF3 id: like}) for the cards of the spec that are among the installed ones (gids)"""
-    spec = spec if spec is not None else json.load(open(SPEC, encoding="utf-8"))
+    if spec is None:
+        spec = json.load(open(SPEC_AUTO, encoding="utf-8")) if os.path.exists(SPEC_AUTO) else {}
+        spec.update(json.load(open(SPEC, encoding="utf-8")))         # the hand-written file wins
     prop = propriedades(gids)
     entradas, likes = [], {}
     for k, e in sorted(spec.items(), key=lambda x: int(x[0])):
