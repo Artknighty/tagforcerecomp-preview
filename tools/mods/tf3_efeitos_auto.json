@@ -91,5 +91,49 @@
  "7691": {
   "like": 4310,
   "name": "Synchro Boost"
+ },
+ "6970": {
+  "like": 4930,
+  "trigger_like": 4930,
+  "zone": "deck",
+  "filter": {
+   "monster": true,
+   "level_max": 3,
+   "name_has": "Six Samurai"
+  },
+  "name": "Shien's Footsoldier"
+ },
+ "7290": {
+  "like": 4930,
+  "trigger_like": 4930,
+  "zone": "deck",
+  "filter": {
+   "monster": true,
+   "level_max": 4,
+   "name_has": "Gladiator Beast"
+  },
+  "name": "Test Ape"
+ },
+ "7818": {
+  "like": 6506,
+  "trigger_like": 6506,
+  "zone": "deck",
+  "filter": {
+   "monster": true,
+   "def_min": 200,
+   "def_max": 200
+  },
+  "name": "Flamvell Paun"
+ },
+ "7892": {
+  "like": 4054,
+  "trigger_like": 4054,
+  "zone": "deck",
+  "filter": {
+   "monster": true,
+   "type": "plant",
+   "def_max": 1000
+  },
+  "name": "Botanical Girl"
  }
 }

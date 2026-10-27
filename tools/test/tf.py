@@ -16,7 +16,8 @@ O jogo roda SEM limitador (rapido) e escondido; 1 quadro = 1/30 s do jogo. Usa c
 import os, sys, time, subprocess, shutil, glob, re, itertools
 
 ROOT = os.path.dirname(os.path.dirname(os.path.dirname(os.path.abspath(__file__))))
-CTL = os.path.join(ROOT, 'gen', 'ctl')
+TAG = os.environ.get('TF_TAG', '')   # TF_TAG=name: isolated ctl/logs/plugins folders so two agents can test at once
+CTL = os.path.join(ROOT, 'gen', 'ctl' + ('_' + TAG if TAG else ''))
 BTN = {'X': 0x4000, 'CROSS': 0x4000, 'O': 0x2000, 'CIRCLE': 0x2000, 'SQ': 0x8000, 'SQUARE': 0x8000, 'TRI': 0x1000, 'TRIANGLE': 0x1000,
        'START': 0x8, 'SELECT': 0x1, 'UP': 0x10, 'RIGHT': 0x20, 'DOWN': 0x40, 'LEFT': 0x80, 'L': 0x100, 'R': 0x200}
 RAPIDO = False   # rasterizacao desligada entre capturas (duelo completo em ~1 min em vez de ~7)
@@ -54,7 +55,7 @@ def vivo():
 
 def resumo_crash():
     out = []
-    for f in glob.glob(os.path.join(ROOT, 'gen', 'logs_teste', '*.log')):
+    for f in glob.glob(os.path.join(ROOT, 'gen', 'logs_teste' + ('_' + TAG if TAG else ''), '*.log')):
         t = open(f, errors='ignore').read().splitlines()
         out += [l[:200] for l in t if 'CRASH' in l or 'RIP nativo' in l or 'ultimas funcoes' in l][-4:]
     return chr(10).join(out) or '(sem linha de crash no log)'
@@ -62,7 +63,7 @@ def resumo_crash():
 
 def log_texto():
     t = ''
-    for f in glob.glob(os.path.join(ROOT, 'gen', 'logs_teste', '*.log')): t += open(f, errors='ignore').read()
+    for f in glob.glob(os.path.join(ROOT, 'gen', 'logs_teste' + ('_' + TAG if TAG else ''), '*.log')): t += open(f, errors='ignore').read()
     return t
 
 
@@ -195,7 +196,7 @@ def start(args):
         raise SystemExit('refusing to run the test inside the repo root: ./ms0 there is the live save of the user. Use the dev package (gen/pkg/TagForceRecomp) as --exe.')
     shutil.rmtree(os.path.join(pkg, 'ms0'), ignore_errors=True)
     if '--fresh' not in args and src: shutil.copytree(src, os.path.join(pkg, 'ms0'))
-    mods = os.path.join(ROOT, 'gen', 'plugins_teste'); shutil.rmtree(mods, ignore_errors=True); os.makedirs(mods)
+    mods = os.path.join(ROOT, 'gen', 'plugins_teste' + ('_' + TAG if TAG else '')); shutil.rmtree(mods, ignore_errors=True); os.makedirs(mods)
     for d in glob.glob(os.path.join(os.environ.get('TF_MODS_FROM') or os.path.join(ROOT, 'gen', 'mods'), '*')):   # TF_MODS_FROM=folder: test with only those mods
         if (os.path.isfile(os.path.join(d, 'plugin.dll')) or os.path.isdir(os.path.join(d, 'PSP_GAME'))) and not os.path.exists(os.path.join(d, 'disabled')):
             shutil.copytree(d, os.path.join(mods, os.path.basename(d)), ignore=shutil.ignore_patterns('llm'))
@@ -204,7 +205,7 @@ def start(args):
         src = os.path.join(ROOT, 'mods', 'EnhancedTextures')
         with open(os.path.join(d, 'mod.txt'), 'w') as f: f.write('name=Enhanced Textures' + chr(10) + 'textures=' + os.path.join(src, 'textures') + chr(10))
         if os.path.exists(os.path.join(src, 'menu_estilo_pc.txt')): shutil.copyfile(os.path.join(src, 'menu_estilo_pc.txt'), os.path.join(d, 'menu_estilo_pc.txt'))
-    logs = os.path.join(ROOT, 'gen', 'logs_teste'); shutil.rmtree(logs, ignore_errors=True)
+    logs = os.path.join(ROOT, 'gen', 'logs_teste' + ('_' + TAG if TAG else '')); shutil.rmtree(logs, ignore_errors=True)
     env = dict(os.environ, TF_CTL=CTL, TF_KEEP_CWD='1', TF_NO_MOVIES='1', NO_PACE='1', NO_AUDIO='1', TF_SEGUNDO_PLANO='1',
                TF_NO_ISO_CACHE='1', TF_INTERP='0', TF_LOG_DIR=logs, TF_INI=os.path.join(logs, 'teste.ini'), TF_MODS_DIR=mods, AUTO_TEXT=(args[args.index('--text') + 1] if '--text' in args else 'o usuario'))
     if '--texturas' in args: env.setdefault('TF_GPU', '2'); env.setdefault('TF_RES', '2')

@@ -63,6 +63,14 @@ def filtro(s):
         if m:
             campo = "atk" if m.group(3) == "ATK" else "def"
             f["%s_%s" % (campo, "max" if m.group(2) == "less" else "min")] = int(m.group(1)); s = s[m.end():]; continue
+        m = re.match(r"with an? (ATK|DEF) of (\d+) or (less|more)\s*", s)
+        if m:
+            campo = "atk" if m.group(1) == "ATK" else "def"
+            f["%s_%s" % (campo, "max" if m.group(3) == "less" else "min")] = int(m.group(2)); s = s[m.end():]; continue
+        m = re.match(r"with (\d+) (ATK|DEF)\s*", s)
+        if m:
+            campo = "atk" if m.group(2) == "ATK" else "def"
+            f["%s_min" % campo] = f["%s_max" % campo] = int(m.group(1)); s = s[m.end():]; continue
         return None
     return f
 
