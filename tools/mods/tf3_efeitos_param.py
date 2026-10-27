@@ -93,6 +93,15 @@ def resolver(gids, spec=None):
     return b"TF3E" + struct.pack("<I", len(entradas)) + b"".join(entradas), likes
 
 
+def resolver_gatilhos(gids, spec=None):
+    """-> trigger.bin bytes: {card: donor} for the spec entries with "trigger_like" (the donor's id is used while the game asks whether the effect starts)"""
+    if spec is None:
+        spec = json.load(open(SPEC_AUTO, encoding="utf-8")) if os.path.exists(SPEC_AUTO) else {}
+        spec.update(json.load(open(SPEC, encoding="utf-8")))
+    pares = [(gids[int(k)], e["trigger_like"]) for k, e in sorted(spec.items(), key=lambda x: int(x[0])) if int(k) in gids and "trigger_like" in e]
+    return b"TF3T" + struct.pack("<I", len(pares)) + b"".join(struct.pack("<HH", a, b) for a, b in pares)
+
+
 SPEC_STATS = os.path.join(os.path.dirname(os.path.abspath(__file__)), "tf3_stats.json")
 SPEC_STATS_AUTO = os.path.join(os.path.dirname(os.path.abspath(__file__)), "tf3_stats_auto.json")
 ESCOPOS = {"self": 0, "own": 1, "opp": 2, "all": 3, "equip": 4}

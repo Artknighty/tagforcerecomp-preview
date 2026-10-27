@@ -41,6 +41,23 @@ A new card borrows the record of a card that plays the same way (`like`) and lis
 Filter keys: `monster`, `normal`, `level_min`, `level_max`, `type`, `attribute`, `atk_min`, `atk_max`, `def_min`, `def_max`, `name_has`, `name_is`.
 `tools/mods/tf3_efeitos_param.py` turns a filter into the sorted id set stored in `effects.bin`; the plugin side is described in `plugins/src/TF3Cards/README.md`.
 
+## Triggers
+
+The game decides when an effect starts in one predicate (`09f30ddc`), a chain of `id == N` branches. A spec entry with `"trigger_like": <TF1 card id>` makes the game answer that predicate as if the card were the donor
+(for example `"trigger_like": 4054` = "when this card is sent from the field to the Graveyard", like Sangan). The effect itself still comes from `like` (the record) and `zone`/`filter`:
+
+```json
+{ "7892": { "like": 4054, "trigger_like": 4054, "zone": "deck",
+            "filter": { "monster": true, "type": "plant", "def_max": 1000 } } }
+```
+
+Checked in a duel: Botanical Girl destroyed by Dark Hole opens the Deck list with only Plant monsters of 1000 or less DEF and adds the chosen card to the hand.
+
+## Known limits
+
+* The first two new ids (6958, 6959) cannot be Normal Summoned as monsters (the card menu only offers "Show Details"); keep Spell/Trap cards there (`tools/mods/tf3_gids.txt` does).
+* While a trigger runs, the game shows the donor's name and text in the selection panel.
+
 ## Adding a new kind of effect
 
 1. Find a TF1 card that plays the same way and read its record (`tools/game/tf3_efeitos.py`, `mapa_cartas.py`).

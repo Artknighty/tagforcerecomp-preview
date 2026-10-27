@@ -58,5 +58,15 @@
    "normal": true,
    "level_min": 5
   }
+ },
+ "7892": {
+  "like": 4054,
+  "trigger_like": 4054,
+  "zone": "deck",
+  "filter": {
+   "monster": true,
+   "type": "plant",
+   "def_max": 1000
+  }
  }
 }

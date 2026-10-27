@@ -617,6 +617,7 @@ static const uint32_t F_CAND_RUN = 0x09f243c8, F_CAND_COUNT = 0x09f24428, F_CAND
 static const uint32_t DUEL_SIDES = 0x09f80000u - 25364u, DUEL_SIDE_SIZE = 4012, CAND_COUNTER = 0x09f80000u - 28440u;
 struct DataEffect { uint8_t zone; std::vector<uint16_t> ids; };
 static std::map<uint16_t, DataEffect> g_fx;
+static std::map<uint16_t, uint16_t> g_trig_real;   /* donor id of an aliased trigger -> the new card that triggered (see hk_trigger) */
 
 static void fx_load(void) {
     const std::wstring p = std::wstring(A->mod_dir) + L"\\effects.bin";
@@ -656,8 +657,14 @@ static void fx_scan(TfCpu *c, uint32_t side_arg, uint32_t slot, const DataEffect
     }
 }
 
+static uint16_t fx_card(uint16_t id) {   /* the card whose data effect applies to an effect object with this id */
+    if (g_fx.count(id)) return id;
+    const auto r = g_trig_real.find(id);
+    return r != g_trig_real.end() && g_fx.count(r->second) ? r->second : id;
+}
+
 static int hk_cand_run(TfCpu *c) {   /* (side, effect card id, step): the queue starts empty; returns how many cards were queued */
-    const auto it = g_fx.find((uint16_t)A->reg(c, 5));
+    const auto it = g_fx.find(fx_card((uint16_t)A->reg(c, 5)));
     if (it == g_fx.end()) return 0;
     uint32_t *ctr = (uint32_t *)A->mem(CAND_COUNTER);
     *ctr = 0;
@@ -667,7 +674,7 @@ static int hk_cand_run(TfCpu *c) {   /* (side, effect card id, step): the queue 
 }
 
 static int hk_cand_count(TfCpu *c) {   /* same scan, but only counts: the queue is put back as it was */
-    const auto it = g_fx.find((uint16_t)A->reg(c, 5));
+    const auto it = g_fx.find(fx_card((uint16_t)A->reg(c, 5)));
     if (it == g_fx.end()) return 0;
     uint32_t *ctr = (uint32_t *)A->mem(CAND_COUNTER);
     const uint32_t before = *ctr;
@@ -765,7 +772,38 @@ static int hk_trigger_debug(TfCpu *c) {
     const uint16_t id = *(const uint16_t *)A->mem(key) & 0x1fff;
     A->call_original(c, F_TRIGGER);
     static int n;
-    if (n < 400) { n++; A->log("trigger: card %u event %08x a2 %u flags %08x key+2 %02x%02x -> %u", id, ev, a2, fl, A->mem(key)[2], A->mem(key)[3], A->reg(c, 2)); }
+    if (n < 4000) { n++; A->log("trigger: card %u event %08x a2 %u flags %08x key+2 %02x%02x -> %u", id, ev, a2, fl, A->mem(key)[2], A->mem(key)[3], A->reg(c, 2)); }
+    return 1;
+}
+
+
+/* Triggers (trigger.bin, "TF3T", u32 n, {u16 card id, u16 donor id}): the game decides WHEN a card's effect starts in one predicate, 09f30ddc(event, key, a2, flags),
+ * a chain of `id == N` branches. A new card whose trigger is the same as a game card's ("when this card is sent to the Graveyard", "FLIP", ...) is asked as that
+ * donor: the key's id is swapped while the predicate runs. The effect itself comes from the borrowed record and the data effect of the card. */
+static std::map<uint16_t, uint16_t> g_trig;
+
+static void trig_load(void) {
+    const std::wstring p = std::wstring(A->mod_dir) + L"\\trigger.bin";
+    FILE *f = _wfopen(p.c_str(), L"rb");
+    if (!f) return;
+    uint32_t h[2];
+    if (fread(h, 4, 2, f) == 2 && h[0] == 0x54334654u /* "TF3T" */)
+        for (uint32_t i = 0; i < h[1]; i++) { uint16_t e[2]; if (fread(e, 2, 2, f) != 2) break; g_trig[e[0]] = e[1]; }
+    fclose(f);
+    A->log("TF3 Cards: %u trigger aliases loaded", (unsigned)g_trig.size());
+}
+
+static int hk_trigger(TfCpu *c) {
+    const uint32_t key = A->reg(c, 5);
+    if (key < 0x08000000u || key > 0x0a000000u - 8) return 0;
+    uint16_t *idp = (uint16_t *)A->mem(key);
+    const auto it = g_trig.find(*idp & 0x1fff);
+    if (it == g_trig.end()) return 0;
+    const uint16_t saved = *idp;
+    *idp = (uint16_t)((saved & ~0x1fff) | it->second);
+    A->call_original(c, F_TRIGGER);
+    *idp = saved;
+    if (A->reg(c, 2)) g_trig_real[it->second] = (uint16_t)(saved & 0x1fff);   /* the pending effect carries the donor's id: remember who it really is */
     return 1;
 }
 
@@ -823,6 +861,7 @@ extern "C" __declspec(dllexport) int tfmod_init(const TfModApi *api) {
     A = api;
     ported_load();
     fx_load();
+    trig_load();
     stat_load();
     ext_init();
     cfg_load();
@@ -841,6 +880,7 @@ extern "C" __declspec(dllexport) int tfmod_init(const TfModApi *api) {
         if (on('e')) A->hook(F_EHP_MEMBER, hk_ehp_member);
     }
     if (getenv("TF3_DEBUG_TRIG")) A->hook(F_TRIGGER, hk_trigger_debug);
+    else if (!g_trig.empty()) A->hook(F_TRIGGER, hk_trigger);
     if (!g_stat.empty()) A->hook(F_STATS, hk_stats);
     if (!g_fx.empty()) { A->hook(F_CAND_RUN, hk_cand_run); A->hook(F_CAND_COUNT, hk_cand_count); }
     A->hook(F_LP_AMOUNTS, hk_lp_amounts);
