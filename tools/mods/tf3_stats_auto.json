@@ -1,0 +1,26 @@
+{
+ "7125": {
+  "scope": "equip",
+  "atk": 500,
+  "def": 0
+ },
+ "7152": {
+  "scope": "equip",
+  "atk": 400,
+  "def": 0,
+  "target": {
+   "monster": true,
+   "attribute": "dark"
+  }
+ },
+ "7446": {
+  "scope": "equip",
+  "atk": 300,
+  "def": 0
+ },
+ "7691": {
+  "scope": "equip",
+  "atk": 500,
+  "def": 0
+ }
+}

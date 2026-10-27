@@ -85,23 +85,28 @@ def resolver(gids, spec=None):
         cid = int(k)
         if cid not in gids:
             continue
+        likes[cid] = e["like"]
+        if "zone" not in e:      # only borrows the record (equip cards: the rule that gives the bonus is in stat.bin)
+            continue
         ids = sorted(i for i, p in prop.items() if combina(p, e["filter"]))
         entradas.append(struct.pack("<HBBI", gids[cid], ZONAS[e["zone"]], 0, len(ids)) + struct.pack("<%dH" % len(ids), *ids))
-        likes[cid] = e["like"]
     return b"TF3E" + struct.pack("<I", len(entradas)) + b"".join(entradas), likes
 
 
 SPEC_STATS = os.path.join(os.path.dirname(os.path.abspath(__file__)), "tf3_stats.json")
-ESCOPOS = {"self": 0, "own": 1, "opp": 2, "all": 3}
+SPEC_STATS_AUTO = os.path.join(os.path.dirname(os.path.abspath(__file__)), "tf3_stats_auto.json")
+ESCOPOS = {"self": 0, "own": 1, "opp": 2, "all": 3, "equip": 4}
 LADOS = {None: 0, "own": 1, "opp": 2, "any": 3}
 
 
 def resolver_stats(gids, spec=None):
     """-> stat.bin bytes: passive ATK/DEF rules of the monsters among the installed cards (see the plugin: hk_stats).
     Spec: { "<TF3 id>": {"scope": self|own|opp|all, "atk": N, "def": N, "target": {filter}, "cond": {"side": own|opp|any, "filter": {...}, "per": bool, "excl": bool}} }
-      scope self: the bonus goes to the card itself; own / opp / all: to the monsters of that side that match `target` (all when absent)
+      scope self: the bonus goes to the card itself; equip: to the monster the equip card is attached to; own / opp / all: to the monsters of that side that match `target` (all when absent)
       cond: the rule only works while a face-up monster matching the filter is on that side (relative to the card); per = once per such monster; excl = not counting the card"""
-    spec = spec if spec is not None else json.load(open(SPEC_STATS, encoding="utf-8"))
+    if spec is None:
+        spec = json.load(open(SPEC_STATS_AUTO, encoding="utf-8")) if os.path.exists(SPEC_STATS_AUTO) else {}
+        spec.update(json.load(open(SPEC_STATS, encoding="utf-8")))
     prop = propriedades(gids)
     out = []
     for k, r in sorted(spec.items(), key=lambda x: int(x[0])):

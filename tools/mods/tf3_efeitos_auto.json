@@ -75,5 +75,21 @@
    "type": "plant"
   },
   "name": "Seed of Deception"
+ },
+ "7125": {
+  "like": 4310,
+  "name": "Lucky Iron Axe"
+ },
+ "7152": {
+  "like": 4308,
+  "name": "Sword of Dark Rites"
+ },
+ "7446": {
+  "like": 4310,
+  "name": "Vicious Claw"
+ },
+ "7691": {
+  "like": 4310,
+  "name": "Synchro Boost"
  }
 }

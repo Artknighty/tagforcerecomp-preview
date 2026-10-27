@@ -718,10 +718,19 @@ static int hk_stats(TfCpu *c) {
     const uint32_t me = zone_card(side, slot);
     if (!me) return 1;
     int32_t *atk = (int32_t *)A->mem(out + 20), *def = (int32_t *)A->mem(out + 24);
+    for (const auto &r : g_stat) {
+        if (r.scope != 4) continue;   /* equip card: a face-up Spell/Trap zone of this side holds it and its u32 at +4 names the equipped monster zone + 1 */
+        if (!r.target.empty() && !std::binary_search(r.target.begin(), r.target.end(), (uint16_t)me)) continue;
+        for (uint32_t k = 0; k < 5; k++) {
+            const uint32_t e = DUEL_SIDES + side * DUEL_SIDE_SIZE + 0x30 + 100 + 20 * k;
+            const uint32_t id = *(const uint16_t *)A->mem(e) & 0x1fff, flags = *(const uint32_t *)A->mem(e + 0x10);
+            if (id == r.src && !(flags & 0x22) && *(const uint32_t *)A->mem(e + 4) == slot + 1) { *atk += r.atk; *def += r.def; }
+        }
+    }
     for (const auto &r : g_stat)
         for (uint32_t ss = 0; ss < 2; ss++)
             for (uint32_t sk = 0; sk < 5; sk++) {
-                if (zone_card(ss, sk) != r.src) continue;
+                if (r.scope == 4 || zone_card(ss, sk) != r.src) continue;
                 const bool mine = ss == side;
                 if (r.scope == 0 ? (ss != side || sk != slot) : r.scope == 1 ? !mine : r.scope == 2 ? mine : false) continue;
                 if (r.scope != 0 && !r.target.empty() && !std::binary_search(r.target.begin(), r.target.end(), (uint16_t)me)) continue;
