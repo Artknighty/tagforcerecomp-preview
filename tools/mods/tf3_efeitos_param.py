@@ -4,7 +4,8 @@ A new card borrows the effect record of a game card that plays the same way (`li
 here, once, into a sorted set of duel card ids (Tag Force 1 ids and the ids of the new cards), so any predicate works and the plugin only does a lookup.
 
 Spec file (tools/mods/tf3_efeitos.json): { "<TF3 card id>": {"like": <TF1 card id>, "zone": "deck", "filter": {...}} }
-  zone    "deck": the effect searches the Deck (like Reinforcement of the Army, id 5328)
+  zone    "deck": searches the Deck (like Reinforcement of the Army, 5328); "grave": picks from the Graveyard (The Warrior Returning Alive, 5330);
+          "grave_summon": Graveyard cards that can be Special Summoned (Call of the Haunted, 4989); "hand": Special Summon from the hand (Magnet Circle LV2, 6572)
   filter  monster (bool), normal (bool: no effect), level_min, level_max, type (name or number), attribute (name or number),
           atk_min, atk_max, def_min, def_max, name_has (substring of the English name, case-insensitive), name_is (exact English name)
 Output: effects.bin = "TF3E", u32 n, then per card: u16 duel id, u8 zone, u8 0, u32 count, u16 ids[count] (sorted).
@@ -17,7 +18,7 @@ import sys
 RAIZ = os.path.dirname(os.path.dirname(os.path.dirname(os.path.abspath(__file__))))
 sys.path.insert(0, os.path.join(RAIZ, "tools", "game"))
 SPEC = os.path.join(os.path.dirname(os.path.abspath(__file__)), "tf3_efeitos.json")
-ZONAS = {"deck": 1}
+ZONAS = {"deck": 1, "grave": 2, "grave_summon": 3, "hand": 4}
 TIPOS = {"dragon": 1, "zombie": 2, "fiend": 3, "pyro": 4, "sea serpent": 5, "rock": 6, "machine": 7, "fish": 8, "dinosaur": 9, "insect": 10,
          "beast": 11, "beast-warrior": 12, "plant": 13, "aqua": 14, "warrior": 15, "winged beast": 16, "fairy": 17, "spellcaster": 18,
          "thunder": 19, "reptile": 20, "psychic": 21}

@@ -602,7 +602,7 @@ static int hk_effect_record(TfCpu *c) {   /* looks the record up as the card it 
  * same way (`like`) and only says WHICH cards its effect may pick: the game keeps one small function per card that scans a zone and queues the cards it accepts
  * (table at 09f76818, dispatchers 09f243c8 / 09f24428 keyed by the effect's card id; 09f240b4(side, kind, index) queues one card of zone `kind`). For the cards
  * of this file the dispatchers run the scan below instead: every card of the zone whose id is in the card's id set is queued.
- * Zones: 1 = deck (the scan of Reinforcement of the Army: ids at side+928, count at side+16, kind 13). */
+ */
 static const uint32_t F_CAND_RUN = 0x09f243c8, F_CAND_COUNT = 0x09f24428, F_CAND_ADD = 0x09f240b4;
 static const uint32_t DUEL_SIDES = 0x09f80000u - 25364u, DUEL_SIDE_SIZE = 4012, CAND_COUNTER = 0x09f80000u - 28440u;
 struct DataEffect { uint8_t zone; std::vector<uint16_t> ids; };
@@ -626,13 +626,23 @@ static void fx_load(void) {
     A->log("TF3 Cards: %u data effects loaded", (unsigned)g_fx.size());
 }
 
-static void fx_scan(TfCpu *c, uint32_t side_arg, const DataEffect &e) {
-    if (e.zone != 1) return;
+/* zones: 1 = deck (ids at side+928, count at side+16, kind 13), 2 = graveyard (ids at side+1808, count at side+20, kind 14), 3 = graveyard cards that can be
+ * Special Summoned (as 2, plus the game's summon check 09f55288 of Call of the Haunted), 4 = hand: the game calls the function once per hand slot (a2 = slot,
+ * ids at side+288, kind 11, plus the summon check 09f43db8 of Magnet Circle LV2) */
+static const uint32_t F_SUMMON_CHECK_GY = 0x09f55288, F_SUMMON_CHECK_HAND = 0x09f43db8;
+static void fx_scan(TfCpu *c, uint32_t side_arg, uint32_t slot, const DataEffect &e) {
     const uint32_t base = DUEL_SIDES + (side_arg & 1) * DUEL_SIDE_SIZE;
-    const uint32_t n = *(const uint32_t *)A->mem(base + 16);
+    const auto wanted = [&](uint32_t off, uint32_t i) { return std::binary_search(e.ids.begin(), e.ids.end(), (uint16_t)(*(const uint16_t *)A->mem(base + off + i * 4) & 0x1fff)); };
+    if (e.zone == 4) {
+        if (slot < 40 && wanted(288, slot) && call_game(c, F_SUMMON_CHECK_HAND, side_arg, *(const uint16_t *)A->mem(base + 288 + slot * 4) & 0x1fff, 0, 0))
+            call_game(c, F_CAND_ADD, side_arg, 11, slot, 0);
+        return;
+    }
+    const uint32_t off = e.zone == 1 ? 928 : 1808, n = *(const uint32_t *)A->mem(base + (e.zone == 1 ? 16 : 20)), kind = e.zone == 1 ? 13 : 14;
     for (uint32_t i = 0; i < n && i < 160; i++) {
-        const uint16_t id = *(const uint16_t *)A->mem(base + 928 + i * 4) & 0x1fff;
-        if (std::binary_search(e.ids.begin(), e.ids.end(), id)) call_game(c, F_CAND_ADD, side_arg, 13, i, 0);
+        if (!wanted(off, i)) continue;
+        if (e.zone == 3 && !call_game(c, F_SUMMON_CHECK_GY, side_arg, side_arg, i, 0)) continue;
+        call_game(c, F_CAND_ADD, side_arg, kind, i, 0);
     }
 }
 
@@ -641,7 +651,7 @@ static int hk_cand_run(TfCpu *c) {   /* (side, effect card id, step): the queue 
     if (it == g_fx.end()) return 0;
     uint32_t *ctr = (uint32_t *)A->mem(CAND_COUNTER);
     *ctr = 0;
-    fx_scan(c, A->reg(c, 4), it->second);
+    fx_scan(c, A->reg(c, 4), A->reg(c, 6), it->second);
     A->set_reg(c, 2, *ctr);
     return 1;
 }
@@ -651,7 +661,7 @@ static int hk_cand_count(TfCpu *c) {   /* same scan, but only counts: the queue 
     if (it == g_fx.end()) return 0;
     uint32_t *ctr = (uint32_t *)A->mem(CAND_COUNTER);
     const uint32_t before = *ctr;
-    fx_scan(c, A->reg(c, 4), it->second);
+    fx_scan(c, A->reg(c, 4), A->reg(c, 6), it->second);
     A->set_reg(c, 2, *ctr - before);
     *ctr = before;
     return 1;
