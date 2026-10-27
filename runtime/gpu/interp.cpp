@@ -194,6 +194,10 @@ bool same_kind_anytex(const Draw &a, const Draw &b) {
 }
 inline uint32_t avg_col(uint32_t a, uint32_t b) { return ((a & 0xfefefefeu) >> 1) + ((b & 0xfefefefeu) >> 1) + (a & b & 0x01010101u); }
 
+/* A draw without a texture (floor shadows under the map characters: flat draws whose first vertex carries unused u,v that flip between 20 and 41 about once a second)
+ * never samples u,v, so a u,v change is not a different object: refusing the pair made every shadow jump to the new place for a frame (flicker). TF_INTERP_NOFLATUV=1 disables */
+static const bool g_flatuv = getenv("TF_INTERP_NOFLATUV") == nullptr;
+inline bool uv_differs(const Draw &c, const GpuVtx &b, const GpuVtx &a) { return (c.s.tex != 0 || !g_flatuv) && (fabsf(b.u - a.u) > 2.f || fabsf(b.v - a.v) > 2.f); }
 uint64_t g_cur_vb; float g_T_mul = 1.f;   /* g_T_mul = 2 no autoteste (F0->F2 anda o dobro) */
 /* fracao do caminho entre o quadro anterior (0) e o novo (1) que o quadro intermediario mostra: 0,5 no 60 FPS; 0,25 / 0,5 / 0,75 no 120 FPS.
  * Em 0,5 as contas sao as de sempre, bit a bit (o 60 FPS nao muda). */
@@ -266,7 +270,7 @@ static std::vector<PreC> g_pcache;
 static std::vector<int8_t> g_bcache; static uint64_t g_bcache_vb = ~0ull; static size_t g_bcache_nv, g_bcache_pv;
 static double g_pf_calc, g_pf_rtt, g_pf_draw; static int g_pf_n;
 struct RingFrame { uint64_t vb = 0; std::string text; };
-static std::deque<RingFrame> g_ring;
+static std::deque<RingFrame> g_ring, g_fring;   /* g_fring: ~5 s at 120 FPS (600) in which a flat (untextured) draw, e.g. a floor shadow, was unmatched or only partly interpolated */
 bool interp_lists(const Rec &pv, Rec &cur, int target, int depth, std::vector<Frozen> &tmp) {
     const double tcalc0 = gpu_now_us();
     std::vector<GpuVtx> &g_out = g_outs[depth];
@@ -274,7 +278,7 @@ bool interp_lists(const Rec &pv, Rec &cur, int target, int depth, std::vector<Fr
     /* pareia cada desenho novo com o desenho anterior de mesma forma que menos andou (janela em torno do ultimo pareado; ordem de desenho
      * pode mudar, ex.: o botao destacado do menu) */
     const size_t pn = pv.d.size(), cn = cur.d.size();
-    std::vector<int> match(cn, -1); std::vector<char> used(pn, 0); size_t hint = 0, nm = 0;   std::vector<char> uvchg(cn, 0);   /* uvchg: sprite 3D (boneco do mapa) que trocou de quadro de animacao (outro recorte da mesma textura) mas e do mesmo tamanho e esta perto: par com UV novo */
+    std::vector<int> match(cn, -1); std::vector<char> used(pn, 0); size_t hint = 0, nm = 0;   std::vector<char> uvchg(cn, 0); std::vector<uint16_t> npin(cn, 0);   /* npin: triangles of each draw left at the new place (not interpolated), for the flat-draw ring */   /* uvchg: sprite 3D (boneco do mapa) que trocou de quadro de animacao (outro recorte da mesma textura) mas e do mesmo tamanho e esta perto: par com UV novo */
     /* a sliding text line: this glyph pair moved by the same offset as a nearby pair with the same texture rectangle (see the glyph rule below) */
     static const bool no_slide = getenv("TF_INTERP_NOSLIDE") != nullptr;
     auto slide_pair = [&](size_t j, size_t k) -> bool {
@@ -327,7 +331,7 @@ bool interp_lists(const Rec &pv, Rec &cur, int target, int depth, std::vector<Fr
             if (used[k] || !same_kind(pv.d[k], c)) continue;
             const GpuVtx *a = &pv.v[pv.d[k].off], *b = &cur.v[c.off]; float cost = 0; const uint32_t step = std::max<uint32_t>(1, c.n / 48);
             bool uvok = true;
-            for (uint32_t q = 0; q < c.n && uvok; q += step) { cost += fabsf(b[q].x - a[q].x) + fabsf(b[q].y - a[q].y); if (fabsf(b[q].u - a[q].u) > 2.f || fabsf(b[q].v - a[q].v) > 2.f) uvok = false; }
+            for (uint32_t q = 0; q < c.n && uvok; q += step) { cost += fabsf(b[q].x - a[q].x) + fabsf(b[q].y - a[q].y); if (uv_differs(c, b[q], a[q])) uvok = false; }
             if (!uvok) continue;   /* outro recorte da textura: nao e o mesmo objeto */
             cost /= (float)((c.n + step - 1) / step);
             /* identical sprites of different sizes far apart (opponent's small hand card vs the player's big one, same card-back texture, drawn
@@ -436,11 +440,11 @@ bool interp_lists(const Rec &pv, Rec &cur, int target, int depth, std::vector<Fr
         /* black box for the F8 mark: the pairing of the last frames (every small sprite: what it was paired with, or UNMATCHED), so the
          * cause of a flicker can be read from the session log without a replay (interp_audit_flush) */
         if (g_ring.empty() || g_ring.back().vb != g_cur_vb) {
-            if (g_ring.size() >= 8) g_ring.pop_front();
+            if (g_ring.size() >= 600) g_ring.pop_front();
             g_ring.push_back(RingFrame()); g_ring.back().vb = g_cur_vb;
             std::string &o = g_ring.back().text; char buf[220];
             for (size_t j = 0; j < cn; j++) {
-                const Draw &c = cur.d[j]; if ((c.n != 6 && c.n != 12) || c.s.tex == 0) continue;
+                const Draw &c = cur.d[j]; if (c.n > 96) continue;   /* flat (untextured) draws too: the floor shadows under the map characters */
                 float x0 = 1e9f, x1 = -1e9f, y0 = 1e9f, y1 = -1e9f; for (uint32_t q = 0; q < c.n; q++) { const GpuVtx &w = cur.v[c.off + q]; x0 = std::min(x0, w.x); x1 = std::max(x1, w.x); y0 = std::min(y0, w.y); y1 = std::max(y1, w.y); }
                 if (x1 - x0 > 140 || y1 - y0 > 140 || x1 < 0 || x0 > 480) continue;
                 if (match[j] < 0) { snprintf(buf, sizeof buf, "  %zu tex=%x %dx%d u=%.0f,%.0f box %.0f,%.0f %.0fx%.0f UNMATCHED\n", j, c.s.tex, c.s.tw, c.s.th, cur.v[c.off].u, cur.v[c.off].v, x0, y0, x1 - x0, y1 - y0); o += buf; continue; }
@@ -521,7 +525,7 @@ bool interp_lists(const Rec &pv, Rec &cur, int target, int depth, std::vector<Fr
             static std::vector<float> mx, my, P; mx.clear(); my.clear(); P.clear();
             for (uint32_t k = 0; k + 2 < c.n && k + 2 < p.n; k += 3) {
                 const GpuVtx *b = &cur.v[c.off + k], *a = &pv.v[p.off + k]; bool ok = true;
-                for (int q = 0; q < 3 && ok; q++) if (fabsf(b[q].u - a[q].u) > 2.f || fabsf(b[q].v - a[q].v) > 2.f) ok = false;
+                for (int q = 0; q < 3 && ok; q++) if (uv_differs(c, b[q], a[q])) ok = false;
                 if (!ok) continue;
                 mx.push_back((b[0].x + b[1].x + b[2].x - a[0].x - a[1].x - a[2].x) / 3.f); my.push_back((b[0].y + b[1].y + b[2].y - a[0].y - a[1].y - a[2].y) / 3.f);
                 for (int q = 0; q < 3; q++) { P.push_back(a[q].x); P.push_back(a[q].y); P.push_back(b[q].x); P.push_back(b[q].y); }
@@ -582,7 +586,7 @@ bool interp_lists(const Rec &pv, Rec &cur, int target, int depth, std::vector<Fr
                 const GpuVtx *a = &pv.v[p.off + k]; float md = 0;
                 for (int q = 0; q < 3; q++) md = std::max(md, hypotf(b[q].x - a[q].x, b[q].y - a[q].y));
                 g_st_tris++;
-                if (md > 24.f * g_T_mul) { pinned.push_back(c.off + k); continue; }
+                if (md > 24.f * g_T_mul) { npin[j]++; pinned.push_back(c.off + k); continue; }
                 g_st_tris_ok++; dmax = std::max(dmax, md); dany = true;
                 for (int q = 0; q < 3; q++) { o[q] = b[q]; o[q].x = mix_f(a[q].x, b[q].x); o[q].y = mix_f(a[q].y, b[q].y); o[q].z = mix_f(a[q].z, b[q].z); }
                 commit(b, o);
@@ -601,7 +605,7 @@ bool interp_lists(const Rec &pv, Rec &cur, int target, int depth, std::vector<Fr
                 if (kk < 0 || kk + 2 >= (int64_t)p.n) continue;
                 const GpuVtx *a = &pv.v[p.off + kk]; bool ok = true; float cost = 0;
                 for (int q = 0; q < 3 && ok; q++) {
-                    if (fabsf(b[q].u - a[q].u) > 2.f || fabsf(b[q].v - a[q].v) > 2.f) ok = false;
+                    if (uv_differs(c, b[q], a[q])) ok = false;
                     else cost += dev(a[q], b[q]);
                 }
                 if (ok && cost < bestc) { bestc = cost; best = a; bestmi = mi; }
@@ -651,7 +655,7 @@ bool interp_lists(const Rec &pv, Rec &cur, int target, int depth, std::vector<Fr
                 if (gy1 - gy0 <= 48.f) ok = false;
             }
             if (c.cull) face[(c.off + k) / 3] = (ok && best && front(best, c.cull) != front(b, c.cull)) ? 0 : (front(b, c.cull) ? 1 : 2);
-            if (!ok) { if (v1b(7)) commit(b, o); else pinned.push_back(c.off + k); if (dump_now) fprintf(stderr, "[idump2] cur %zu tri %u: NAO interpolado (par %d, md %.1f, e %.1f, prev_disp %.1f)%c", j, k / 3, bestmi, md, e, prev_disp, 10); continue; }
+            if (!ok) { if (v1b(7)) commit(b, o); else { npin[j]++; pinned.push_back(c.off + k); } if (dump_now) fprintf(stderr, "[idump2] cur %zu tri %u: NAO interpolado (par %d, md %.1f, e %.1f, prev_disp %.1f)%c", j, k / 3, bestmi, md, e, prev_disp, 10); continue; }
             g_st_tris_ok++;
             for (int q = 0; q < 3; q++) {
                 o[q].x = mix_f(a[q].x, b[q].x); o[q].y = mix_f(a[q].y, b[q].y); o[q].z = mix_f(a[q].z, b[q].z);
@@ -667,6 +671,18 @@ bool interp_lists(const Rec &pv, Rec &cur, int target, int depth, std::vector<Fr
         if (const std::array<float, 3> *v = shared.find(((uint64_t)xb << 32 | yb) * 0x9E3779B97F4A7C15ull ^ zb)) { o.x = (*v)[0]; o.y = (*v)[1]; o.z = (*v)[2]; }
     };
     for (uint32_t i : pinned) for (int q = 0; q < 3; q++) follow(cur.v[i + q], g_out[i + q]);
+    if (depth == 0 && getenv("TF_INTERP_NOAUDIT") == nullptr && (g_fring.empty() || g_fring.back().vb != g_cur_vb)) {
+        std::string o; char buf[200];
+        for (size_t j = 0; j < cn; j++) {
+            const Draw &c = cur.d[j]; if (c.n > 96 || c.s.tex != 0 || c.s.clear || (match[j] >= 0 && !npin[j])) continue;
+            float x0 = 1e9f, x1 = -1e9f, y0 = 1e9f, y1 = -1e9f; for (uint32_t q = 0; q < c.n; q++) { const GpuVtx &w = cur.v[c.off + q]; x0 = std::min(x0, w.x); x1 = std::max(x1, w.x); y0 = std::min(y0, w.y); y1 = std::max(y1, w.y); }
+            if (x1 - x0 > 140 || y1 - y0 > 140 || x1 < 0 || x0 > 480) continue;
+            if (match[j] < 0) snprintf(buf, sizeof buf, "  %zu flat n=%u box %.0f,%.0f %.0fx%.0f UNMATCHED\n", j, c.n, x0, y0, x1 - x0, y1 - y0);
+            else snprintf(buf, sizeof buf, "  %zu flat n=%u box %.0f,%.0f %.0fx%.0f <- prev %d: %u of %u triangles not interpolated\n", j, c.n, x0, y0, x1 - x0, y1 - y0, match[j], (unsigned)npin[j], c.n / 3);
+            o += buf;
+        }
+        if (!o.empty()) { if (g_fring.size() >= 600) g_fring.pop_front(); g_fring.push_back(RingFrame()); g_fring.back().vb = g_cur_vb; g_fring.back().text = o; }
+    }
     /* desenhos sem par (ex.: poligonos cujo numero de triangulos mudou por recorte) ficam no lugar novo, mas os vertices que dividem posicao com um
      * desenho interpolado vao junto: senao abre uma rachadura entre os dois e o fundo aparece */
     for (size_t j = 0; j < cn; j++) {
@@ -884,5 +900,6 @@ bool interp_extra(float t, int res) {
 void interp_extra_done(void) { g_old.clear(); g_have_old = false; for (const Frozen &f : g_rtt_held) g_fpool.push_back(f); g_rtt_held.clear(); g_rtt_cache.clear(); g_rtt_cache_on = false; }   /* devolve as copias congeladas de g_old ao pool */
 void interp_audit_flush(unsigned mark) {   /* F8: the pairing ring kept by the audit in interp_lists */
     for (const RingFrame &r : g_ring) fprintf(stderr, "[iring] mark %u vb=%llu\n%s", mark, (unsigned long long)r.vb, r.text.c_str());
+    for (const RingFrame &r : g_fring) fprintf(stderr, "[iflat] mark %u vb=%llu\n%s", mark, (unsigned long long)r.vb, r.text.c_str());
 }
 void interp_use_scratch(int k) { scratch_use(k); }   /* (scratch_use fica no namespace anonimo, junto do g_scratch) */
