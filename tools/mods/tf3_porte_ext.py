@@ -5,12 +5,10 @@ gets the next free index (2480, 2481, ...) and the next free id (6958, 6959, ...
 CARD_Prop holds). The pieces:
   ext_info_<l>.bin          CARD_Prop / Pass / Genre rows, CARD_IntID, CARD_Indx / Name / Desc texts and the CARD_Sort array of the new cards; the plugin
                             appends them to copies of the game's tables (the cardinfo file itself is not in the mod)
-  CARD_IntID                grows to cover the new ids ([id - 4000] = index; the game looks it up without a bound check)
-  CARD_Indx / Name / Desc   text at the end, one Indx entry per new index, the sentinel moves
-  CARD_Sort                 alphabetical rank per index: rebuilt so the new cards sit where their names belong (per language)
-  card/cardm_<l>.cip, cardh_<l>.cip   rebuilt (tf3_porte_arte.extend): index and blocks for the new ids
+                            (CARD_IntID grows to cover the new ids; CARD_Sort is the alphabetical rank per index, rebuilt per language)
+  card/cardm_<l>.cip, cardh_<l>.cip   rebuilt (tf3_porte_arte.extend, lazy mode): index for the new ids, no art, a pool of placeholder blocks;
+  ext_art_<m|h>_<l>.bin     the art blocks of the new cards: the plugin copies one into a pool block when the game asks for that card
   deck/all_<l>.ehp          fileTbl.dat (ids in atlas order) and cis_all.gim (thumbnail atlas) grow (tf3_porte_atlas.extend)
-  ext_desc_<l>.bin          the descriptions of the new cards (the plugin points their CARD_Indx entries at them: the file may not grow much)
   ported.txt                "<game id> <TF3 id> <TF1 id whose effect it uses or 0> <name>", read by the TF3Cards plugin, which also gives the
                             collection records of the new indices (the save has no room for them)
 Usage:  python tools/mods/tf3_porte_ext.py <mod folder> <TF3 id> [<TF3 id> ...]
