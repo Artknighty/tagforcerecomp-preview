@@ -756,6 +756,19 @@ static int hk_stats(TfCpu *c) {
     return 1;
 }
 
+
+/* research aid (TF3_DEBUG_TRIG=1): logs every trigger check (libduel 09f30ddc(event, key, a2, flags): does the effect of the card of `key` trigger on this event?) */
+static const uint32_t F_TRIGGER = 0x09f30ddc;
+static int hk_trigger_debug(TfCpu *c) {
+    const uint32_t ev = A->reg(c, 4), key = A->reg(c, 5), a2 = A->reg(c, 6), fl = A->reg(c, 7);
+    if (key < 0x08000000u || key > 0x0a000000u - 8) return 0;
+    const uint16_t id = *(const uint16_t *)A->mem(key) & 0x1fff;
+    A->call_original(c, F_TRIGGER);
+    static int n;
+    if (n < 400) { n++; A->log("trigger: card %u event %08x a2 %u flags %08x key+2 %02x%02x -> %u", id, ev, a2, fl, A->mem(key)[2], A->mem(key)[3], A->reg(c, 2)); }
+    return 1;
+}
+
 /* research aid (TF3_DEBUG_STREAM=1): dumps the card-art stream object when the game queues a read far beyond the file (BOOT 0882ead0:
  * a1 = stream object, a3 = file position; the object keeps the .cip header at +172, the index entries {unit, state} follow at +0x30) */
 static int hk_debug_obj(TfCpu *c) {   /* TF3_DEBUG_OBJ: first request of each .cip stream object (slot ring of the preloader) */
@@ -827,6 +840,7 @@ extern "C" __declspec(dllexport) int tfmod_init(const TfModApi *api) {
         if (on('s')) { A->hook(F_STREAM_REQUEST, hk_stream_request); A->hook(F_STREAM_READY, hk_stream_ready); A->hook(F_STREAM_GET, hk_stream_get); A->hook(F_TEXTURE_FROM_DATA, hk_texture_from_data); }
         if (on('e')) A->hook(F_EHP_MEMBER, hk_ehp_member);
     }
+    if (getenv("TF3_DEBUG_TRIG")) A->hook(F_TRIGGER, hk_trigger_debug);
     if (!g_stat.empty()) A->hook(F_STATS, hk_stats);
     if (!g_fx.empty()) { A->hook(F_CAND_RUN, hk_cand_run); A->hook(F_CAND_COUNT, hk_cand_count); }
     A->hook(F_LP_AMOUNTS, hk_lp_amounts);
