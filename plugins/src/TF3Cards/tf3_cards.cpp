@@ -254,51 +254,102 @@ static int hk_texture_from_data(TfCpu *c) {
     return 0;
 }
 
-/* Descriptions of the cards beyond the table: the game reads the whole cardinfo_<l>.ehp into a fixed buffer (BOOT 08ac7714, ~190 KB of room), which
- * the texts of a few hundred cards would overflow, so the mod keeps them in ext_desc_<l>.bin (u32 count, u32 offsets[count + 1], UTF-16 texts) and
- * the CARD_Indx entries of the new cards have an empty text at the end of CARD_Desc. Every time the game has (re)loaded the file, this points those
- * entries at the plugin's copy of the texts (the offset is relative to CARD_Desc: 32-bit wrap-around reaches any address). */
-static const uint32_t CARDINFO_BUF = 0x08ac7714, TF1_INDEX_COUNT = 2480;
-static std::map<char, uint32_t> g_desc_mem;
+/* The tables of the cards beyond the game's table. The game reads the whole cardinfo_<l>.ehp into a fixed buffer (BOOT 08ac7714, little room), so the mod
+ * does not carry that file: ext_info_<l>.bin (tools/mods/tf3_porte_ext.py) holds the rows of the new cards, and when the game looks a CARD_ member up in the
+ * file (BOOT 08833540(ehp, name, &size), which it does once while loading) the plugin answers with a copy of the table plus the new rows (guest memory,
+ * never freed, one per member). Every consumer then sees the longer tables: CARD_Prop/Pass/Genre rows, CARD_IntID, CARD_Indx/Name/Desc and CARD_Sort. */
+static const uint32_t F_EHP_MEMBER = 0x08833540, CARDINFO_BUF = 0x08ac7714, TF1_INDEX_COUNT = 2480;
+struct ExtInfo { std::vector<uint8_t> raw; bool tried; };
+static std::map<char, ExtInfo> g_info;
+struct Built { uint32_t orig, orig_size, ptr, size; };
+static std::map<std::string, Built> g_built;
 
-static void desc_patch(void) {
-    if (!g_ext_n) return;
-    const uint8_t *b = A->mem(CARDINFO_BUF);
-    if (memcmp(b, "EHP\x03", 4) != 0) return;
+static ExtInfo &ext_info(char lang) {
+    ExtInfo &e = g_info[lang];
+    if (e.tried) return e;
+    e.tried = true;
+    const std::wstring name = std::wstring(L"ext_info_") + (wchar_t)lang + L".bin";
+    if (FILE *f = _wfopen((std::wstring(A->mod_dir) + L"\\" + name).c_str(), L"rb")) {
+        fseek(f, 0, SEEK_END); const long len = ftell(f); fseek(f, 0, SEEK_SET);
+        e.raw.resize((size_t)len);
+        if (fread(e.raw.data(), 1, e.raw.size(), f) != e.raw.size() || len < 20 || memcmp(e.raw.data(), "TF3I", 4) != 0 || *(const uint32_t *)(e.raw.data() + 4) != g_ext_n) e.raw.clear();
+        fclose(f);
+    }
+    A->log("TF3 Cards: ext_info_%c.bin: %zu bytes", lang, e.raw.size());
+    return e;
+}
+
+static uint32_t ehp_member_size(uint32_t base, const char *want) {
+    const uint8_t *b = A->mem(base);
+    if (memcmp(b, "EHP\x03", 4) != 0) return 0;
     const uint32_t n = *(const uint32_t *)(b + 12);
-    if (n < 1 || n > 64) return;
-    uint32_t desc_base = 0, desc_len = 0, indx = 0, indx_len = 0;
-    char lang = 0;
-    for (uint32_t i = 0; i < n; i++) {
-        const uint32_t no = *(const uint32_t *)(b + 16 + 8 * i), dof = *(const uint32_t *)(b + 20 + 8 * i);
-        if (no > 0x2000) return;
+    for (uint32_t i = 0; i < n && i < 64; i++) {
+        const uint32_t no = *(const uint32_t *)(b + 16 + 8 * i);
+        if (no > 0x2000) return 0;
         const char *name = (const char *)(b + no);
-        const uint32_t size = *(const uint32_t *)(b + no + strlen(name) + 1);
-        if (strncmp(name, "CARD_Desc_", 10) == 0) { desc_base = CARDINFO_BUF + dof; desc_len = size; lang = (char)tolower((unsigned char)name[10]); }
-        else if (strncmp(name, "CARD_Indx_", 10) == 0) { indx = CARDINFO_BUF + dof; indx_len = size; }
+        if (strcmp(name, want) == 0) return *(const uint32_t *)(b + no + strlen(name) + 1);
     }
-    if (!desc_base || !indx || indx_len != 8 * (TF1_INDEX_COUNT + g_ext_n + 1)) return;
-    uint32_t *ix = (uint32_t *)A->mem(indx);
-    if (ix[TF1_INDEX_COUNT * 2 + 1] != desc_len) return;          /* already patched, or not the mod's file */
-    uint32_t &mem = g_desc_mem[lang];
-    if (!mem) {
-        const std::wstring name = std::wstring(L"ext_desc_") + (wchar_t)lang + L".bin";
-        if (FILE *f = _wfopen((std::wstring(A->mod_dir) + L"\\" + name).c_str(), L"rb")) {
-            fseek(f, 0, SEEK_END); const long len = ftell(f); fseek(f, 0, SEEK_SET);
-            std::vector<uint8_t> v((size_t)len);
-            if (fread(v.data(), 1, v.size(), f) == v.size() && len >= 8 && *(const uint32_t *)v.data() == g_ext_n) {
-                mem = A->guest_alloc((uint32_t)len);
-                memcpy(A->mem(mem), v.data(), v.size());
+    return 0;
+}
+
+static int hk_ehp_member(TfCpu *c) {
+    const uint32_t base = A->reg(c, 4), name_ptr = A->reg(c, 5), size_ptr = A->reg(c, 6);
+    if (!g_ext_n || base != CARDINFO_BUF || name_ptr < 0x08000000u || name_ptr > 0x0a000000u - 64) return 0;
+    char name[64]; memcpy(name, A->mem(name_ptr), 63); name[63] = 0;
+    if (strncmp(name, "CARD_", 5) != 0) return 0;
+    A->call_original(c, F_EHP_MEMBER);
+    const uint32_t orig = A->reg(c, 2);
+    if (!orig) return 1;
+    const char *what = name + 5;
+    char lang = 'e';
+    if (strncmp(what, "Indx_", 5) == 0 || strncmp(what, "Name_", 5) == 0 || strncmp(what, "Desc_", 5) == 0 || strncmp(what, "Sort_", 5) == 0) lang = (char)tolower((unsigned char)what[5]);
+    else if (strncmp(what, "Prop.", 5) != 0 && strncmp(what, "Pass.", 5) != 0 && strncmp(what, "Genre", 5) != 0 && strncmp(what, "IntID", 5) != 0) return 1;
+    const uint32_t orig_size = ehp_member_size(base, name);
+    Built &b = g_built[name];
+    if (b.orig != orig || b.orig_size != orig_size) {
+        b = Built{orig, orig_size, 0, 0};
+        const ExtInfo &info = ext_info(lang);
+        const uint32_t n = g_ext_n;
+        if (info.raw.empty()) return 1;
+        const uint8_t *r = info.raw.data();
+        const uint32_t sort_n = *(const uint32_t *)(r + 8), nbytes = *(const uint32_t *)(r + 12), dbytes = *(const uint32_t *)(r + 16);
+        const uint8_t *prop = r + 20, *pass = prop + 8 * n, *genre = pass + 4 * n, *intid = genre + 6 * n, *sort = intid + 2 * n,
+                      *noffs = sort + 2 * sort_n, *ntext = noffs + 4 * (n + 1), *doffs = ntext + nbytes, *dtext = doffs + 4 * (n + 1);
+        (void)dbytes;
+        std::vector<uint8_t> out;
+        const uint8_t *src = A->mem(orig);
+        auto append = [&](const uint8_t *p, size_t len) { out.insert(out.end(), p, p + len); };
+        bool ok = true;
+        if (strncmp(what, "Prop.", 5) == 0)       { ok = orig_size == 8 * TF1_INDEX_COUNT; append(src, orig_size); append(prop, 8 * n); }
+        else if (strncmp(what, "Pass.", 5) == 0)  { ok = orig_size == 4 * TF1_INDEX_COUNT; append(src, orig_size); append(pass, 4 * n); }
+        else if (strncmp(what, "Genre", 5) == 0)  { ok = orig_size == 6 * TF1_INDEX_COUNT; append(src, orig_size); append(genre, 6 * n); }
+        else if (strncmp(what, "IntID", 5) == 0)  { ok = orig_size == 2 * (EXT_FIRST_ID - 4000); append(src, orig_size); append(intid, 2 * n); }
+        else if (strncmp(what, "Sort_", 5) == 0)  { ok = orig_size == 2 * TF1_INDEX_COUNT && sort_n == TF1_INDEX_COUNT + n; append(sort, 2 * sort_n); }
+        else if (strncmp(what, "Name_", 5) == 0)  { append(src, orig_size); append(ntext, nbytes); }
+        else if (strncmp(what, "Desc_", 5) == 0)  { append(src, orig_size); append(dtext, dbytes); }
+        else if (strncmp(what, "Indx_", 5) == 0) {
+            ok = orig_size == 8 * (TF1_INDEX_COUNT + 1);
+            if (ok) {
+                const uint32_t *sent = (const uint32_t *)(src + 8 * TF1_INDEX_COUNT);       /* the sentinel: where the Name and Desc members end */
+                append(src, 8 * TF1_INDEX_COUNT);
+                for (uint32_t k = 0; k <= n; k++) {
+                    const uint32_t e[2] = {sent[0] + ((const uint32_t *)noffs)[k], sent[1] + ((const uint32_t *)doffs)[k]};
+                    append((const uint8_t *)e, 8);
+                }
             }
-            fclose(f);
         }
-        if (!mem) { A->log("TF3 Cards: ext_desc_%c.bin is missing or does not match ported.txt", lang); mem = 1; }
-        else A->log("TF3 Cards: ext_desc_%c.bin: %u texts at %08x", lang, g_ext_n, mem);
+        if (!ok) { A->log("TF3 Cards: %s has an unexpected size (%u): left alone", name, orig_size); out.clear(); }
+        if (!out.empty()) {
+            b.ptr = A->guest_alloc((uint32_t)out.size()); b.size = (uint32_t)out.size();
+            memcpy(A->mem(b.ptr), out.data(), out.size());
+            A->log("TF3 Cards: %s extended: %u -> %u bytes", name, orig_size, b.size);
+        }
     }
-    if (mem == 1) return;
-    const uint32_t *offs = (const uint32_t *)A->mem(mem + 4), text = mem + 4 + 4 * (g_ext_n + 1);
-    for (uint32_t k = 0; k <= g_ext_n; k++) ix[(TF1_INDEX_COUNT + k) * 2 + 1] = text + offs[k] - desc_base;
-    if (getenv("TF3_DEBUG_LAZY")) A->log("TF3 Cards: CARD_Indx description offsets of %u cards point at %08x", g_ext_n, text);
+    if (b.ptr) {
+        A->set_reg(c, 2, b.ptr);
+        if (size_ptr >= 0x08000000u && size_ptr < 0x0a000000u) *(uint32_t *)A->mem(size_ptr) = b.size;
+    }
+    return 1;
 }
 
 static void ported_load(void) {
@@ -425,7 +476,6 @@ static uint32_t collection_entry(TfCpu *c, uint32_t id) {
 /* grant_copies: a ported card the player does not own yet is added to the collection (marked "new") so it shows up in the trunk. The game reloads
  * the save when Continue is pressed, so this runs every half second once a save is in memory; it only touches cards with 0 copies. */
 static int hk_frame(TfCpu *c) {
-    desc_patch();
     static uint64_t dbg_next;
     if (g_trunk_n && getenv("TF3_DEBUG_TRUNK") && A->frame() >= dbg_next) {
         dbg_next = A->frame() + 300;
@@ -614,6 +664,7 @@ extern "C" __declspec(dllexport) int tfmod_init(const TfModApi *api) {
         g_debug_lazy = getenv("TF3_DEBUG_LAZY") != nullptr;
         A->hook(F_STREAM_REQUEST, hk_stream_request); A->hook(F_STREAM_READY, hk_stream_ready); A->hook(F_STREAM_GET, hk_stream_get);
         A->hook(F_TEXTURE_FROM_DATA, hk_texture_from_data);
+        A->hook(F_EHP_MEMBER, hk_ehp_member);
     }
     A->hook(F_LP_AMOUNTS, hk_lp_amounts);
     A->hook(F_EFFECT_DRIVER, hk_effect_driver);

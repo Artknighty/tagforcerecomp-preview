@@ -3,7 +3,8 @@
 The game keeps one collection record per card index in the save (2480 of them) and every card id of the game is below 6958; a new card
 gets the next free index (2480, 2481, ...) and the next free id (6958, 6959, ... up to 8191, the largest id the 13-bit id field of
 CARD_Prop holds). The pieces:
-  CARD_Prop / Pass / Genre  one record more per card (id field = the new id)
+  ext_info_<l>.bin          CARD_Prop / Pass / Genre rows, CARD_IntID, CARD_Indx / Name / Desc texts and the CARD_Sort array of the new cards; the plugin
+                            appends them to copies of the game's tables (the cardinfo file itself is not in the mod)
   CARD_IntID                grows to cover the new ids ([id - 4000] = index; the game looks it up without a bound check)
   CARD_Indx / Name / Desc   text at the end, one Indx entry per new index, the sentinel moves
   CARD_Sort                 alphabetical rank per index: rebuilt so the new cards sit where their names belong (per language)
@@ -60,43 +61,41 @@ def _sort(m, L, novos):
     return struct.pack("<%dH" % len(out), *out)
 
 
-def cardinfo(ids, lang="e"):
-    """returns the bytes of cardinfo_<lang>.ehp with the cards appended; ids = TF3 ids, in the order they get new indices/ids"""
+def ext_info(ids, lang="e"):
+    """the data of the new cards for cardinfo_<lang>.ehp, as one blob (ext_info_<lang>.bin): the game's file is NOT changed (it is read whole into a
+    fixed buffer), the plugin appends these rows to copies of the tables when the game asks for them (BOOT 08833540, member lookup).
+    ids = TF3 ids in the order they get the new indices/ids. Layout: b"TF3I", u32 n, u32 sort entries, u32 name bytes, u32 desc bytes, then
+    CARD_Prop rows (8 each), CARD_Pass (4), CARD_Genre (6), CARD_IntID (2: the index of the id 6958 + k), CARD_Sort (the whole new array, 2 per index),
+    u32 name offsets (n + 1), the names (UTF-16, 0-terminated), u32 description offsets (n + 1), the descriptions."""
     L = lang.upper()
     tag, mem = ehp.ler(_ler("duelsys/cardinfo_%s.ehp" % LANGS[lang]))
     m = dict(mem)
     novas = tf3_cartas.carregar(lang)
     pas, gen = (tf3_cartas._ler(n, lang) for n in ("CARD_Pass.bin", "CARD_Genre.bin"))
-    p1, ps, gn = (bytearray(m[n]) for n in ("CARD_Prop.bin", "CARD_Pass.bin", "CARD_Genre.bin"))
-    ix, nm, ds = (bytearray(m["CARD_%s_%s.bin" % (k, L)]) for k in ("Indx", "Name", "Desc"))
-    iid = bytearray(m["CARD_IntID.bin"])
-    assert len(p1) // 8 == TF1_CARDS
-    novos, texts = [], []
+    assert len(m["CARD_Prop.bin"]) // 8 == TF1_CARDS and len(m["CARD_IntID.bin"]) == (FIRST_ID - BASE_INTID) * 2
+    prop, pass_, genre, intid, novos, names, descs = bytearray(), bytearray(), bytearray(), bytearray(), [], [], []
     for k, cid in enumerate(ids):
         c, n, gid = novas[cid], TF1_CARDS + k, FIRST_ID + k
         assert gid <= LAST_ID, "too many cards for the id field"
         i3 = c["idx"]
         w0, w1 = tf3_cartas.para_tf1(c["w0"], c["w1"])
-        p1 += struct.pack("<II", (w0 & ~0x1FFF) | gid, w1 & ~(7 << 20))     # rarity 0: the card is in no booster pool
-        ps += pas[i3 * 4:i3 * 4 + 4]
-        gn += tf3_cartas.genero_para_tf1(gen[i3 * 6:i3 * 6 + 6])
-        ix[-8:] = struct.pack("<II", len(nm), len(ds))                         # the sentinel becomes the new entry
-        nm += _utf16(c["nome"])
-        texts.append(_utf16(c["desc"]))                                        # the descriptions do not go in the file: the game reads the whole cardinfo into a fixed buffer
-        ix += struct.pack("<II", len(nm), len(ds))                             # new sentinel
-        pos = (gid - BASE_INTID) * 2
-        if len(iid) < pos + 2:
-            iid += bytes(pos + 2 - len(iid))
-        struct.pack_into("<H", iid, pos, n)
+        prop += struct.pack("<II", (w0 & ~0x1FFF) | gid, w1 & ~(7 << 20))     # rarity 0: the card is in no booster pool
+        pass_ += pas[i3 * 4:i3 * 4 + 4]
+        genre += tf3_cartas.genero_para_tf1(gen[i3 * 6:i3 * 6 + 6])
+        intid += struct.pack("<H", n)
         novos.append((n, c["nome"]))
-    m.update({"CARD_Prop.bin": bytes(p1), "CARD_Pass.bin": bytes(ps), "CARD_Genre.bin": bytes(gn), "CARD_IntID.bin": bytes(iid),
-              "CARD_Indx_%s.bin" % L: bytes(ix), "CARD_Name_%s.bin" % L: bytes(nm), "CARD_Desc_%s.bin" % L: bytes(ds)})
-    m["CARD_Sort_%s.bin" % L] = _sort(m, L, novos)
-    offs = [0]
-    for t in texts:
-        offs.append(offs[-1] + len(t))
-    side = struct.pack("<I", len(texts)) + struct.pack("<%dI" % len(offs), *offs) + b"".join(texts)
-    return ehp.montar([(n, m[n]) for n, _ in mem], tag), side
+        names.append(_utf16(c["nome"]))
+        descs.append(_utf16(c["desc"]))
+    sort = _sort(m, L, novos)
+
+    def table(items):
+        offs = [0]
+        for t in items:
+            offs.append(offs[-1] + len(t))
+        return struct.pack("<%dI" % len(offs), *offs) + b"".join(items), offs[-1]
+    nt, nb = table(names)
+    dt, db = table(descs)
+    return (b"TF3I" + struct.pack("<IIII", len(ids), len(sort) // 2, nb, db) + bytes(prop) + bytes(pass_) + bytes(genre) + bytes(intid) + sort + nt + dt)
 
 
 def montar_mod(pasta, ids):
@@ -104,16 +103,14 @@ def montar_mod(pasta, ids):
     import tf3_porte_atlas
     novas = tf3_cartas.carregar()
     base = os.path.join(pasta, "PSP_GAME", "USRDIR")
-    for sub in ("duelsys", "card", "deck"):
+    for sub in ("card", "deck"):
         os.makedirs(os.path.join(base, sub), exist_ok=True)
     assert len(ids) <= MAX_CARDS, "at most %d cards fit the id field; got %d" % (MAX_CARDS, len(ids))
     gids = {cid: FIRST_ID + k for k, cid in enumerate(ids)}
     tf3_card = os.path.join(RAIZ, "ref", "tf3", "card")
     atlas = None
     for lang, nome in LANGS.items():
-        info, side = cardinfo(ids, lang)
-        open(os.path.join(base, "duelsys", "cardinfo_%s.ehp" % nome), "wb").write(info)
-        open(os.path.join(pasta, "ext_desc_%s.bin" % lang), "wb").write(side)
+        open(os.path.join(pasta, "ext_info_%s.bin" % lang), "wb").write(ext_info(ids, lang))
         for k in ("cardm", "cardh"):
             f = "%s_%s.cip" % (k, lang)
             out, art = tf3_porte_arte.extend(_ler("card/" + f), open(os.path.join(tf3_card, f), "rb").read(), gids, lazy=(k[-1], lang, POOL[k]))
