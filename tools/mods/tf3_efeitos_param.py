@@ -48,6 +48,8 @@ def propriedades(gids):
 
 
 def combina(p, f):
+    if "not" in f and combina(p, f["not"]):
+        return False
     if f.get("monster") is not None and (p["category"] < 13) != f["monster"]:
         return False
     if f.get("normal") is not None and (p["category"] == 0) != f["normal"]:
@@ -87,6 +89,32 @@ def resolver(gids, spec=None):
         entradas.append(struct.pack("<HBBI", gids[cid], ZONAS[e["zone"]], 0, len(ids)) + struct.pack("<%dH" % len(ids), *ids))
         likes[cid] = e["like"]
     return b"TF3E" + struct.pack("<I", len(entradas)) + b"".join(entradas), likes
+
+
+SPEC_STATS = os.path.join(os.path.dirname(os.path.abspath(__file__)), "tf3_stats.json")
+ESCOPOS = {"self": 0, "own": 1, "opp": 2, "all": 3}
+LADOS = {None: 0, "own": 1, "opp": 2, "any": 3}
+
+
+def resolver_stats(gids, spec=None):
+    """-> stat.bin bytes: passive ATK/DEF rules of the monsters among the installed cards (see the plugin: hk_stats).
+    Spec: { "<TF3 id>": {"scope": self|own|opp|all, "atk": N, "def": N, "target": {filter}, "cond": {"side": own|opp|any, "filter": {...}, "per": bool, "excl": bool}} }
+      scope self: the bonus goes to the card itself; own / opp / all: to the monsters of that side that match `target` (all when absent)
+      cond: the rule only works while a face-up monster matching the filter is on that side (relative to the card); per = once per such monster; excl = not counting the card"""
+    spec = spec if spec is not None else json.load(open(SPEC_STATS, encoding="utf-8"))
+    prop = propriedades(gids)
+    out = []
+    for k, r in sorted(spec.items(), key=lambda x: int(x[0])):
+        cid = int(k)
+        if cid not in gids:
+            continue
+        tgt = sorted(i for i, p in prop.items() if combina(p, r["target"])) if r.get("target") else []
+        c = r.get("cond") or {}
+        cond = sorted(i for i, p in prop.items() if combina(p, c["filter"])) if c else []
+        out.append(struct.pack("<HBBBBiiII", gids[cid], ESCOPOS[r.get("scope", "self")], LADOS[c.get("side")], 1 if c.get("per") else 0,
+                               1 if c.get("excl") else 0, r.get("atk", 0), r.get("def", 0), len(tgt), len(cond))
+                   + struct.pack("<%dH" % len(tgt), *tgt) + struct.pack("<%dH" % len(cond), *cond))
+    return b"TF3S" + struct.pack("<I", len(out)) + b"".join(out)
 
 
 if __name__ == "__main__":

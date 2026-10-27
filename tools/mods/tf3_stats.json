@@ -1,0 +1,69 @@
+{
+ "6927": {
+  "scope": "self",
+  "atk": 200,
+  "cond": {
+   "side": "own",
+   "filter": {
+    "monster": true,
+    "name_has": "Elemental Hero"
+   },
+   "per": true
+  }
+ },
+ "7143": {
+  "scope": "self",
+  "atk": 300,
+  "cond": {
+   "side": "own",
+   "filter": {
+    "monster": true,
+    "type": "plant"
+   },
+   "per": true
+  }
+ },
+ "6934": {
+  "scope": "self",
+  "atk": 2000,
+  "cond": {
+   "side": "own",
+   "filter": {
+    "monster": true,
+    "name_has": "Gadget"
+   },
+   "excl": true
+  }
+ },
+ "7534": {
+  "scope": "self",
+  "atk": 400,
+  "cond": {
+   "side": "own",
+   "filter": {
+    "monster": true,
+    "name_has": "Ally of Justice"
+   },
+   "excl": true
+  }
+ },
+ "7539": {
+  "scope": "own",
+  "atk": 400,
+  "target": {
+   "monster": true,
+   "name_has": "Saber"
+  }
+ },
+ "7347": {
+  "scope": "all",
+  "atk": -500,
+  "def": -500,
+  "target": {
+   "monster": true,
+   "not": {
+    "type": "fairy"
+   }
+  }
+ }
+}

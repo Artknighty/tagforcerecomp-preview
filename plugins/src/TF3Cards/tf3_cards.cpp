@@ -677,6 +677,76 @@ static int hk_cand_count(TfCpu *c) {   /* same scan, but only counts: the queue 
     return 1;
 }
 
+
+/* Passive ATK/DEF rules (stat.bin, written by tools/mods/tf3_efeitos_param.py from tools/mods/tf3_stats.json) for face-up monsters of the new cards.
+ * The game computes a monster's stats in 09f56da8(side, slot, out, duel): out+20 = ATK, out+24 = DEF (a chain of `id == N` rules per card). After the
+ * original runs, every rule whose source monster is face-up on the field adds its bonus to the monster being asked about.
+ * Monster zones: id (u16 & 0x1fff) at side+0x30+20*slot, flags (u32) at +0x40+20*slot (bit 1 / bit 5 = not face-up). */
+static const uint32_t F_STATS = 0x09f56da8;
+struct StatRule { uint16_t src; uint8_t scope, cond_side, per, excl; int32_t atk, def; std::vector<uint16_t> target, cond; };
+static std::vector<StatRule> g_stat;
+
+static void stat_load(void) {
+    const std::wstring p = std::wstring(A->mod_dir) + L"\\stat.bin";
+    FILE *f = _wfopen(p.c_str(), L"rb");
+    if (!f) return;
+    uint32_t h[2];
+    if (fread(h, 4, 2, f) == 2 && h[0] == 0x53334654u /* "TF3S" */) {
+        for (uint32_t i = 0; i < h[1]; i++) {
+            StatRule r; uint8_t b[4]; uint32_t nt, nc; int32_t ad[2];
+            if (fread(&r.src, 2, 1, f) != 1 || fread(b, 1, 4, f) != 4 || fread(ad, 4, 2, f) != 2 || fread(&nt, 4, 1, f) != 1 || fread(&nc, 4, 1, f) != 1 || nt > 0x10000 || nc > 0x10000) break;
+            r.scope = b[0]; r.cond_side = b[1]; r.per = b[2]; r.excl = b[3]; r.atk = ad[0]; r.def = ad[1];
+            r.target.resize(nt); r.cond.resize(nc);
+            if ((nt && fread(r.target.data(), 2, nt, f) != nt) || (nc && fread(r.cond.data(), 2, nc, f) != nc)) break;
+            g_stat.push_back(std::move(r));
+        }
+    }
+    fclose(f);
+    A->log("TF3 Cards: %u passive stat rules loaded", (unsigned)g_stat.size());
+}
+
+static uint32_t zone_card(uint32_t side, uint32_t slot) {   /* face-up monster id of a zone, 0 when empty or not face-up */
+    const uint32_t base = DUEL_SIDES + side * DUEL_SIDE_SIZE + 20 * slot;
+    const uint32_t id = *(const uint16_t *)A->mem(base + 0x30) & 0x1fff, flags = *(const uint32_t *)A->mem(base + 0x40);
+    return (flags & 0x22) ? 0 : id;
+}
+
+static int hk_stats(TfCpu *c) {
+    const uint32_t side = A->reg(c, 4) & 1, slot = A->reg(c, 5), out = A->reg(c, 6);
+    A->call_original(c, F_STATS);
+    if (slot >= 5 || out < 0x08000000u || out > 0x0a000000u - 64) return 1;
+    const uint32_t me = zone_card(side, slot);
+    if (!me) return 1;
+    int32_t *atk = (int32_t *)A->mem(out + 20), *def = (int32_t *)A->mem(out + 24);
+    for (const auto &r : g_stat)
+        for (uint32_t ss = 0; ss < 2; ss++)
+            for (uint32_t sk = 0; sk < 5; sk++) {
+                if (zone_card(ss, sk) != r.src) continue;
+                const bool mine = ss == side;
+                if (r.scope == 0 ? (ss != side || sk != slot) : r.scope == 1 ? !mine : r.scope == 2 ? mine : false) continue;
+                if (r.scope != 0 && !r.target.empty() && !std::binary_search(r.target.begin(), r.target.end(), (uint16_t)me)) continue;
+                int32_t mult = 1;
+                if (r.cond_side) {
+                    int32_t n = 0;
+                    for (uint32_t cs = 0; cs < 2; cs++) {
+                        const bool own = cs == ss;
+                        if (r.cond_side == 1 ? !own : r.cond_side == 2 ? own : false) continue;
+                        for (uint32_t ck = 0; ck < 5; ck++) {
+                            if (r.excl && cs == ss && ck == sk) continue;
+                            const uint32_t id = zone_card(cs, ck);
+                            if (id && std::binary_search(r.cond.begin(), r.cond.end(), (uint16_t)id)) n++;
+                        }
+                    }
+                    if (!n) continue;
+                    mult = r.per ? n : 1;
+                }
+                *atk += r.atk * mult; *def += r.def * mult;
+            }
+    if (*atk < 0) *atk = 0;
+    if (*def < 0) *def = 0;
+    return 1;
+}
+
 /* research aid (TF3_DEBUG_STREAM=1): dumps the card-art stream object when the game queues a read far beyond the file (BOOT 0882ead0:
  * a1 = stream object, a3 = file position; the object keeps the .cip header at +172, the index entries {unit, state} follow at +0x30) */
 static int hk_debug_obj(TfCpu *c) {   /* TF3_DEBUG_OBJ: first request of each .cip stream object (slot ring of the preloader) */
@@ -731,6 +801,7 @@ extern "C" __declspec(dllexport) int tfmod_init(const TfModApi *api) {
     A = api;
     ported_load();
     fx_load();
+    stat_load();
     ext_init();
     cfg_load();
     const char *off = getenv("TF3_OFF");   /* research aid: letters of the hook groups to leave out (d deck/duel, r record, f frame, c collection, t trunk, s art stream, e tables) */
@@ -747,6 +818,7 @@ extern "C" __declspec(dllexport) int tfmod_init(const TfModApi *api) {
         if (on('s')) { A->hook(F_STREAM_REQUEST, hk_stream_request); A->hook(F_STREAM_READY, hk_stream_ready); A->hook(F_STREAM_GET, hk_stream_get); A->hook(F_TEXTURE_FROM_DATA, hk_texture_from_data); }
         if (on('e')) A->hook(F_EHP_MEMBER, hk_ehp_member);
     }
+    if (!g_stat.empty()) A->hook(F_STATS, hk_stats);
     if (!g_fx.empty()) { A->hook(F_CAND_RUN, hk_cand_run); A->hook(F_CAND_COUNT, hk_cand_count); }
     A->hook(F_LP_AMOUNTS, hk_lp_amounts);
     A->hook(F_EFFECT_DRIVER, hk_effect_driver);
