@@ -55,7 +55,7 @@ static void ext_init(void) {
         std::vector<uint8_t> b(4 * g_ext_n);
         const size_t n = fread(b.data(), 1, b.size(), f);
         fclose(f);
-        if (n == b.size()) memcpy(r, b.data(), b.size());
+        if (n == b.size()) { memcpy(r, b.data(), b.size()); A->log("TF3 Cards: collection_ext.bin loaded (%u records)", g_ext_n); }
     }
     g_ext_saved.assign(r, r + 4 * g_ext_n);
     A->log("TF3 Cards: %u cards beyond the game's table (ids %u..%u), collection kept in collection_ext.bin", g_ext_n, EXT_FIRST_ID, EXT_FIRST_ID + g_ext_n - 1);
@@ -247,6 +247,16 @@ static int hk_frame(TfCpu *c) {
         const uint16_t *ord = (const uint16_t *)A->mem(*(uint32_t *)A->mem(g_trunk_obj + 16)), *base = nullptr;
         (void)base;
         for (uint32_t i = 0; i < g_trunk_n; i++) if (ord[i] >= g_trunk_n0) A->log("TF3 Cards: trunk position %u shows entry %u", i, ord[i]);
+    }
+    if (const char *e = getenv("TF3_DEBUG_BUMP")) {   /* "<game id>:<copies>": set the copies of an ext card once (test of collection_ext.bin) */
+        static bool done;
+        unsigned id, n;
+        if (!done && A->frame() > 600 && g_ext_n && sscanf(e, "%u:%u", &id, &n) == 2 && id >= EXT_FIRST_ID && id - EXT_FIRST_ID < g_ext_n) {
+            done = true;
+            uint8_t *r = A->mem(g_ext + (id - EXT_FIRST_ID) * 4);
+            r[0] = (uint8_t)((r[0] & ~6) | 4); r[1] = (uint8_t)((r[1] & 0x80) | (n & 0x7f));
+            A->log("TF3 Cards: debug bump id %u -> %u copies", id, n);
+        }
     }
     static uint64_t next, ext_next;
     if (g_ext_n && A->frame() >= ext_next) { ext_next = A->frame() + 60; ext_save(); }
