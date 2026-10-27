@@ -738,9 +738,16 @@ bool interp_lists(const Rec &pv, Rec &cur, int target, int depth, std::vector<Fr
                 const double tr0 = gpu_now_us();
                 /* 120 FPS: o alvo refeito do 1o intermediario do par (t = 0,25) serve aos outros dois (o reflexo erra 1/4 de quadro: invisivel; refazer custava
                  * 2,4 ms de CPU por intermediario no mapa). TF_INTERP_RTT_POR_T=1 refaz em cada um */
+                /* ... except when the target IS the scene (the map rooms: the whole picture is rendered to a texture and then copied to the screen in full-height
+                 * strips): the middle frames at 0,5 and 0,75 then showed the 0,25 picture, everything but the sprites stood still and jumped at the real frame
+                 * (session 20261027_193849, the room after the door). A draw that covers the full screen height is redone for each intermediate. TF_INTERP_RTT_CACHE_ALL=1 disables */
+                static const bool cache_all = getenv("TF_INTERP_RTT_CACHE_ALL") != nullptr;
+                bool scene_rtt = false;
+                if (!cache_all) { float y0 = 1e9f, y1 = -1e9f; for (uint32_t q = 0; q < cur.d[j].n; q++) { const float y = cur.v[cur.d[j].off + q].y; y0 = std::min(y0, y); y1 = std::max(y1, y); } scene_rtt = y1 - y0 >= 250.f; }
+                const bool use_cache = g_rtt_cache_on && depth == 0 && !scene_rtt;
                 bool reused = false;
-                if (g_rtt_cache_on && depth == 0) for (const auto &r : g_rtt_cache) if (r.first == fc) { got = r.second; reused = true; }
-                if (!reused) { got = ec && ep ? mid_rtt(*ec, *ep, tmp) : -1; if (g_rtt_cache_on && depth == 0) g_rtt_cache.push_back({fc, got}); }
+                if (use_cache) for (const auto &r : g_rtt_cache) if (r.first == fc) { got = r.second; reused = true; }
+                if (!reused) { got = ec && ep ? mid_rtt(*ec, *ep, tmp) : -1; if (use_cache) g_rtt_cache.push_back({fc, got}); }
                 trtt += gpu_now_us() - tr0;
                 rtt_mid.push_back({fc, got});
             }
