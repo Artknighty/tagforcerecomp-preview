@@ -52,3 +52,11 @@ sh tools/build/build_plugins.sh TF3Cards                              # plugin.d
 Inputs: your TF1 files in `gen/jogo`, the TF3 files extracted into `ref/tf3` (see the header of `tools/game/tf3_cartas.py`), `gen/decks_db`.
 New cards need an entry in `EFEITO` (`tf3_porte_carta.py`) when they play like a card of the game, or code in this plugin when they do not.
 Japanese is not ported (that language keeps the original cards).
+
+## Data-driven effects
+`effects.bin` (written by `tools/mods/tf3_efeitos_param.py` from `tools/mods/tf3_efeitos.json`) gives a new card an effect without new code: the card borrows the effect record of a game card
+that plays the same way (`like`, the third column of `ported.txt`) and lists which cards its effect may pick (a sorted set of duel ids, resolved from a filter such as
+`{"monster": true, "level_max": 4, "name_has": "Gladiator Beast"}`). The game keeps one small function per card that scans a zone and queues the cards the effect accepts;
+for the cards of the file the plugin runs a scan against the id set instead (hooks `09f243c8` / `09f24428`). First zone supported: the Deck ("Add 1 ... from your Deck to your hand").
+Checked in a duel: Gladiator Proving Ground opens the card list with only Gladiator Beast monsters of Level 4 or lower and adds the chosen card to the hand.
+

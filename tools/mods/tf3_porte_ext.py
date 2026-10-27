@@ -121,9 +121,12 @@ def montar_mod(pasta, ids):
             atlas = tf3_porte_atlas.extend(d["cis_all.gim"], d["fileTbl.dat"], open(os.path.join(tf3_card, "cardm_e.cip"), "rb").read(), gids)
         mem = [(n, atlas[0] if n == "cis_all.gim" else atlas[1] if n == "fileTbl.dat" else b) for n, b in mem]
         open(os.path.join(base, "deck", "all_%s.ehp" % lang), "wb").write(ehp.montar(mem, tag))
+    import tf3_efeitos_param
+    fx, likes = tf3_efeitos_param.resolver(gids)
+    open(os.path.join(pasta, "effects.bin"), "wb").write(fx)
     with open(os.path.join(pasta, "ported.txt"), "w", encoding="utf-8", newline="\n") as f:
         for cid in ids:
-            f.write("%d %d %d %s\n" % (gids[cid], cid, EFEITO.get(cid, 0), novas[cid]["nome"]))
+            f.write("%d %d %d %s\n" % (gids[cid], cid, likes.get(cid, EFEITO.get(cid, 0)), novas[cid]["nome"]))
     return gids
 
 

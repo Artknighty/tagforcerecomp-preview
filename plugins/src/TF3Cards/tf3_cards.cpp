@@ -18,6 +18,7 @@
 #include <vector>
 #include <map>
 #include <set>
+#include <algorithm>
 #include <string>
 
 static const TfModApi *A;
@@ -597,6 +598,65 @@ static int hk_effect_record(TfCpu *c) {   /* looks the record up as the card it 
     return 0;
 }
 
+/* Data-driven effects (effects.bin in the mod folder, written by tools/mods/tf3_efeitos_param.py): a new card borrows the record of a game card that plays the
+ * same way (`like`) and only says WHICH cards its effect may pick: the game keeps one small function per card that scans a zone and queues the cards it accepts
+ * (table at 09f76818, dispatchers 09f243c8 / 09f24428 keyed by the effect's card id; 09f240b4(side, kind, index) queues one card of zone `kind`). For the cards
+ * of this file the dispatchers run the scan below instead: every card of the zone whose id is in the card's id set is queued.
+ * Zones: 1 = deck (the scan of Reinforcement of the Army: ids at side+928, count at side+16, kind 13). */
+static const uint32_t F_CAND_RUN = 0x09f243c8, F_CAND_COUNT = 0x09f24428, F_CAND_ADD = 0x09f240b4;
+static const uint32_t DUEL_SIDES = 0x09f80000u - 25364u, DUEL_SIDE_SIZE = 4012, CAND_COUNTER = 0x09f80000u - 28440u;
+struct DataEffect { uint8_t zone; std::vector<uint16_t> ids; };
+static std::map<uint16_t, DataEffect> g_fx;
+
+static void fx_load(void) {
+    const std::wstring p = std::wstring(A->mod_dir) + L"\\effects.bin";
+    FILE *f = _wfopen(p.c_str(), L"rb");
+    if (!f) return;
+    uint32_t h[2];
+    if (fread(h, 4, 2, f) == 2 && h[0] == 0x45334654u /* "TF3E" */) {
+        for (uint32_t i = 0; i < h[1]; i++) {
+            uint16_t id; uint8_t zone, pad; uint32_t n;
+            if (fread(&id, 2, 1, f) != 1 || fread(&zone, 1, 1, f) != 1 || fread(&pad, 1, 1, f) != 1 || fread(&n, 4, 1, f) != 1 || n > 0x10000) break;
+            DataEffect e{zone, std::vector<uint16_t>(n)};
+            if (n && fread(e.ids.data(), 2, n, f) != n) break;
+            g_fx[id] = std::move(e);
+        }
+    }
+    fclose(f);
+    A->log("TF3 Cards: %u data effects loaded", (unsigned)g_fx.size());
+}
+
+static void fx_scan(TfCpu *c, uint32_t side_arg, const DataEffect &e) {
+    if (e.zone != 1) return;
+    const uint32_t base = DUEL_SIDES + (side_arg & 1) * DUEL_SIDE_SIZE;
+    const uint32_t n = *(const uint32_t *)A->mem(base + 16);
+    for (uint32_t i = 0; i < n && i < 160; i++) {
+        const uint16_t id = *(const uint16_t *)A->mem(base + 928 + i * 4) & 0x1fff;
+        if (std::binary_search(e.ids.begin(), e.ids.end(), id)) call_game(c, F_CAND_ADD, side_arg, 13, i, 0);
+    }
+}
+
+static int hk_cand_run(TfCpu *c) {   /* (side, effect card id, step): the queue starts empty; returns how many cards were queued */
+    const auto it = g_fx.find((uint16_t)A->reg(c, 5));
+    if (it == g_fx.end()) return 0;
+    uint32_t *ctr = (uint32_t *)A->mem(CAND_COUNTER);
+    *ctr = 0;
+    fx_scan(c, A->reg(c, 4), it->second);
+    A->set_reg(c, 2, *ctr);
+    return 1;
+}
+
+static int hk_cand_count(TfCpu *c) {   /* same scan, but only counts: the queue is put back as it was */
+    const auto it = g_fx.find((uint16_t)A->reg(c, 5));
+    if (it == g_fx.end()) return 0;
+    uint32_t *ctr = (uint32_t *)A->mem(CAND_COUNTER);
+    const uint32_t before = *ctr;
+    fx_scan(c, A->reg(c, 4), it->second);
+    A->set_reg(c, 2, *ctr - before);
+    *ctr = before;
+    return 1;
+}
+
 /* research aid (TF3_DEBUG_STREAM=1): dumps the card-art stream object when the game queues a read far beyond the file (BOOT 0882ead0:
  * a1 = stream object, a3 = file position; the object keeps the .cip header at +172, the index entries {unit, state} follow at +0x30) */
 static int hk_debug_obj(TfCpu *c) {   /* TF3_DEBUG_OBJ: first request of each .cip stream object (slot ring of the preloader) */
@@ -650,6 +710,7 @@ static int hk_debug_req(TfCpu *c) {
 extern "C" __declspec(dllexport) int tfmod_init(const TfModApi *api) {
     A = api;
     ported_load();
+    fx_load();
     ext_init();
     cfg_load();
     A->hook(F_READ_DECK, hk_read_deck);
@@ -666,6 +727,7 @@ extern "C" __declspec(dllexport) int tfmod_init(const TfModApi *api) {
         A->hook(F_TEXTURE_FROM_DATA, hk_texture_from_data);
         A->hook(F_EHP_MEMBER, hk_ehp_member);
     }
+    if (!g_fx.empty()) { A->hook(F_CAND_RUN, hk_cand_run); A->hook(F_CAND_COUNT, hk_cand_count); }
     A->hook(F_LP_AMOUNTS, hk_lp_amounts);
     A->hook(F_EFFECT_DRIVER, hk_effect_driver);
     A->hook(F_TARGET_ALL, hk_target_all);

@@ -1,0 +1,4 @@
+{
+ "7220": {"like": 5328, "zone": "deck", "filter": {"monster": true, "normal": true, "level_min": 5}},
+ "7460": {"like": 5328, "zone": "deck", "filter": {"monster": true, "level_max": 4, "name_has": "Gladiator Beast"}}
+}

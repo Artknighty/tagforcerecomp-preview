@@ -36,6 +36,7 @@ To find a new one, run the game with `TF_HOOK_TRACE=addr,addr` (logs frame and a
 | `09ee3b7c` | `libduel_eng`: driver of the Dark Hole / Raigeki family record: walks every monster zone, asks the record's target filter, destroys the chosen monsters (a0 = effect object) | TF3 Cards (Suit of Sword X: tosses the coin, then runs the original) |
 | `08efcb68` | `libdeck`: builds the deck editor trunk list (ids 4007..6957: 6-byte records + index array, returns the count; `a0` = list object) | TF3 Cards (runs it, then appends the cards beyond the table with its own buffers) |
 | `09ebbbe8` | `libduel_eng`: Dark Hole target filter `(effect object, side, zone)` -> 1 if the monster is hit; `09eb30b8(n)` = game random in [0, n), `09e998a0(side, slot, 1, result)` = queue the coin animation | TF3 Cards (Suit of Sword X narrows it to one side) |
+| `09f243c8` / `09f24428` | `libduel_eng`: run / count the per-card **candidate scan** `(side, effect card id, step)` (table at `09f76818`, 364 `{id, function}` entries; the function scans a zone and queues the cards the effect may pick with `09f240b4(side, kind, index)`; the queue count is the u32 at `09f78f68`) | TF3 Cards (data-driven effects: replaces the scan of the new cards with an id-set filter) |
 | `09f56da8` | stats of a monster slot (ATK at `+20`, DEF at `+24` of the buffer) | Better AI |
 | `09f5060c` | `libduel_eng_43595669(player, slot, 1)`: can this monster attack now | Better AI |
 | `09e74f60` / `09e762e0` / `09e76a14` | AI: attack / hand / spell decision | Better AI |
