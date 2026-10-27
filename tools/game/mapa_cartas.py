@@ -9,8 +9,10 @@ Usage:  python -I tools/game/mapa_cartas.py [saida.json]      (default gen/mapa_
 Input:  the same files as tf3_efeitos.py and tf3_cartas.py.
 Output sections:  cards (list), handlers_tf3 (per TF3 handler: cards, mapped TF1 handler or conflict), summary.
 """
+import difflib
 import json
 import os
+import re
 import struct
 import sys
 from collections import Counter, defaultdict
@@ -86,7 +88,22 @@ def montar():
             else:
                 r = e["rec_tf3"]
                 e["effect_status"] = (handlers[hex(r[0])]["status"] if r else "no_record")
+    # donor: a shared card with the identical TF3 record whose TF3 text reads the most like the new card (a record only names generic handlers,
+    # the card-specific part is in the code, so the text similarity tells whether lending the TF1 record is plausible)
+    doadores = defaultdict(list)
+    for e in cards:
+        if e["shared"] and e["rec_tf1"] and e["rec_tf3"]:
+            doadores[tuple(e["rec_tf3"])].append(e)
+    norm = lambda t: re.sub(r"\s+", " ", re.sub(r"[\"'`]", "", t or "")).lower()
+    for e in cards:
+        e["donor"] = None
+        if e["effect_status"] and e["rec_tf3"]:
+            melhor = max(((difflib.SequenceMatcher(None, norm(e["text_tf3"]), norm(d["text_tf3"])).ratio(), d) for d in doadores.get(tuple(e["rec_tf3"]), [])),
+                         key=lambda x: x[0], default=None)
+            if melhor:
+                e["donor"] = dict(tf1_id=melhor[1]["tf1_id"], name=melhor[1]["name"], similarity=round(melhor[0], 2))
     resumo = Counter(e["effect_status"] for e in cards if e["effect_status"])
+    resumo["donor_text_0.8"] = sum(1 for e in cards if e.get("donor") and e["donor"]["similarity"] >= 0.8)
     resumo["cards_total"] = len(cards)
     resumo["shared"] = sum(1 for e in cards if e["shared"])
     resumo["tf3_only"] = sum(1 for e in cards if e["tf3_id"] and not e["shared"])
