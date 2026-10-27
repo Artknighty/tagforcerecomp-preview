@@ -44,13 +44,16 @@ def filtro(s):
         m = re.match(r"(%s)\s*" % "|".join(ATRIBUTOS), s)
         if m:
             f["attribute"] = m.group(1).lower(); s = s[m.end():]; continue
+        m = re.match(r"Effect\s*", s)
+        if m:
+            f["normal"] = False; s = s[m.end():]; continue
         m = re.match(r"Normal\s*", s)
         if m:
             f["normal"] = True; s = s[m.end():]; continue
         m = re.match(r"\"([^\"]+)\"\s*", s)
         if m:
             nome = m.group(1); s = s[m.end():]
-            if re.match(r"[Mm]onster", s):
+            if re.match(r"(?:Effect )?[Mm]onster", s):
                 f["name_has"] = nome
             else:
                 f["name_is"] = nome

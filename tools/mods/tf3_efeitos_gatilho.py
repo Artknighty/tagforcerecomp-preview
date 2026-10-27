@@ -25,14 +25,17 @@ TABELA = {
     ("battle_gy", "add"): (6506, 6506),
     ("battle_gy", "summon"): (4930, 4930),
     ("effect_gy", "summon"): (6799, 6799),
+    # ("summoned", "add"): (6151, 6151),    # DISABLED: Green Gadget's record scans with a generic id (0xfffe) and, when it finds nothing, cancels the Summon itself; Green Gadget: "When you Normal Summon or Special Summon this card, add 1 ... from your Deck"
+    ("flip", "add"): (5769, 5769),           # Iron Blacksmith Kotetsu: "FLIP: select 1 ... from your Deck and add it to your hand"
 }
 GATILHOS = [
     ("field_gy", r"sent from the field to the Graveyard"),
     ("battle_gy", r"destroyed (?:by battle|as a result of battle) and sent to the Graveyard|sent to the Graveyard as a result of battle|destroyed by battle"),
     ("effect_gy", r"destroyed by (?:a card )?effect and sent to the Graveyard"),
+    ("summoned", r"(?:Normal|Special|Flip|Tribute)?(?: or (?:Normal|Special|Flip|Tribute))* ?Summoned|Normal Summoned, Flip Summoned, or Special Summoned"),
 ]
 EFEITOS = [
-    ("add", r"add 1 (?P<f>.+?) from your Deck to your hand", "deck"),
+    ("add", r"(?:select 1 .+? from your Deck and )?add (?:1|any) (?P<f>.+?) (?:from your Deck to your hand|to your hand from your Deck)", "deck"),
     ("summon", r"Special Summon 1 (?P<f>.+?) from your Deck(?: in face-up Attack Position| to your side of the field)?", "deck"),
 ]
 
@@ -47,13 +50,15 @@ def gerar():
             continue
         t = (e["text_tf3"] or "").replace("\n", " ").strip()
         m = re.match(r"^(?:When|If) this (?:face-up )?card (?:is|was) (?P<g>[^,]+?),\s*(?:you can )?(?P<e>.+?)\.$", t)
+        if not m:
+            m = re.match(r"^(?P<g>FLIP):\s*(?:You can )?(?P<e>.+?)\.$", t)
         if not m or re.search(r"[Pp]ay|[Dd]iscard|[Tt]ribute|then|Then|and if|\. [A-Z]", t[m.start("e"):-1]):
             continue
-        gat = next((k for k, rx in GATILHOS if re.fullmatch(rx, m.group("g"))), None)
+        gat = "flip" if m.group("g") == "FLIP" else next((k for k, rx in GATILHOS if re.fullmatch(rx, m.group("g"))), None)
         if gat is None:
             continue
         for kind, rx, zona in EFEITOS:
-            mm = re.fullmatch(rx, m.group("e"))
+            mm = re.fullmatch(rx, m.group("e"), re.I)
             if mm and (gat, kind) in TABELA:
                 f = T.filtro(mm.group("f"))
                 if f is None:

@@ -135,5 +135,17 @@
    "def_max": 1000
   },
   "name": "Botanical Girl"
+ },
+ "7545": {
+  "like": 5769,
+  "trigger_like": 5769,
+  "zone": "deck",
+  "filter": {
+   "monster": true,
+   "level_max": 4,
+   "type": "reptile",
+   "name_has": "Worm"
+  },
+  "name": "Worm Cartaros"
  }
 }

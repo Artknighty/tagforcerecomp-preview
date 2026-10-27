@@ -803,6 +803,8 @@ static int hk_trigger(TfCpu *c) {
     *idp = (uint16_t)((saved & ~0x1fff) | it->second);
     A->call_original(c, F_TRIGGER);
     *idp = saved;
+    static const bool dbg = getenv("TF3_DEBUG_TRIG2") != nullptr;
+    if (dbg) { static int n; if (n++ < 300) A->log("trigger alias: card %u as %u event %08x a2 %u flags %08x key %02x%02x%02x%02x -> %u", saved & 0x1fff, it->second, A->reg(c, 4), A->reg(c, 6), A->reg(c, 7), A->mem(key)[0], A->mem(key)[1], A->mem(key)[2], A->mem(key)[3], A->reg(c, 2)); }
     if (A->reg(c, 2)) g_trig_real[it->second] = (uint16_t)(saved & 0x1fff);   /* the pending effect carries the donor's id: remember who it really is */
     return 1;
 }
