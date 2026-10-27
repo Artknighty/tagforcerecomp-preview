@@ -86,12 +86,22 @@ static const uint32_t F_TRUNK_LIST = 0x08efcb68, F_DK_COPIES = 0x08f18d84, F_DK_
                       F_DK_SORT_TABLE = 0x08f06498, F_DK_SORT_KEY = 0x08f0dd90, NEW_COUNTER = 0x09ccb168;
 
 static uint32_t g_trunk_obj, g_trunk_n0, g_trunk_n;
+/* libdeck 08efca00(list, kind) gives a card list its two buffers from the game's own heap: 6 bytes and 2 bytes per card, the count read from a u16 table
+ * indexed by kind (at 08f1b588). The trunk's count is the 2451 cards of the table; while the buffers are taken it is raised by the new cards, so the game
+ * allocates (and later frees, when the deck editor closes) buffers big enough for all of them. Buffers of the plugin's own would crash the game on exit. */
+static const uint32_t F_LIST_ALLOC = 0x08efca00, LIST_COUNTS = 0x08f20000u - 19064u, TRUNK_TABLE_CARDS = 2451;
+static int hk_list_alloc(TfCpu *c) {
+    uint16_t *count = (uint16_t *)A->mem(LIST_COUNTS + 2 * (A->reg(c, 5) & 0xffff));
+    if (*count != TRUNK_TABLE_CARDS || !g_ext_n) return 0;
+    const uint16_t saved = *count;
+    *count = (uint16_t)(saved + g_ext_n + 8);
+    A->call_original(c, F_LIST_ALLOC);
+    *count = saved;
+    return 1;
+}
+
 static int hk_trunk_list(TfCpu *c) {
     const uint32_t list = A->reg(c, 4), ra = A->reg(c, 31);
-    /* the game's buffers hold the 2451 cards of the table (+ a little): give the list room for the new cards too (never freed, reused on every call) */
-    static uint32_t recs, order;
-    if (!recs) { recs = A->guest_alloc(6 * (3000 + g_ext_n)); order = A->guest_alloc(2 * (3000 + g_ext_n)); }
-    *(uint32_t *)A->mem(list + 4) = recs; *(uint32_t *)A->mem(list + 16) = order;
     A->call_original(c, F_TRUNK_LIST);
     uint32_t n = A->reg(c, 2) & 0xffff;
     const uint32_t n0 = n;
@@ -723,19 +733,19 @@ extern "C" __declspec(dllexport) int tfmod_init(const TfModApi *api) {
     fx_load();
     ext_init();
     cfg_load();
-    A->hook(F_READ_DECK, hk_read_deck);
-    A->hook(F_PREPARE_DUEL, hk_prepare_duel);
-    A->hook(F_EFFECT_RECORD, hk_effect_record);
-    A->hook(F_FRAME, hk_frame);
-    A->hook(F_COLLECTION_ENTRY, hk_collection_entry);
+    const char *off = getenv("TF3_OFF");   /* research aid: letters of the hook groups to leave out (d deck/duel, r record, f frame, c collection, t trunk, s art stream, e tables) */
+    const auto on = [&](char k) { return !(off && strchr(off, k)); };
+    if (on('d')) { A->hook(F_READ_DECK, hk_read_deck); A->hook(F_PREPARE_DUEL, hk_prepare_duel); }
+    if (on('r')) A->hook(F_EFFECT_RECORD, hk_effect_record);
+    if (on('f')) A->hook(F_FRAME, hk_frame);
+    if (on('c')) A->hook(F_COLLECTION_ENTRY, hk_collection_entry);
     A->hook(F_DUEL_START, hk_duel_start);
     A->hook(F_RANDOM, hk_random);
-    if (g_ext_n) A->hook(F_TRUNK_LIST, hk_trunk_list);
+    if (g_ext_n && on('t')) { A->hook(F_LIST_ALLOC, hk_list_alloc); A->hook(F_TRUNK_LIST, hk_trunk_list); }
     if (g_ext_n) {
         g_debug_lazy = getenv("TF3_DEBUG_LAZY") != nullptr;
-        A->hook(F_STREAM_REQUEST, hk_stream_request); A->hook(F_STREAM_READY, hk_stream_ready); A->hook(F_STREAM_GET, hk_stream_get);
-        A->hook(F_TEXTURE_FROM_DATA, hk_texture_from_data);
-        A->hook(F_EHP_MEMBER, hk_ehp_member);
+        if (on('s')) { A->hook(F_STREAM_REQUEST, hk_stream_request); A->hook(F_STREAM_READY, hk_stream_ready); A->hook(F_STREAM_GET, hk_stream_get); A->hook(F_TEXTURE_FROM_DATA, hk_texture_from_data); }
+        if (on('e')) A->hook(F_EHP_MEMBER, hk_ehp_member);
     }
     if (!g_fx.empty()) { A->hook(F_CAND_RUN, hk_cand_run); A->hook(F_CAND_COUNT, hk_cand_count); }
     A->hook(F_LP_AMOUNTS, hk_lp_amounts);

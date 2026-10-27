@@ -53,6 +53,9 @@ Inputs: your TF1 files in `gen/jogo`, the TF3 files extracted into `ref/tf3` (se
 New cards need an entry in `EFEITO` (`tf3_porte_carta.py`) when they play like a card of the game, or code in this plugin when they do not.
 Japanese is not ported (that language keeps the original cards).
 
+## Diagnostics
+`TF3_OFF=<letters>` leaves hook groups out (d deck/duel, r effect record, f frame, c collection, t trunk list, s art stream, e tables) to bisect a problem.
+
 ## Data-driven effects
 `effects.bin` (written by `tools/mods/tf3_efeitos_param.py` from `tools/mods/tf3_efeitos.json`) gives a new card an effect without new code: the card borrows the effect record of a game card
 that plays the same way (`like`, the third column of `ported.txt`) and lists which cards its effect may pick (a sorted set of duel ids, resolved from a filter such as
