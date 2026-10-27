@@ -764,6 +764,50 @@ static int hk_stats(TfCpu *c) {
 }
 
 
+/* research aid (TF3_DEBUG_CAND=1): logs every candidate scan the game asks for (side, id, step) and how many cards it queued */
+static int cand_debug(TfCpu *c, uint32_t fn, const char *what) {
+    const uint32_t ra = A->reg(c, 31), side = A->reg(c, 4), id = A->reg(c, 5), step = A->reg(c, 6);
+    A->call_original(c, fn);
+    static int n;
+    if (n++ < 600) A->log("cand %s: side %u id %x step %u -> %d (ra %08x)", what, side, id, step, (int)A->reg(c, 2), ra);
+    return 1;
+}
+static int hk_cand_run_debug(TfCpu *c) { return cand_debug(c, F_CAND_RUN, "run"); }
+static int hk_cand_count_debug(TfCpu *c) { return cand_debug(c, F_CAND_COUNT, "count"); }
+
+/* research aid (TF3_DEBUG_FN=addr,addr,...): logs the arguments and the result of the listed libduel functions (up to 8) while the duel runs; a call is shown
+ * only when one of its arguments (or the u16 at an argument that points into RAM) is the id of a new card */
+template <int N> static int hk_fn_log(TfCpu *c);
+static uint32_t g_fn_addr[8];
+static uint32_t g_fn_id;   /* TF3_DEBUG_FN_ID: show the calls that carry this id instead of the ids of the new cards */
+static bool new_id(uint32_t v) {
+    const auto hit = [](uint32_t u) { return g_fn_id ? u == g_fn_id : u >= 6958 && u < 8192; };
+    if (hit(v & 0xffff)) return true;
+    if (v >= 0x08000000u && v < 0x0a000000u - 8) return hit(*(const uint16_t *)A->mem(v) & 0x1fff);
+    return false;
+}
+template <int N> static int hk_fn_log(TfCpu *c) {
+    const uint32_t a[4] = {A->reg(c, 4), A->reg(c, 5), A->reg(c, 6), A->reg(c, 7)}, ra = A->reg(c, 31);
+    static const bool all = getenv("TF3_DEBUG_FN_ALL") != nullptr;
+    const bool show = all || new_id(a[0]) || new_id(a[1]) || new_id(a[2]) || new_id(a[3]);
+    const uint32_t k0 = a[0] >= 0x08000000u && a[0] < 0x0a000000u - 8 ? *(const uint16_t *)A->mem(a[0]) & 0x1fff : 0;   /* id the first argument points to */
+    A->call_original(c, g_fn_addr[N]);
+    static int n;
+    if (show && n++ < 400) A->log("fn %08x(%x[id %u], %x, %x, %x) -> %x (ra %08x)", g_fn_addr[N], a[0], k0, a[1], a[2], a[3], A->reg(c, 2), ra);
+    return 1;
+}
+static void fn_log_init(const char *list) {
+    if (const char *id = getenv("TF3_DEBUG_FN_ID")) g_fn_id = (uint32_t)atoi(id);
+    static int (*const fns[8])(TfCpu *) = {hk_fn_log<0>, hk_fn_log<1>, hk_fn_log<2>, hk_fn_log<3>, hk_fn_log<4>, hk_fn_log<5>, hk_fn_log<6>, hk_fn_log<7>};
+    int k = 0;
+    for (const char *p = list; *p && k < 8;) {
+        char *e; const uint32_t v = (uint32_t)strtoul(p, &e, 16);
+        if (e == p) break;
+        g_fn_addr[k] = v; A->hook(v, fns[k]); A->log("debug hook %08x", v); k++;
+        p = *e == ',' ? e + 1 : e;
+    }
+}
+
 /* research aid (TF3_DEBUG_TRIG=1): logs every trigger check (libduel 09f30ddc(event, key, a2, flags): does the effect of the card of `key` trigger on this event?) */
 static const uint32_t F_TRIGGER = 0x09f30ddc;
 static int hk_trigger_debug(TfCpu *c) {
@@ -781,6 +825,7 @@ static int hk_trigger_debug(TfCpu *c) {
  * a chain of `id == N` branches. A new card whose trigger is the same as a game card's ("when this card is sent to the Graveyard", "FLIP", ...) is asked as that
  * donor: the key's id is swapped while the predicate runs. The effect itself comes from the borrowed record and the data effect of the card. */
 static std::map<uint16_t, uint16_t> g_trig;
+static std::map<uint16_t, bool> g_trig_summon;   /* cards whose alias also holds while the game scans the events of a finished action (Summon triggers) */
 
 static void trig_load(void) {
     const std::wstring p = std::wstring(A->mod_dir) + L"\\trigger.bin";
@@ -788,7 +833,12 @@ static void trig_load(void) {
     if (!f) return;
     uint32_t h[2];
     if (fread(h, 4, 2, f) == 2 && h[0] == 0x54334654u /* "TF3T" */)
-        for (uint32_t i = 0; i < h[1]; i++) { uint16_t e[2]; if (fread(e, 2, 2, f) != 2) break; g_trig[e[0]] = e[1]; }
+        for (uint32_t i = 0; i < h[1]; i++) {
+            uint16_t e[2];
+            if (fread(e, 2, 2, f) != 2) break;
+            g_trig[e[0]] = e[1] & 0x1fff;
+            if (e[1] & 0x8000) g_trig_summon[e[0]] = true;
+        }
     fclose(f);
     A->log("TF3 Cards: %u trigger aliases loaded", (unsigned)g_trig.size());
 }
@@ -806,6 +856,26 @@ static int hk_trigger(TfCpu *c) {
     static const bool dbg = getenv("TF3_DEBUG_TRIG2") != nullptr;
     if (dbg) { static int n; if (n++ < 300) A->log("trigger alias: card %u as %u event %08x a2 %u flags %08x key %02x%02x%02x%02x -> %u", saved & 0x1fff, it->second, A->reg(c, 4), A->reg(c, 6), A->reg(c, 7), A->mem(key)[0], A->mem(key)[1], A->mem(key)[2], A->mem(key)[3], A->reg(c, 2)); }
     if (A->reg(c, 2)) g_trig_real[it->second] = (uint16_t)(saved & 0x1fff);   /* the pending effect carries the donor's id: remember who it really is */
+    return 1;
+}
+
+/* Summon triggers: after every action the game scans the events it caused in 09e89110, a long chain of `id == N` branches over the id of the card that acted,
+ * which the action record at 09f788a4 keeps in bits 8..20 of its first word. While the scan runs, a new card flagged as a Summon trigger shows its donor's id
+ * there, so the scan queues the donor's event; the effect object then carries the donor id and fx_card() maps it back to the new card. */
+static const uint32_t F_POST_ACTION = 0x09e89110, ACTION_STATE = 0x09f80000u - 30556u;
+static int hk_post_action(TfCpu *c) {
+    uint32_t *w = (uint32_t *)A->mem(ACTION_STATE);
+    const uint16_t id = (uint16_t)((*w >> 8) & 0x1fff);
+    static const bool dbg = getenv("TF3_DEBUG_TRIG2") != nullptr;
+    static const uint32_t dbg_id = getenv("TF3_DEBUG_POST") ? (uint32_t)atoi(getenv("TF3_DEBUG_POST")) : 0;   /* also log the actions of this card (a game card to compare with) */
+    if ((dbg && id >= 6958) || (dbg_id && id == dbg_id)) { static int n; if (n++ < 300) A->log("post action: record %08x id %u (action type %u)", *w, id, A->mem(0x09f80000u - 30532u)[0]); }
+    const auto it = g_trig.find(id);
+    if (it == g_trig.end() || !g_trig_summon.count(id)) return 0;
+    const uint32_t saved = *w;
+    *w = (saved & ~(0x1fffu << 8)) | ((uint32_t)it->second << 8);
+    g_trig_real[it->second] = id;
+    A->call_original(c, F_POST_ACTION);
+    if (((*w >> 8) & 0x1fff) == it->second) *w = (*w & ~(0x1fffu << 8)) | (saved & (0x1fffu << 8));
     return 1;
 }
 
@@ -881,10 +951,13 @@ extern "C" __declspec(dllexport) int tfmod_init(const TfModApi *api) {
         if (on('s')) { A->hook(F_STREAM_REQUEST, hk_stream_request); A->hook(F_STREAM_READY, hk_stream_ready); A->hook(F_STREAM_GET, hk_stream_get); A->hook(F_TEXTURE_FROM_DATA, hk_texture_from_data); }
         if (on('e')) A->hook(F_EHP_MEMBER, hk_ehp_member);
     }
+    if (const char *fl = getenv("TF3_DEBUG_FN")) fn_log_init(fl);
     if (getenv("TF3_DEBUG_TRIG")) A->hook(F_TRIGGER, hk_trigger_debug);
     else if (!g_trig.empty()) A->hook(F_TRIGGER, hk_trigger);
+    if (!g_trig_summon.empty()) A->hook(F_POST_ACTION, hk_post_action);
     if (!g_stat.empty()) A->hook(F_STATS, hk_stats);
-    if (!g_fx.empty()) { A->hook(F_CAND_RUN, hk_cand_run); A->hook(F_CAND_COUNT, hk_cand_count); }
+    if (getenv("TF3_DEBUG_CAND")) { A->hook(F_CAND_RUN, hk_cand_run_debug); A->hook(F_CAND_COUNT, hk_cand_count_debug); }
+    else if (!g_fx.empty()) { A->hook(F_CAND_RUN, hk_cand_run); A->hook(F_CAND_COUNT, hk_cand_count); }
     A->hook(F_LP_AMOUNTS, hk_lp_amounts);
     A->hook(F_EFFECT_DRIVER, hk_effect_driver);
     A->hook(F_TARGET_ALL, hk_target_all);

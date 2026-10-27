@@ -53,6 +53,12 @@ The game decides when an effect starts in one predicate (`09f30ddc`), a chain of
 
 Checked in a duel: Botanical Girl destroyed by Dark Hole opens the Deck list with only Plant monsters of 1000 or less DEF and adds the chosen card to the hand.
 
+### Summon triggers
+
+A spec entry with `"trigger_event": "summon"` (set by `tf3_efeitos_gatilho.py` for "When this card is Normal Summoned, ..." texts) also holds the donor alias while the game scans the events of a finished action (`09e89110`, which reads the acting card's id from the action record at `09f788a4`). With `"trigger_like": 6151` (Green Gadget) the card prompts "Activate the effect of ...?" after a Normal Summon and the data effect runs. Checked in a duel: Genex Power Planner added a Level 3 "Genex" monster from the Deck to the hand.
+
+FLIP effects (donor 5769) are set up the same way but do not fire yet when the card is flipped by an attack; the game queues that event along a different path (not an id chain). Not working.
+
 ## Known limits
 
 * The first two new ids (6958, 6959) cannot be Normal Summoned as monsters (the card menu only offers "Show Details"); keep Spell/Trap cards there (`tools/mods/tf3_gids.txt` does).

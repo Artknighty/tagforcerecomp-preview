@@ -146,6 +146,21 @@
    "type": "reptile",
    "name_has": "Worm"
   },
-  "name": "Worm Cartaros"
+  "name": "Worm Cartaros",
+  "trigger_event": "summon"
+ },
+ "7809": {
+  "like": 6151,
+  "trigger_like": 6151,
+  "zone": "deck",
+  "filter": {
+   "monster": true,
+   "level_min": 3,
+   "level_max": 3,
+   "name_has": "Genex",
+   "normal": false
+  },
+  "name": "Genex Power Planner",
+  "trigger_event": "summon"
  }
 }

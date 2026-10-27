@@ -94,11 +94,13 @@ def resolver(gids, spec=None):
 
 
 def resolver_gatilhos(gids, spec=None):
-    """-> trigger.bin bytes: {card: donor} for the spec entries with "trigger_like" (the donor's id is used while the game asks whether the effect starts)"""
+    """-> trigger.bin bytes: {card: donor} for the spec entries with "trigger_like" (the donor's id is used while the game asks whether the effect starts);
+    "trigger_event": "summon" also sets bit 15 of the donor: the alias holds while the game scans the events of a finished action (Summon triggers)"""
     if spec is None:
         spec = json.load(open(SPEC_AUTO, encoding="utf-8")) if os.path.exists(SPEC_AUTO) else {}
         spec.update(json.load(open(SPEC, encoding="utf-8")))
-    pares = [(gids[int(k)], e["trigger_like"]) for k, e in sorted(spec.items(), key=lambda x: int(x[0])) if int(k) in gids and "trigger_like" in e]
+    pares = [(gids[int(k)], e["trigger_like"] | (0x8000 if e.get("trigger_event") == "summon" else 0)) for k, e in sorted(spec.items(), key=lambda x: int(x[0]))
+             if int(k) in gids and "trigger_like" in e]
     return b"TF3T" + struct.pack("<I", len(pares)) + b"".join(struct.pack("<HH", a, b) for a, b in pares)
 
 

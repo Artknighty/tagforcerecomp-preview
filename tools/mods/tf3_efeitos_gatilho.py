@@ -25,7 +25,7 @@ TABELA = {
     ("battle_gy", "add"): (6506, 6506),
     ("battle_gy", "summon"): (4930, 4930),
     ("effect_gy", "summon"): (6799, 6799),
-    # ("summoned", "add"): (6151, 6151),    # DISABLED: Green Gadget's record scans with a generic id (0xfffe) and, when it finds nothing, cancels the Summon itself; Green Gadget: "When you Normal Summon or Special Summon this card, add 1 ... from your Deck"
+    ("summoned", "add"): (6151, 6151),    # Green Gadget: "When you Normal Summon or Special Summon this card, add 1 ... from your Deck" (the alias holds while the post-action scan runs: hk_post_action)
     ("flip", "add"): (5769, 5769),           # Iron Blacksmith Kotetsu: "FLIP: select 1 ... from your Deck and add it to your hand"
 }
 GATILHOS = [
@@ -65,6 +65,8 @@ def gerar():
                     break
                 trig, rec = TABELA[(gat, kind)]
                 out[str(e["tf3_id"])] = {"like": rec, "trigger_like": trig, "zone": zona, "filter": f, "name": e["name"]}
+                if gat in ("summoned", "flip"):
+                    out[str(e["tf3_id"])]["trigger_event"] = "summon"
                 break
     return out
 
