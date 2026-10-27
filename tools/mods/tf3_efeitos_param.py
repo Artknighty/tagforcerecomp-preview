@@ -104,6 +104,26 @@ def resolver_gatilhos(gids, spec=None):
     return b"TF3T" + struct.pack("<I", len(pares)) + b"".join(struct.pack("<HH", a, b) for a, b in pares)
 
 
+KIND_VALUES = {"draw": 1, "lp": 2}
+
+
+def resolver_valores(gids, spec=None):
+    """-> amount.bin bytes: the numbers of the draw / life point effects of the installed cards (see the plugin: hk_draw, hk_lp_amounts).
+    Spec keys: "draw": {"self": N, "opp": N}  cards drawn by the card's controller / by the other player;
+               "lp": {"self": N, "opp": N}    life point change of each side (positive = gain, negative = damage)"""
+    if spec is None:
+        spec = json.load(open(SPEC_AUTO, encoding="utf-8")) if os.path.exists(SPEC_AUTO) else {}
+        spec.update(json.load(open(SPEC, encoding="utf-8")))
+    out = []
+    for k, e in sorted(spec.items(), key=lambda x: int(x[0])):
+        if int(k) not in gids:
+            continue
+        for kind, code in KIND_VALUES.items():
+            if kind in e:
+                out.append(struct.pack("<HBBii", gids[int(k)], code, 0, e[kind].get("self", 0), e[kind].get("opp", 0)))
+    return b"TF3V" + struct.pack("<I", len(out)) + b"".join(out)
+
+
 SPEC_STATS = os.path.join(os.path.dirname(os.path.abspath(__file__)), "tf3_stats.json")
 SPEC_STATS_AUTO = os.path.join(os.path.dirname(os.path.abspath(__file__)), "tf3_stats_auto.json")
 ESCOPOS = {"self": 0, "own": 1, "opp": 2, "all": 3, "equip": 4}

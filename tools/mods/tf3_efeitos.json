@@ -68,5 +68,19 @@
    "type": "plant",
    "def_max": 1000
   }
+ },
+ "7234": {
+  "like": 4353,
+  "lp": {
+   "opp": 3000
+  },
+  "name": "Gift Card"
+ },
+ "7235": {
+  "like": 4844,
+  "draw": {
+   "opp": 2
+  },
+  "name": "The Gift of Greed"
  }
 }

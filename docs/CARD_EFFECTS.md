@@ -59,6 +59,20 @@ A spec entry with `"trigger_event": "summon"` (set by `tf3_efeitos_gatilho.py` f
 
 FLIP effects (donor 5769) are set up the same way but do not fire yet when the card is flipped by an attack; the game queues that event along a different path (not an id chain). Not working.
 
+## Draw and life point effects
+
+`"draw": {"self": N, "opp": N}` and `"lp": {"self": N, "opp": N}` (positive = gain, negative = damage) give a card the numbers of the game's one-step draw and life point handlers; the game fixes these numbers per card id inside the handlers, so the plugin reads them from `amount.bin` instead:
+
+```json
+{ "7235": { "like": 4844, "draw": { "opp": 2 } },
+  "7234": { "like": 4353, "lp": { "opp": 3000 } } }
+```
+
+The `like` donors are Pot of Greed (draw) and Tremendous Fire (life points). A trigger spec may combine any trigger donor with these records: while the aliased trigger runs, the record lookup uses the card's own `like` instead of the trigger donor's. `tools/mods/tf3_efeitos_gatilho.py` writes them for texts such as "When this card is destroyed by battle and sent to the Graveyard, draw 1 card" / "both players take 500 damage".
+Checked in a duel: Blizzed (draw 1) and Abaki (both players 2000 → 1500).
+
+Not wired yet: triggers the game tests outside the two gates above, such as "destroys a monster by battle", "inflicts Battle Damage" and "Special Summoned from the Graveyard".
+
 ## Known limits
 
 * The first two new ids (6958, 6959) cannot be Normal Summoned as monsters (the card menu only offers "Show Details"); keep Spell/Trap cards there (`tools/mods/tf3_gids.txt` does).

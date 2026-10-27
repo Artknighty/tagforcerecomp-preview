@@ -33,6 +33,34 @@ static const uint32_t F_EFFECT_RECORD = 0x09eb4574;
  * TF1 card whose effect record it borrows (0 = no effect yet). */
 struct Ported { uint16_t slot, tf3, like; std::string name; };
 static std::vector<Ported> PORTED;
+static std::map<uint16_t, uint16_t> g_trig;         /* card id -> donor id of its trigger (trigger.bin) */
+static std::map<uint16_t, uint16_t> g_trig_real;   /* donor id of an aliased trigger -> the new card that triggered (see hk_trigger) */
+
+/* Numbers of the draw / life point effects (amount.bin, "TF3V", u32 n, {u16 card id, u8 kind (1 draw, 2 life points), u8 0, i32 self, i32 opp}), written by
+ * tools/mods/tf3_efeitos_param.py: the game fixes them per card id inside its handlers, so for the new cards the handlers read them from here instead. */
+struct Amount { int32_t self, opp; };
+static std::map<std::pair<uint16_t, uint8_t>, Amount> g_amt;
+static const Amount *amount_of(uint16_t id, uint8_t kind) {   /* id = the id of the effect object: the new card, or the donor id of an aliased trigger */
+    auto it = g_amt.find({id, kind});
+    if (it != g_amt.end()) return &it->second;
+    const auto r = g_trig_real.find(id);
+    if (r != g_trig_real.end() && (it = g_amt.find({r->second, kind})) != g_amt.end()) return &it->second;
+    return nullptr;
+}
+static void amt_load(void) {
+    const std::wstring p = std::wstring(A->mod_dir) + L"\\amount.bin";
+    FILE *f = _wfopen(p.c_str(), L"rb");
+    if (!f) return;
+    uint32_t h[2];
+    if (fread(h, 4, 2, f) == 2 && h[0] == 0x56334654u /* "TF3V" */)
+        for (uint32_t i = 0; i < h[1]; i++) {
+            uint16_t id; uint8_t kind, pad; int32_t v[2];
+            if (fread(&id, 2, 1, f) != 1 || fread(&kind, 1, 1, f) != 1 || fread(&pad, 1, 1, f) != 1 || fread(v, 4, 2, f) != 2) break;
+            g_amt[{id, kind}] = Amount{v[0], v[1]};
+        }
+    fclose(f);
+    A->log("TF3 Cards: %u draw / life point amounts loaded", (unsigned)g_amt.size());
+}
 /* collection records, copy limits and the save format are per card index: see tf3_porte_carta.py */
 static const uint32_t F_LP_AMOUNTS = 0x09ee3efc, F_FRAME = 0x08833fc4, F_COLLECTION_ENTRY = 0x0883de3c, SAVE = 0x08a65418, SAVE_VERSION = 0x10002;
 static std::vector<int> g_cards;   /* force_cards=a,b,c: several cards, force_copies copies of each */
@@ -525,7 +553,6 @@ static int hk_frame(TfCpu *c) {
 
 /* libduel_eng 09ee3efc: the life point change of the life point cards, by card id. a0 = the effect object (u16 id at +0, byte +2 bit 0 = side, byte +3 bit 1 = swapped
  * side), a1 = out int[2] (LP delta per player index; the caller damages the negative ones and heals the positive ones). Ookazi writes -800 to the opponent's index. */
-static const uint16_t TF3_GIFT_CARD = 7234;
 static int hk_lp_amounts(TfCpu *c) {
     const uint32_t obj = A->reg(c, 4), out = A->reg(c, 5);
     if (obj < 0x08000000u || obj > 0x0a000000u - 0x20 || out < 0x08000000u || out > 0x0a000000u - 8) return 0;
@@ -538,12 +565,12 @@ static int hk_lp_amounts(TfCpu *c) {
         A->log("LP amounts: card %u byte2 %02x byte3 %02x -> player0 %d, player1 %d", id, o[2], o[3], d[0], d[1]);
         return 1;
     }
-    for (const auto &p : PORTED) {
-        if (p.tf3 != TF3_GIFT_CARD || *(const uint16_t *)o != p.slot) continue;
+    if (const Amount *am = amount_of(*(const uint16_t *)o, 2)) {
         const uint32_t side = (uint32_t)((o[2] & 1) ^ ((o[3] >> 6) & 1));
+        if (getenv("TF3_DEBUG_FX")) A->log("life point effect of id %u: controller %d, other player %d", *(const uint16_t *)o, am->self, am->opp);
         int32_t *d = (int32_t *)A->mem(out);
-        d[0] = d[1] = 0;
-        d[1 - side] = 3000;                                  /* Gift Card: the opponent gains 3000 Life Points */
+        d[side] = am->self;
+        d[1 - side] = am->opp;
         return 1;
     }
     return 0;
@@ -565,6 +592,25 @@ static uint32_t call_game(TfCpu *c, uint32_t fn, uint32_t a0, uint32_t a1, uint3
     const uint32_t r = A->reg(c, 2);
     for (int i = 1; i < 32; i++) if (i != 26 && i != 27) A->set_reg(c, i, s[i]);
     return r;
+}
+
+/* libduel_eng 09ee56a0: the resolution of the draw effects (Pot of Greed and others). It decides by card id how many cards are drawn and by whom, then calls
+ * 09f2a3fc(player, count). For the cards of amount.bin it draws the listed numbers: self = the card's controller, opp = the other player. */
+static const uint32_t F_DRAW = 0x09ee56a0, F_DRAW_CARDS = 0x09f2a3fc;
+static int hk_draw(TfCpu *c) {
+    const uint32_t obj = A->reg(c, 4);
+    if (obj < 0x08000000u || obj > 0x0a000000u - 0x20) return 0;
+    const uint8_t *o = A->mem(obj);
+    const Amount *am = amount_of(*(const uint16_t *)o, 1);
+    if (!am) return 0;
+    const uint32_t side = (uint32_t)((o[2] & 1) ^ ((o[3] & 0x7f) >> 6));
+    const Amount n = *am;
+    static const bool dbg = getenv("TF3_DEBUG_FX") != nullptr;
+    if (dbg) A->log("draw effect of id %u: controller %u draws %d, other player draws %d", *(const uint16_t *)o, side, n.self, n.opp);
+    if (n.self > 0) call_game(c, F_DRAW_CARDS, side, (uint32_t)n.self, 0, 0);
+    if (n.opp > 0) call_game(c, F_DRAW_CARDS, 1 - side, (uint32_t)n.opp, 0, 0);
+    A->set_reg(c, 2, 0);
+    return 1;
 }
 
 static bool is_card(uint32_t obj, uint16_t tf3) {
@@ -598,6 +644,17 @@ static int hk_effect_record(TfCpu *c) {   /* looks the record up as the card it 
     const uint32_t p = A->reg(c, 4);
     if (p < 0x08000000u || p > 0x0a000000u - 8) return 0;
     uint16_t *key = (uint16_t *)A->mem(p);
+    const auto real = g_trig_real.find(*key);       /* an aliased trigger runs under the donor's id: when the card plays another record than the donor's, use that one */
+    if (real != g_trig_real.end())
+        for (const auto &a : PORTED) {
+            const auto t = g_trig.find(a.slot);
+            if (a.slot != real->second || !a.like || t == g_trig.end() || t->second == a.like) continue;
+            const uint16_t donor = *key;
+            *key = a.like;
+            A->call_original(c, F_EFFECT_RECORD);
+            *key = donor;
+            return 1;
+        }
     for (const auto &a : PORTED) {
         if (*key != a.slot || !a.like) continue;
         *key = a.like;
@@ -617,7 +674,6 @@ static const uint32_t F_CAND_RUN = 0x09f243c8, F_CAND_COUNT = 0x09f24428, F_CAND
 static const uint32_t DUEL_SIDES = 0x09f80000u - 25364u, DUEL_SIDE_SIZE = 4012, CAND_COUNTER = 0x09f80000u - 28440u;
 struct DataEffect { uint8_t zone; std::vector<uint16_t> ids; };
 static std::map<uint16_t, DataEffect> g_fx;
-static std::map<uint16_t, uint16_t> g_trig_real;   /* donor id of an aliased trigger -> the new card that triggered (see hk_trigger) */
 
 static void fx_load(void) {
     const std::wstring p = std::wstring(A->mod_dir) + L"\\effects.bin";
@@ -824,7 +880,6 @@ static int hk_trigger_debug(TfCpu *c) {
 /* Triggers (trigger.bin, "TF3T", u32 n, {u16 card id, u16 donor id}): the game decides WHEN a card's effect starts in one predicate, 09f30ddc(event, key, a2, flags),
  * a chain of `id == N` branches. A new card whose trigger is the same as a game card's ("when this card is sent to the Graveyard", "FLIP", ...) is asked as that
  * donor: the key's id is swapped while the predicate runs. The effect itself comes from the borrowed record and the data effect of the card. */
-static std::map<uint16_t, uint16_t> g_trig;
 static std::map<uint16_t, bool> g_trig_summon;   /* cards whose alias also holds while the game scans the events of a finished action (Summon triggers) */
 
 static void trig_load(void) {
@@ -848,7 +903,7 @@ static int hk_trigger(TfCpu *c) {
     if (key < 0x08000000u || key > 0x0a000000u - 8) return 0;
     uint16_t *idp = (uint16_t *)A->mem(key);
     const auto it = g_trig.find(*idp & 0x1fff);
-    if (it == g_trig.end()) return 0;
+    if (it == g_trig.end()) { g_trig_real.erase(*idp & 0x1fff); return 0; }   /* a game card asking as itself: a stale alias must not reach it */
     const uint16_t saved = *idp;
     *idp = (uint16_t)((saved & ~0x1fff) | it->second);
     A->call_original(c, F_TRIGGER);
@@ -870,7 +925,7 @@ static int hk_post_action(TfCpu *c) {
     static const uint32_t dbg_id = getenv("TF3_DEBUG_POST") ? (uint32_t)atoi(getenv("TF3_DEBUG_POST")) : 0;   /* also log the actions of this card (a game card to compare with) */
     if ((dbg && id >= 6958) || (dbg_id && id == dbg_id)) { static int n; if (n++ < 300) A->log("post action: record %08x id %u (action type %u)", *w, id, A->mem(0x09f80000u - 30532u)[0]); }
     const auto it = g_trig.find(id);
-    if (it == g_trig.end() || !g_trig_summon.count(id)) return 0;
+    if (it == g_trig.end() || !g_trig_summon.count(id)) { g_trig_real.erase(id); return 0; }
     const uint32_t saved = *w;
     *w = (saved & ~(0x1fffu << 8)) | ((uint32_t)it->second << 8);
     g_trig_real[it->second] = id;
@@ -934,6 +989,7 @@ extern "C" __declspec(dllexport) int tfmod_init(const TfModApi *api) {
     ported_load();
     fx_load();
     trig_load();
+    amt_load();
     stat_load();
     ext_init();
     cfg_load();
@@ -958,6 +1014,7 @@ extern "C" __declspec(dllexport) int tfmod_init(const TfModApi *api) {
     if (!g_stat.empty()) A->hook(F_STATS, hk_stats);
     if (getenv("TF3_DEBUG_CAND")) { A->hook(F_CAND_RUN, hk_cand_run_debug); A->hook(F_CAND_COUNT, hk_cand_count_debug); }
     else if (!g_fx.empty()) { A->hook(F_CAND_RUN, hk_cand_run); A->hook(F_CAND_COUNT, hk_cand_count); }
+    if (!g_amt.empty()) A->hook(F_DRAW, hk_draw);
     A->hook(F_LP_AMOUNTS, hk_lp_amounts);
     A->hook(F_EFFECT_DRIVER, hk_effect_driver);
     A->hook(F_TARGET_ALL, hk_target_all);

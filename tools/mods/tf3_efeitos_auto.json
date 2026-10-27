@@ -162,5 +162,40 @@
   },
   "name": "Genex Power Planner",
   "trigger_event": "summon"
+ },
+ "6936": {
+  "like": 6327,
+  "trigger_like": 6506,
+  "lp": {
+   "self": 800,
+   "opp": 800
+  },
+  "name": "Stray Asmodian"
+ },
+ "6937": {
+  "like": 6327,
+  "trigger_like": 6506,
+  "lp": {
+   "self": -500,
+   "opp": -500
+  },
+  "name": "Abaki"
+ },
+ "6938": {
+  "like": 6502,
+  "trigger_like": 6151,
+  "draw": {
+   "self": 1
+  },
+  "name": "Flame Ogre",
+  "trigger_event": "summon"
+ },
+ "7527": {
+  "like": 6502,
+  "trigger_like": 6506,
+  "draw": {
+   "self": 1
+  },
+  "name": "Blizzed, Guard of the Ice Barrier"
  }
 }
