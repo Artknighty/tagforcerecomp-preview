@@ -41,9 +41,15 @@ def slots_ok(tf1, slot):
     return bool(v) and not v & 0x80000000
 
 
-def extend(tf1, tf3, gids):
+def extend(tf1, tf3, gids, lazy=None):
     """adds art for NEW ids (above the id range of the file): gids {TF3 id: new game id}. The index grows, so the lists and the art blocks move
-    to later units (every unit number of the file is shifted); the new blocks go at the end. Returns the bytes of the new file."""
+    to later units (every unit number of the file is shifted); the new blocks go at the end. Returns the bytes of the new file.
+
+    lazy=(kind, lang, pool): the file does NOT get the art of the new cards (the game keeps the whole file in a fixed buffer): the index covers their
+    ids with empty entries and the file ends with `pool` placeholder blocks (valid GIM blocks whose pixel data starts with a marker b"TF3X" + kind +
+    lang + u16 slot). The plugin hands a pool block to a new card when the game asks for its art and fills it with the art just before the texture is
+    made. The header says so: +8 b"TF3X", +0xc first pool unit, +0x24 pool size, +0x28 kind, +0x29 lang. Returns (file, art) where `art` is the blocks of the
+    new cards one after another in gid order (the mod's ext_art_<kind>_<lang>.bin)."""
     end = struct.unpack_from("<I", tf1, 0x10)[0]
     lo, hi = struct.unpack_from("<II", tf1, 0x14)
     blocks = 1 if bytes(tf1[:4]) == b"CPM" + bytes([0x1a]) else 2
@@ -70,12 +76,28 @@ def extend(tf1, tf3, gids):
     cursor = u0 + len(data) // UNIT
     extra = bytearray()
     entries = {}
+    art = bytearray()
+    template = None
+    pool_start = cursor
     for tf3id, gid in sorted(gids.items(), key=lambda x: x[1]):
         v3 = struct.unpack_from("<I", tf3, 0x30 + (tf3id - lo3) * 8)[0]
         assert v3 and not v3 & 0x80000000, "TF3 has no plain art for %d" % tf3id
-        extra += tf3[v3 * UNIT:(v3 + blocks) * UNIT]
+        blk = tf3[v3 * UNIT:(v3 + blocks) * UNIT]
+        if lazy:
+            art += blk
+            if template is None:
+                template = bytes(blk)
+            continue
+        extra += blk
         entries[gid] = cursor
         cursor += blocks
+    if lazy:
+        kind, lang, pool = lazy
+        for k in range(pool):
+            b = bytearray(template)
+            b[0x80:0x88] = b"TF3X" + kind.encode() + lang.encode() + struct.pack("<H", k)
+            extra += b
+            cursor += blocks
     for gid in range(hi + 1, new_hi + 1):
         out += struct.pack("<II", entries.get(gid, 0), 0)
     for i in range(0, len(lists), 8):
@@ -89,6 +111,12 @@ def extend(tf1, tf3, gids):
     struct.pack_into("<I", out, 0x10, new_end)
     struct.pack_into("<I", out, 0x18, new_hi)
     out += bytes(UNIT)                                   # the last block's data runs a little past its units
+    if lazy:
+        out[8:12] = b"TF3X"
+        struct.pack_into("<I", out, 0xc, pool_start)
+        struct.pack_into("<I", out, 0x24, lazy[2])
+        out[0x28:0x2a] = (lazy[0] + lazy[1]).encode()
+        return bytes(out), bytes(art)
     return bytes(out)
 
 

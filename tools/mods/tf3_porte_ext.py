@@ -9,6 +9,7 @@ CARD_Prop holds). The pieces:
   CARD_Sort                 alphabetical rank per index: rebuilt so the new cards sit where their names belong (per language)
   card/cardm_<l>.cip, cardh_<l>.cip   rebuilt (tf3_porte_arte.extend): index and blocks for the new ids
   deck/all_<l>.ehp          fileTbl.dat (ids in atlas order) and cis_all.gim (thumbnail atlas) grow (tf3_porte_atlas.extend)
+  ext_desc_<l>.bin          the descriptions of the new cards (the plugin points their CARD_Indx entries at them: the file may not grow much)
   ported.txt                "<game id> <TF3 id> <TF1 id whose effect it uses or 0> <name>", read by the TF3Cards plugin, which also gives the
                             collection records of the new indices (the save has no room for them)
 Usage:  python tools/mods/tf3_porte_ext.py <mod folder> <TF3 id> [<TF3 id> ...]
@@ -28,9 +29,8 @@ from tf3_porte_carta import EFEITO, JOGO, LANGS, _ler, _utf16  # noqa: E402
 BASE_INTID = 4000
 FIRST_ID, LAST_ID = 6958, 8191       # ids of the new cards (the TF1 game uses 4007..6957)
 TF1_CARDS = 2480                      # indices 0..2479 exist in the game
-MAX_CARDS = 72                        # the deck editor loads the whole cardh_<l>.cip into a fixed buffer of libdeck (0x0901e3b0..0x09a46000): the file
-                                      # may not pass 0xa2e000 bytes, which leaves room for 72 more cards (2 units of 0x800 each). More needs a lazy art
-                                      # provider (docs/internal/registro/tf3-estudo.md, "Limite de memoria da arte")
+POOL = {"cardm": 64, "cardh": 24}        # placeholder art blocks per file: cards whose art is on screen at the same time (duel: hands and fields)
+MAX_CARDS = LAST_ID - FIRST_ID + 1   # the 13-bit id field; the art comes on demand (lazy pool), so the game's art buffer no longer limits the count
 
 
 def _nomes(m, L):
@@ -71,7 +71,7 @@ def cardinfo(ids, lang="e"):
     ix, nm, ds = (bytearray(m["CARD_%s_%s.bin" % (k, L)]) for k in ("Indx", "Name", "Desc"))
     iid = bytearray(m["CARD_IntID.bin"])
     assert len(p1) // 8 == TF1_CARDS
-    novos = []
+    novos, texts = [], []
     for k, cid in enumerate(ids):
         c, n, gid = novas[cid], TF1_CARDS + k, FIRST_ID + k
         assert gid <= LAST_ID, "too many cards for the id field"
@@ -82,7 +82,7 @@ def cardinfo(ids, lang="e"):
         gn += tf3_cartas.genero_para_tf1(gen[i3 * 6:i3 * 6 + 6])
         ix[-8:] = struct.pack("<II", len(nm), len(ds))                         # the sentinel becomes the new entry
         nm += _utf16(c["nome"])
-        ds += _utf16(c["desc"])
+        texts.append(_utf16(c["desc"]))                                        # the descriptions do not go in the file: the game reads the whole cardinfo into a fixed buffer
         ix += struct.pack("<II", len(nm), len(ds))                             # new sentinel
         pos = (gid - BASE_INTID) * 2
         if len(iid) < pos + 2:
@@ -92,7 +92,11 @@ def cardinfo(ids, lang="e"):
     m.update({"CARD_Prop.bin": bytes(p1), "CARD_Pass.bin": bytes(ps), "CARD_Genre.bin": bytes(gn), "CARD_IntID.bin": bytes(iid),
               "CARD_Indx_%s.bin" % L: bytes(ix), "CARD_Name_%s.bin" % L: bytes(nm), "CARD_Desc_%s.bin" % L: bytes(ds)})
     m["CARD_Sort_%s.bin" % L] = _sort(m, L, novos)
-    return ehp.montar([(n, m[n]) for n, _ in mem], tag)
+    offs = [0]
+    for t in texts:
+        offs.append(offs[-1] + len(t))
+    side = struct.pack("<I", len(texts)) + struct.pack("<%dI" % len(offs), *offs) + b"".join(texts)
+    return ehp.montar([(n, m[n]) for n, _ in mem], tag), side
 
 
 def montar_mod(pasta, ids):
@@ -102,16 +106,19 @@ def montar_mod(pasta, ids):
     base = os.path.join(pasta, "PSP_GAME", "USRDIR")
     for sub in ("duelsys", "card", "deck"):
         os.makedirs(os.path.join(base, sub), exist_ok=True)
-    assert len(ids) <= MAX_CARDS, "at most %d cards fit the game's art buffer (cardh_<l>.cip); got %d" % (MAX_CARDS, len(ids))
+    assert len(ids) <= MAX_CARDS, "at most %d cards fit the id field; got %d" % (MAX_CARDS, len(ids))
     gids = {cid: FIRST_ID + k for k, cid in enumerate(ids)}
     tf3_card = os.path.join(RAIZ, "ref", "tf3", "card")
     atlas = None
     for lang, nome in LANGS.items():
-        open(os.path.join(base, "duelsys", "cardinfo_%s.ehp" % nome), "wb").write(cardinfo(ids, lang))
+        info, side = cardinfo(ids, lang)
+        open(os.path.join(base, "duelsys", "cardinfo_%s.ehp" % nome), "wb").write(info)
+        open(os.path.join(pasta, "ext_desc_%s.bin" % lang), "wb").write(side)
         for k in ("cardm", "cardh"):
             f = "%s_%s.cip" % (k, lang)
-            out = tf3_porte_arte.extend(_ler("card/" + f), open(os.path.join(tf3_card, f), "rb").read(), gids)
+            out, art = tf3_porte_arte.extend(_ler("card/" + f), open(os.path.join(tf3_card, f), "rb").read(), gids, lazy=(k[-1], lang, POOL[k]))
             open(os.path.join(base, "card", f), "wb").write(out)
+            open(os.path.join(pasta, "ext_art_%s_%s.bin" % (k[-1], lang)), "wb").write(art)
         tag, mem = ehp.ler(_ler("deck/all_%s.ehp" % lang))
         mem = dict(mem) if False else mem
         d = dict(mem)

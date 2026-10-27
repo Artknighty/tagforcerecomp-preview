@@ -16,6 +16,9 @@
 #include <string.h>
 #include <string>
 #include <vector>
+#include <map>
+#include <set>
+#include <string>
 
 static const TfModApi *A;
 static uint32_t g_pos;      /* TF3_FORCE_POS: first deck position of the forced cards (the duel start runs without shuffling when the deck is kept whole) */
@@ -115,6 +118,187 @@ static int hk_trunk_list(TfCpu *c) {
     A->log("TF3 Cards: trunk list %u cards + %u beyond the table", n0, n - n0);
     A->set_reg(c, 31, ra); A->set_reg(c, 2, n);
     return 1;
+}
+
+
+/* Art on demand for the cards beyond the table. The .cip files of the mod (tf3_porte_arte.extend, lazy mode) hold no art for them: their index
+ * entries are empty and the file ends with a pool of placeholder blocks (marker b"TF3X" + kind + lang + u16 slot at +0x80 of each). When the game asks for
+ * the art of one of the new ids (BOOT stream API: request 08851b7c, ready 08851f00, get 08851d24) the plugin points the id's index entry at a pool block
+ * (least recently used), and when the game builds the texture from a block (08834d34(texture, data)) that is a pool block, the block is filled with the
+ * art of its current owner, read from ext_art_<kind>_<lang>.bin in the mod folder. */
+static const uint32_t F_STREAM_REQUEST = 0x08851b7c, F_STREAM_READY = 0x08851f00, F_STREAM_GET = 0x08851d24, F_TEXTURE_FROM_DATA = 0x08834d34;
+struct PoolSlot { uint32_t id; uint64_t used; };
+struct LazyFile { std::vector<uint8_t> bytes; bool tried; };
+static std::map<uint32_t, std::vector<PoolSlot>> g_pools;          /* stream object -> its pool */
+static std::map<uint32_t, uint32_t> g_pool_block;                   /* data pointer the game used -> block start, learnt from the marker */
+static std::map<uint32_t, std::pair<uint32_t, uint32_t>> g_block_slot;   /* block start -> (obj, slot) */
+static std::map<std::string, LazyFile> g_lazy_files;
+static bool g_debug_lazy;
+
+static uint32_t rd32(uint32_t a) { return *(const uint32_t *)A->mem(a); }
+
+static void lazy_assign(uint32_t obj, uint32_t id) {
+    if (id < EXT_FIRST_ID || id - EXT_FIRST_ID >= g_ext_n || obj < 0x08000000u || obj > 0x0a000000u - 0x400) return;
+    if (rd32(obj + 172 + 8) != 0x58334654u) return;            /* "TF3X": a file of the mod with a pool */
+    const uint32_t lo = rd32(obj + 192), hi = rd32(obj + 196), idx = rd32(obj + 200), blocks = rd32(obj + 204);
+    if (id < lo || id > hi || !blocks) return;
+    const uint32_t pool_start = rd32(obj + 172 + 0xc), pool = rd32(obj + 172 + 0x24);
+    uint32_t *entry = (uint32_t *)A->mem(obj + 172 + idx + (id - lo) * 8);
+    auto &slots = g_pools[obj];
+    if (slots.empty()) slots.assign(pool, PoolSlot{0, 0});
+    const uint64_t now = A->frame();
+    uint32_t pick = 0;
+    for (uint32_t k = 0; k < slots.size(); k++) {
+        if (slots[k].id == id && entry[0] == pool_start + k * blocks) { slots[k].used = now; return; }
+    }
+    for (uint32_t k = 1; k < slots.size(); k++) if (slots[k].used < slots[pick].used) pick = k;
+    if (slots[pick].id && slots[pick].used + 3 > now && g_debug_lazy) A->log("TF3 Cards: art pool of %08x is full (slot %u of id %u was used %llu frames ago)", obj, pick, slots[pick].id, (unsigned long long)(now - slots[pick].used));
+    if (slots[pick].id) {                                       /* the previous owner loses the block */
+        uint32_t *old = (uint32_t *)A->mem(obj + 172 + idx + (slots[pick].id - lo) * 8);
+        if (old[0] == pool_start + pick * blocks) { old[0] = 0; old[1] = 0; }
+    }
+    slots[pick] = PoolSlot{id, now};
+    entry[0] = pool_start + pick * blocks; entry[1] = 0;
+    if (g_debug_lazy) A->log("TF3 Cards: id %u gets art pool slot %u (unit %u) in stream %08x", id, pick, entry[0], obj);
+}
+
+static const std::vector<uint8_t> *lazy_file(char kind, char lang);
+static std::set<uint32_t> g_pool_addr;                              /* addresses (entry states) known to hold a pool block */
+
+/* after the game's own code ran: when the entry of an id holds the address of its (loaded) block, put the art in it */
+static void lazy_fill(uint32_t obj, uint32_t id) {
+    if (!g_pools.count(obj)) return;
+    const uint32_t lo = rd32(obj + 192), idx = rd32(obj + 200), blocks = rd32(obj + 204);
+    const uint32_t *entry = (const uint32_t *)A->mem(obj + 172 + idx + (id - lo) * 8);
+    const uint32_t addr = entry[1];
+    if (addr < 0x08800000u || addr > 0x0a000000u - 0x2000) return;
+    if (!g_pool_addr.count(addr)) {
+        const uint8_t *m = A->mem(addr + 0x80);
+        if (memcmp(m, "TF3X", 4) != 0) return;
+        g_pool_addr.insert(addr);
+        if (g_debug_lazy) A->log("TF3 Cards: pool block of id %u is loaded at %08x", id, addr);
+    }
+    const uint8_t *h = A->mem(obj + 172 + 0x28);
+    const std::vector<uint8_t> *f = lazy_file((char)h[0], (char)h[1]);
+    const uint32_t bytes = blocks * 0x800, k = id - EXT_FIRST_ID;
+    if (f->size() < (size_t)(k + 1) * bytes) return;
+    uint8_t *dst = A->mem(addr);
+    if (memcmp(dst, f->data() + (size_t)k * bytes, bytes) != 0) {
+        memcpy(dst, f->data() + (size_t)k * bytes, bytes);
+        if (g_debug_lazy) A->log("TF3 Cards: block %08x filled with the %c art of id %u", addr, h[0], id);
+    }
+}
+
+static int stream_hook(TfCpu *c, uint32_t fn, uint32_t obj, uint32_t id) {
+    lazy_assign(obj, id);
+    A->call_original(c, fn);
+    lazy_fill(obj, id);
+    return 1;
+}
+static int hk_stream_request(TfCpu *c) { return stream_hook(c, F_STREAM_REQUEST, A->reg(c, 4), A->reg(c, 5) & 0xffff); }
+static int hk_stream_ready(TfCpu *c) { return stream_hook(c, F_STREAM_READY, A->reg(c, 4), A->reg(c, 5) & 0xffff); }
+static int hk_stream_get(TfCpu *c) { return stream_hook(c, F_STREAM_GET, A->reg(c, 5), A->reg(c, 6) & 0xffff); }
+
+static const std::vector<uint8_t> *lazy_file(char kind, char lang) {
+    const std::string name = std::string("ext_art_") + kind + "_" + lang + ".bin";
+    LazyFile &f = g_lazy_files[name];
+    if (!f.tried) {
+        f.tried = true;
+        const std::wstring path = std::wstring(A->mod_dir) + L"\\" + std::wstring(name.begin(), name.end());
+        if (FILE *fp = _wfopen(path.c_str(), L"rb")) {
+            fseek(fp, 0, SEEK_END); const long n = ftell(fp); fseek(fp, 0, SEEK_SET);
+            f.bytes.resize((size_t)n); if (fread(f.bytes.data(), 1, (size_t)n, fp) != (size_t)n) f.bytes.clear();
+            fclose(fp);
+        }
+        A->log("TF3 Cards: %s: %zu bytes", name.c_str(), f.bytes.size());
+    }
+    return &f.bytes;
+}
+
+static int hk_texture_from_data(TfCpu *c) {
+    const uint32_t p = A->reg(c, 5);
+    if (p < 0x08800000u || p > 0x0a000000u - 0x2000) return 0;
+    uint32_t block = 0;
+    auto it = g_pool_block.find(p);
+    if (it != g_pool_block.end()) block = it->second;
+    else {
+        for (uint32_t o = 0; o <= 0x200; o += 4) {              /* the block start is p, p + 0x100...: look for the marker near the pointer */
+            const uint8_t *m = A->mem(p + o - 0x100 + 0x80);
+            if (memcmp(m, "TF3X", 4) == 0 && (m[4] == 'h' || m[4] == 'm')) { block = p + o - 0x100; break; }
+        }
+        if (!block) {
+            if (g_debug_lazy) { static int n; for (uint32_t o = 0; o < 0x1000 && n < 20; o += 4) if (memcmp(A->mem(p + o), "TF3Xm", 5) == 0) { A->log("TF3 Cards: cardm marker at +%x of texture data %08x (tex %08x)", o, p, A->reg(c, 4)); n++; break; } }
+            return 0;
+        }
+        g_pool_block[p] = block;
+        if (g_debug_lazy) A->log("TF3 Cards: texture data %08x is the pool block at %08x (offset %d)", p, block, (int)(block - p));
+    }
+    const uint8_t *m = A->mem(block + 0x80);
+    char kind, lang; uint32_t slot;
+    auto bs = g_block_slot.find(block);
+    static std::map<uint32_t, std::pair<char, char>> kinds;
+    if (memcmp(m, "TF3X", 4) == 0) { kind = (char)m[4]; lang = (char)m[5]; slot = *(const uint16_t *)(m + 6); kinds[block] = {kind, lang}; g_block_slot[block] = {0, slot}; }
+    else if (bs != g_block_slot.end()) { slot = bs->second.second; kind = kinds[block].first; lang = kinds[block].second; }
+    else return 0;
+    uint32_t id = 0;
+    for (auto &po : g_pools) { auto &sl = po.second; const uint8_t *h = A->mem(po.first + 172 + 0x28); if (slot < sl.size() && sl[slot].id && h[0] == (uint8_t)kind && h[1] == (uint8_t)lang) { id = sl[slot].id; break; } }
+    if (!id) return 0;
+    const std::vector<uint8_t> *f = lazy_file(kind, lang);
+    const uint32_t bytes = (kind == 'h' ? 2 : 1) * 0x800, k = id - EXT_FIRST_ID;
+    if (f->size() < (size_t)(k + 1) * bytes) return 0;
+    uint8_t *dst = A->mem(block);
+    if (memcmp(dst, f->data() + (size_t)k * bytes, bytes) != 0) {
+        memcpy(dst, f->data() + (size_t)k * bytes, bytes);
+        if (g_debug_lazy) A->log("TF3 Cards: block %08x filled with the %c art of id %u (%c)", block, kind, id, lang);
+    }
+    return 0;
+}
+
+/* Descriptions of the cards beyond the table: the game reads the whole cardinfo_<l>.ehp into a fixed buffer (BOOT 08ac7714, ~190 KB of room), which
+ * the texts of a few hundred cards would overflow, so the mod keeps them in ext_desc_<l>.bin (u32 count, u32 offsets[count + 1], UTF-16 texts) and
+ * the CARD_Indx entries of the new cards have an empty text at the end of CARD_Desc. Every time the game has (re)loaded the file, this points those
+ * entries at the plugin's copy of the texts (the offset is relative to CARD_Desc: 32-bit wrap-around reaches any address). */
+static const uint32_t CARDINFO_BUF = 0x08ac7714, TF1_INDEX_COUNT = 2480;
+static std::map<char, uint32_t> g_desc_mem;
+
+static void desc_patch(void) {
+    if (!g_ext_n) return;
+    const uint8_t *b = A->mem(CARDINFO_BUF);
+    if (memcmp(b, "EHP\x03", 4) != 0) return;
+    const uint32_t n = *(const uint32_t *)(b + 12);
+    if (n < 1 || n > 64) return;
+    uint32_t desc_base = 0, desc_len = 0, indx = 0, indx_len = 0;
+    char lang = 0;
+    for (uint32_t i = 0; i < n; i++) {
+        const uint32_t no = *(const uint32_t *)(b + 16 + 8 * i), dof = *(const uint32_t *)(b + 20 + 8 * i);
+        if (no > 0x2000) return;
+        const char *name = (const char *)(b + no);
+        const uint32_t size = *(const uint32_t *)(b + no + strlen(name) + 1);
+        if (strncmp(name, "CARD_Desc_", 10) == 0) { desc_base = CARDINFO_BUF + dof; desc_len = size; lang = (char)tolower((unsigned char)name[10]); }
+        else if (strncmp(name, "CARD_Indx_", 10) == 0) { indx = CARDINFO_BUF + dof; indx_len = size; }
+    }
+    if (!desc_base || !indx || indx_len != 8 * (TF1_INDEX_COUNT + g_ext_n + 1)) return;
+    uint32_t *ix = (uint32_t *)A->mem(indx);
+    if (ix[TF1_INDEX_COUNT * 2 + 1] != desc_len) return;          /* already patched, or not the mod's file */
+    uint32_t &mem = g_desc_mem[lang];
+    if (!mem) {
+        const std::wstring name = std::wstring(L"ext_desc_") + (wchar_t)lang + L".bin";
+        if (FILE *f = _wfopen((std::wstring(A->mod_dir) + L"\\" + name).c_str(), L"rb")) {
+            fseek(f, 0, SEEK_END); const long len = ftell(f); fseek(f, 0, SEEK_SET);
+            std::vector<uint8_t> v((size_t)len);
+            if (fread(v.data(), 1, v.size(), f) == v.size() && len >= 8 && *(const uint32_t *)v.data() == g_ext_n) {
+                mem = A->guest_alloc((uint32_t)len);
+                memcpy(A->mem(mem), v.data(), v.size());
+            }
+            fclose(f);
+        }
+        if (!mem) { A->log("TF3 Cards: ext_desc_%c.bin is missing or does not match ported.txt", lang); mem = 1; }
+        else A->log("TF3 Cards: ext_desc_%c.bin: %u texts at %08x", lang, g_ext_n, mem);
+    }
+    if (mem == 1) return;
+    const uint32_t *offs = (const uint32_t *)A->mem(mem + 4), text = mem + 4 + 4 * (g_ext_n + 1);
+    for (uint32_t k = 0; k <= g_ext_n; k++) ix[(TF1_INDEX_COUNT + k) * 2 + 1] = text + offs[k] - desc_base;
+    if (getenv("TF3_DEBUG_LAZY")) A->log("TF3 Cards: CARD_Indx description offsets of %u cards point at %08x", g_ext_n, text);
 }
 
 static void ported_load(void) {
@@ -241,6 +425,7 @@ static uint32_t collection_entry(TfCpu *c, uint32_t id) {
 /* grant_copies: a ported card the player does not own yet is added to the collection (marked "new") so it shows up in the trunk. The game reloads
  * the save when Continue is pressed, so this runs every half second once a save is in memory; it only touches cards with 0 copies. */
 static int hk_frame(TfCpu *c) {
+    desc_patch();
     static uint64_t dbg_next;
     if (g_trunk_n && getenv("TF3_DEBUG_TRUNK") && A->frame() >= dbg_next) {
         dbg_next = A->frame() + 300;
@@ -425,6 +610,11 @@ extern "C" __declspec(dllexport) int tfmod_init(const TfModApi *api) {
     A->hook(F_DUEL_START, hk_duel_start);
     A->hook(F_RANDOM, hk_random);
     if (g_ext_n) A->hook(F_TRUNK_LIST, hk_trunk_list);
+    if (g_ext_n) {
+        g_debug_lazy = getenv("TF3_DEBUG_LAZY") != nullptr;
+        A->hook(F_STREAM_REQUEST, hk_stream_request); A->hook(F_STREAM_READY, hk_stream_ready); A->hook(F_STREAM_GET, hk_stream_get);
+        A->hook(F_TEXTURE_FROM_DATA, hk_texture_from_data);
+    }
     A->hook(F_LP_AMOUNTS, hk_lp_amounts);
     A->hook(F_EFFECT_DRIVER, hk_effect_driver);
     A->hook(F_TARGET_ALL, hk_target_all);
