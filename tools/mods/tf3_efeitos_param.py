@@ -163,20 +163,22 @@ def resolver_stats(gids, spec=None):
     """-> stat.bin bytes: passive ATK/DEF rules of the monsters among the installed cards (see the plugin: hk_stats).
     Spec: { "<TF3 id>": {"scope": self|own|opp|all, "atk": N, "def": N, "target": {filter}, "cond": {"side": own|opp|any, "filter": {...}, "per": bool, "excl": bool}} }
       scope self: the bonus goes to the card itself; equip: to the monster the equip card is attached to; own / opp / all: to the monsters of that side that match `target` (all when absent)
+      source "st": the card is a Spell / Trap (continuous Spell) and the rule works while it is face-up in a Spell / Trap zone of either side
       cond: the rule only works while a face-up monster matching the filter is on that side (relative to the card); per = once per such monster; excl = not counting the card"""
     if spec is None:
         spec = json.load(open(SPEC_STATS_AUTO, encoding="utf-8")) if os.path.exists(SPEC_STATS_AUTO) else {}
         spec.update(json.load(open(SPEC_STATS, encoding="utf-8")))
     prop = propriedades(gids)
     out = []
-    for k, r in sorted(spec.items(), key=lambda x: int(x[0])):
+    regras = [(k, r) for k, v in sorted(spec.items(), key=lambda x: int(x[0])) for r in (v if isinstance(v, list) else [v])]   # a card may list several rules
+    for k, r in regras:
         cid = int(k)
         if cid not in gids:
             continue
         tgt = sorted(i for i, p in prop.items() if combina(p, r["target"])) if r.get("target") else []
         c = r.get("cond") or {}
         cond = sorted(i for i, p in prop.items() if combina(p, c["filter"])) if c else []
-        out.append(struct.pack("<HBBBBiiII", gids[cid], ESCOPOS[r.get("scope", "self")], LADOS[c.get("side")], 1 if c.get("per") else 0,
+        out.append(struct.pack("<HBBBBiiII", gids[cid], ESCOPOS[r.get("scope", "self")] | (16 if r.get("source") == "st" else 0), LADOS[c.get("side")], 1 if c.get("per") else 0,
                                1 if c.get("excl") else 0, r.get("atk", 0), r.get("def", 0), len(tgt), len(cond))
                    + struct.pack("<%dH" % len(tgt), *tgt) + struct.pack("<%dH" % len(cond), *cond))
     return b"TF3S" + struct.pack("<I", len(out)) + b"".join(out)

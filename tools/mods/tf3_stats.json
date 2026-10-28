@@ -94,5 +94,148 @@
    },
    "per": true
   }
+ },
+ "7399": [
+  {
+   "scope": "opp",
+   "source": "st",
+   "atk": -100,
+   "target": {
+    "monster": true,
+    "level_min": 1,
+    "level_max": 1
+   }
+  },
+  {
+   "scope": "opp",
+   "source": "st",
+   "atk": -200,
+   "target": {
+    "monster": true,
+    "level_min": 2,
+    "level_max": 2
+   }
+  },
+  {
+   "scope": "opp",
+   "source": "st",
+   "atk": -300,
+   "target": {
+    "monster": true,
+    "level_min": 3,
+    "level_max": 3
+   }
+  },
+  {
+   "scope": "opp",
+   "source": "st",
+   "atk": -400,
+   "target": {
+    "monster": true,
+    "level_min": 4,
+    "level_max": 4
+   }
+  },
+  {
+   "scope": "opp",
+   "source": "st",
+   "atk": -500,
+   "target": {
+    "monster": true,
+    "level_min": 5,
+    "level_max": 5
+   }
+  },
+  {
+   "scope": "opp",
+   "source": "st",
+   "atk": -600,
+   "target": {
+    "monster": true,
+    "level_min": 6,
+    "level_max": 6
+   }
+  },
+  {
+   "scope": "opp",
+   "source": "st",
+   "atk": -700,
+   "target": {
+    "monster": true,
+    "level_min": 7,
+    "level_max": 7
+   }
+  },
+  {
+   "scope": "opp",
+   "source": "st",
+   "atk": -800,
+   "target": {
+    "monster": true,
+    "level_min": 8,
+    "level_max": 8
+   }
+  },
+  {
+   "scope": "opp",
+   "source": "st",
+   "atk": -900,
+   "target": {
+    "monster": true,
+    "level_min": 9,
+    "level_max": 9
+   }
+  },
+  {
+   "scope": "opp",
+   "source": "st",
+   "atk": -1000,
+   "target": {
+    "monster": true,
+    "level_min": 10,
+    "level_max": 10
+   }
+  },
+  {
+   "scope": "opp",
+   "source": "st",
+   "atk": -1100,
+   "target": {
+    "monster": true,
+    "level_min": 11,
+    "level_max": 11
+   }
+  },
+  {
+   "scope": "opp",
+   "source": "st",
+   "atk": -1200,
+   "target": {
+    "monster": true,
+    "level_min": 12,
+    "level_max": 12
+   }
+  }
+ ],
+ "7457": {
+  "scope": "all",
+  "source": "st",
+  "atk": -500,
+  "def": 400,
+  "target": {
+   "monster": true,
+   "attribute": "earth"
+  }
+ },
+ "7627": {
+  "scope": "all",
+  "source": "st",
+  "atk": 1200,
+  "target": {
+   "monster": true,
+   "type": "aqua",
+   "attribute": "water",
+   "level_max": 2
+  }
  }
 }

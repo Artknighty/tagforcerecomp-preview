@@ -83,6 +83,16 @@ Not wired yet: triggers the game tests outside the two gates above, such as "des
 
 Checked in a duel: Flash of the Forbidden Spell cannot be activated while the opponent has free monster zones, and with the condition off it destroys the opponent's monsters; Short Circuit (condition off) destroys the opponent's monster. Destroying Spell / Trap cards through the same rule is not checked yet.
 
+## Passive bonuses of continuous Spells
+
+`tools/mods/tf3_stats.json` rules take `"source": "st"` when the card is a continuous Spell: the rule works while the card is face-up in a Spell / Trap zone of either side (scope `own` / `opp` / `all` is relative to its controller). A card may list several rules; "loses 100 ATK x Level" is one rule per Level:
+
+```json
+{ "7457": { "scope": "all", "source": "st", "atk": -500, "def": 400, "target": { "monster": true, "attribute": "earth" } } }
+```
+
+Checked in a duel: Burden of the Mighty took 400 ATK from a Level 4 opponent monster (1400 -> 1000). Acidic Downpour and Wetlands use the same path (not duelled separately).
+
 ## Known limits
 
 * The first two new ids (6958, 6959) cannot be Normal Summoned as monsters (the card menu only offers "Show Details"); keep Spell/Trap cards there (`tools/mods/tf3_gids.txt` does).
