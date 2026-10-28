@@ -54,7 +54,12 @@ static int64_t do_open_(const std::string &path, uint32_t flags) {
         f.kind = File::RAW;
     } else if (is_disc(dev)) {
         uint32_t lba, size; bool isdir;
-        if (!parse_lbn_path(rest, &lba, &size) && iso_find(rest, &lba, &size, &isdir) != 0) return ERR_NOENT;
+        if (!parse_lbn_path(rest, &lba, &size) && iso_find(rest, &lba, &size, &isdir) != 0) {
+            /* a Field Spell added by a mod has no background file of its own (duel/bg/fmagic<id>.ehp): the game would retry forever, so it gets the default one */
+            static const char kBg[] = "PSP_GAME/USRDIR/duel/bg/fmagic";
+            const size_t n = sizeof(kBg) - 1;
+            if (rest.size() != n + 8 || rest.compare(0, n, kBg) != 0 || iso_find(std::string(kBg) + "0000.ehp", &lba, &size, &isdir) != 0) return ERR_NOENT;
+        }
         if (flags & 0x0002) return 0x80010001u;   /* escrita em ISO */
         f.kind = File::ISO; f.lba = lba; f.size = size;
         { extern void mpeg_movie_opened(uint32_t); mpeg_movie_opened(lba); }   /* video substituto de um mod (hle_mpeg.cpp) */
