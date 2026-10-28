@@ -83,6 +83,8 @@ Not wired yet: triggers the game tests outside the two gates above, such as "des
 
 Checked in a duel: Flash of the Forbidden Spell cannot be activated while the opponent has free monster zones, and with the condition off it destroys the opponent's monsters; Short Circuit (condition off) destroys the opponent's monster. Destroying Spell / Trap cards through the same rule is not checked yet.
 
+Attack traps borrow Mirror Force (`"like": 4887`): the game's own "opponent declared an attack" test (09ed5870) starts the trap and the donor's filter destroys the Attack Position monsters. `{"kind": "opp_attack_monsters", "n": 3}` adds "while they control 3 or more Attack Position monsters" (Radiant Mirror Force, 7137), evaluated inside that test. Checked in a duel: with 2 attackers and N = 3 the trap is not offered; with N = 1 it is offered and clears the opponent's monsters.
+
 ## Passive bonuses of continuous Spells
 
 `tools/mods/tf3_stats.json` rules take `"source": "st"` when the card is a continuous Spell: the rule works while the card is face-up in a Spell / Trap zone of either side (scope `own` / `opp` / `all` is relative to its controller). A card may list several rules; "loses 100 ATK x Level" is one rule per Level:

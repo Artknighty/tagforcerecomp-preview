@@ -126,7 +126,7 @@ def resolver_valores(gids, spec=None):
 
 LADOS_DESTRUIR = {"own": 1, "opp": 2, "both": 3}
 ZONAS_DESTRUIR = {"monster": 1, "st": 2, "all": 3}
-CONDS_DESTRUIR = {None: 0, "opp_monsters_full": 1, "opp_st_full": 2, "controls": 4}
+CONDS_DESTRUIR = {None: 0, "opp_monsters_full": 1, "opp_st_full": 2, "controls": 4, "opp_attack_monsters": 5}
 
 
 def resolver_destruir(gids, spec=None):

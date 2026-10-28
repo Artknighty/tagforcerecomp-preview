@@ -581,7 +581,7 @@ static int hk_lp_amounts(TfCpu *c) {
  * record whether the monster is hit, then destroys the chosen ones). The driver hook tosses the coin with the game's own random (09eb30b8) and shows the coin
  * (animation command 09e998a0, as Fiend Comedian does); the filter hook then narrows Dark Hole's "every monster" to one side while that effect resolves. */
 static const uint16_t TF3_SUIT_OF_SWORD_X = 3734;
-static const uint32_t F_EFFECT_DRIVER = 0x09ee3b7c, F_TARGET_ALL = 0x09ebbbe8, F_TARGET_OPP = 0x09ebbca0, F_TARGET_ST = 0x09ebe088, F_COIN_ANIM = 0x09e998a0;
+static const uint32_t F_EFFECT_DRIVER = 0x09ee3b7c, F_TARGET_ALL = 0x09ebbbe8, F_TARGET_OPP = 0x09ebbca0, F_TARGET_ST = 0x09ebe088, F_TARGET_ATK = 0x09ebe884, F_ATTACK_TRIGGER = 0x09ed5870, F_COIN_ANIM = 0x09e998a0;
 static int g_coin = -1;                                       /* -1 = not resolving; 1 = heads (opponent's side), 0 = tails (own side) */
 
 static uint16_t slot_of(uint16_t tf3) { for (const auto &p : PORTED) if (p.tf3 == tf3) return p.slot; return 0; }
@@ -668,12 +668,21 @@ static void destroy_load(void) {
     A->log("TF3 Cards: %u destroy rules loaded", (unsigned)g_destroy.size());
 }
 
-static bool destroy_cond(const DestroyRule &r, uint32_t own) {
+static bool g_in_cond = false;
+static bool destroy_cond(TfCpu *c, uint32_t obj, const DestroyRule &r, uint32_t own) {
     if (r.cond == 1 || r.cond == 2 || r.cond == 3) {   /* 1: all 5 monster zones of the opponent are occupied; 2: all 5 Spell / Trap zones of the opponent; 3: all 5 of both kinds of this side */
         int n = 0;
         for (uint32_t k = 0; k < 5; k++) n += r.cond == 2 ? (*(const uint16_t *)A->mem(DUEL_SIDES + (1 - own) * DUEL_SIDE_SIZE + 0x30 + 100 + 20 * k) & 0x1fff) != 0
                                                           : (*(const uint16_t *)A->mem(DUEL_SIDES + (1 - own) * DUEL_SIDE_SIZE + 0x30 + 20 * k) & 0x1fff) != 0;
         return n == 5;
+    }
+    if (r.cond == 5) {   /* at least `param` Attack Position monsters of the opponent: counted with the filter of Mirror Force (the game's own "face-up Attack Position monster of the other side") */
+        int n = 0;
+        g_in_cond = true;
+        for (uint32_t k = 0; k < 5; k++) n += call_game(c, F_TARGET_ATK, obj, 1 - own, k, 0) & 1;
+        g_in_cond = false;
+        if (getenv("TF3_DEBUG_FX")) A->log("attack position monsters of the opponent: %d (needs %u)", n, (unsigned)r.param);
+        return n >= r.param;
     }
     if (r.cond == 4) {   /* you control at least `param` face-up monsters from the id set */
         int n = 0;
@@ -685,12 +694,15 @@ static bool destroy_cond(const DestroyRule &r, uint32_t own) {
 
 static int hk_target_all(TfCpu *c) {   /* a0 = effect object, a1 = side, a2 = zone; false for the monsters the coin spares */
     const uint32_t obj = A->reg(c, 4);
+    if (g_in_cond) return 0;
+    static const bool dbg0 = getenv("TF3_DEBUG_FX") != nullptr;
+    if (dbg0 && obj >= 0x08000000u && obj <= 0x0a000000u - 0x20 && A->reg(c, 6) == 0) A->log("target filter %08x: object id %u side %u", A->reg(c, 31), (unsigned)*(const uint16_t *)A->mem(obj), A->reg(c, 5));
     if (obj >= 0x08000000u && obj <= 0x0a000000u - 0x20) {
         const auto d = g_destroy.find(*(const uint16_t *)A->mem(obj));
         if (d != g_destroy.end()) {
             const DestroyRule &r = d->second;
             const uint32_t own = A->mem(obj)[2] & 1, side = A->reg(c, 5) & 1, zone = A->reg(c, 6);
-            const bool ok = ((r.side & (side == own ? 1 : 2)) != 0) && ((r.zones & (zone < 5 ? 1 : 2)) != 0) && (g_destroying || destroy_cond(r, own));
+            const bool ok = ((r.side & (side == own ? 1 : 2)) != 0) && ((r.zones & (zone < 5 ? 1 : 2)) != 0) && (g_destroying || destroy_cond(c, obj, r, own));
             static const bool dbg = getenv("TF3_DEBUG_FX") != nullptr;
             if (dbg) A->log("destroy filter of id %u: side %u zone %u resolving %d -> %s", (unsigned)*(const uint16_t *)A->mem(obj), side, zone, (int)g_destroying, ok ? "ask the game" : "no");
             if (!ok) { A->set_reg(c, 2, 0); return 1; }
@@ -706,6 +718,21 @@ static int hk_target_all(TfCpu *c) {   /* a0 = effect object, a1 = side, a2 = zo
     const uint32_t own = A->mem(A->reg(c, 4))[2] & 1, side = A->reg(c, 5) & 1;
     if ((g_coin == 0) != (side == own)) { A->set_reg(c, 2, 0); return 1; }
     return 0;
+}
+
+static int hk_attack_trigger(TfCpu *c) {   /* 09ed5870(effect object): the "opponent declared an attack" test of Mirror Force; a destroy rule adds its own condition to it */
+    const uint32_t obj = A->reg(c, 4);
+    if (obj < 0x08000000u || obj > 0x0a000000u - 0x20) return 0;
+    const auto d = g_destroy.find(*(const uint16_t *)A->mem(obj));
+    if (d == g_destroy.end() || !d->second.cond) return 0;
+    A->call_original(c, F_ATTACK_TRIGGER);
+    if (A->reg(c, 2) & 1) {
+        const bool ok = destroy_cond(c, obj, d->second, A->mem(obj)[2] & 1);
+        static const bool dbg = getenv("TF3_DEBUG_FX") != nullptr;
+        if (dbg) A->log("attack trigger of id %u: condition %s", (unsigned)d->first, ok ? "met" : "not met");
+        A->set_reg(c, 2, ok ? 1 : 0);
+    }
+    return 1;
 }
 
 static int hk_effect_record(TfCpu *c) {   /* looks the record up as the card it plays like, then puts the key back */
@@ -1116,7 +1143,7 @@ extern "C" __declspec(dllexport) int tfmod_init(const TfModApi *api) {
     A->hook(F_LP_AMOUNTS, hk_lp_amounts);
     A->hook(F_EFFECT_DRIVER, hk_effect_driver);
     A->hook(F_TARGET_ALL, hk_target_all);
-    if (!g_destroy.empty()) { A->hook(F_TARGET_OPP, hk_target_all); A->hook(F_TARGET_ST, hk_target_all); }
+    if (!g_destroy.empty()) { A->hook(F_TARGET_OPP, hk_target_all); A->hook(F_TARGET_ST, hk_target_all); A->hook(F_TARGET_ATK, hk_target_all); A->hook(F_ATTACK_TRIGGER, hk_attack_trigger); }
     if (getenv("TF3_DEBUG_STREAM")) A->hook(0x0882ead0, hk_debug_stream);
     if (getenv("TF3_DEBUG_OBJ")) A->hook(0x0882ead0, hk_debug_obj);
     if (getenv("TF3_DEBUG_REQ")) A->hook(0x0882ead0, hk_debug_req);

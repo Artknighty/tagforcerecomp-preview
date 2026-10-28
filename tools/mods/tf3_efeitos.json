@@ -117,5 +117,16 @@
     }
    }
   }
+ },
+ "7137": {
+  "like": 4887,
+  "destroy": {
+   "side": "opp",
+   "zones": "monster",
+   "cond": {
+    "kind": "opp_attack_monsters",
+    "n": 3
+   }
+  }
  }
 }
