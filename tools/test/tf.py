@@ -188,6 +188,13 @@ def start(args):
     iso = os.environ.get('TF_ISO') or (re.search(r'(?im)^iso=(.*)$', ini).group(1).strip() if re.search(r'(?im)^iso=(.*)$', ini) else '')
     exe = args[args.index('--exe') + 1] if '--exe' in args else os.path.join('gen', 'pkg', 'TagForceRecomp', 'TagForceRecomp_bg.exe')
     pkg = os.path.dirname(os.path.join(ROOT, exe))   # the test runs inside the package folder (its own gen/ translated code and ms0/ test save)
+    if TAG and os.path.basename(pkg) == 'TagForceRecomp' and os.path.basename(os.path.dirname(pkg)) == 'pkg':
+        # TF_TAG: each parallel instance runs in its own copy of the package (the test save ms0/ and the translated code cache live there)
+        tagpkg = os.path.join(ROOT, 'gen', 'pkg_' + TAG)
+        subprocess.run(['robocopy', pkg, tagpkg, '/MIR', '/XD', 'jogo', 'ms0', '/NFL', '/NDL', '/NJH', '/NJS', '/NP'], capture_output=True)
+        if not os.path.exists(os.path.join(tagpkg, 'jogo')) and os.path.isdir(os.path.join(pkg, 'jogo')):
+            subprocess.run(['cmd', '/c', 'mklink', '/J', os.path.join(tagpkg, 'jogo'), os.path.realpath(os.path.join(pkg, 'jogo'))], capture_output=True)
+        exe = os.path.relpath(os.path.join(tagpkg, os.path.basename(exe)), ROOT); pkg = tagpkg
     dados = os.path.join(pkg, 'jogo')
     if not os.path.isdir(dados) and not os.path.isfile(iso): raise SystemExit('sem dados instalados em %s: rode tools/install_dev.sh ou defina TF_ISO' % dados)
     # save de teste = copia do save do usuario (ou vazio com --fresh); nunca escreve em gen/ms0
