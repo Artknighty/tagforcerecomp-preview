@@ -65,5 +65,34 @@
     "type": "fairy"
    }
   }
+ },
+ "7895": {
+  "scope": "own",
+  "atk": 400,
+  "target": {
+   "monster": true,
+   "type": "warrior"
+  }
+ },
+ "7049": {
+  "scope": "own",
+  "atk": 400,
+  "def": 400,
+  "target": {
+   "monster": true,
+   "type": "fairy"
+  }
+ },
+ "7038": {
+  "scope": "self",
+  "atk": 500,
+  "cond": {
+   "side": "own",
+   "filter": {
+    "monster": true,
+    "attribute": "wind"
+   },
+   "per": true
+  }
  }
 }
