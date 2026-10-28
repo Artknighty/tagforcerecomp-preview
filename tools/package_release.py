@@ -26,7 +26,7 @@ MSYS_USR = r'C:\msys64\usr\bin'
 # translator: everything build_modules.py -> recomp.py imports, plus the module tables
 TOOLS = ['build_modules.py', 'recomp.py', 'allegrex.py', 'pspmod.py', 'elfscan.py', 'imports.py', 'merge.tsv', 'modules.tsv', 'modules_ULUS10136.tsv']
 PY_KEEP = ['python.exe', 'python311.dll', 'python3.dll', 'vcruntime140.dll', 'vcruntime140_1.dll', 'LICENSE.txt', 'python311.zip']
-SKIP_MODS = {'MonstersOnField'}   # prototype that needs art generated from the game; not part of the first release
+SKIP_MODS = {'MonstersOnField', 'Yugi'}   # prototype that needs art generated from the game; not part of the first release
 
 
 def run(cmd, **kw):

@@ -49,3 +49,7 @@ texturas_despejo/
 /tools/python/
 /tools/translator_version.txt
 /.gitattributes
+
+# Yugi mod: work in progress, kept local only
+/plugins/src/Yugi/
+/tools/mods/mod_yugi_portrait.py
