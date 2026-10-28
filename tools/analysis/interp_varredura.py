@@ -126,6 +126,9 @@ def analyse_seq(seq_dir):
             even = T / 4.0
             # [T,0,0,0] (all of it at the first in-between) is a cut shown early, by design: not flagged. The defect is motion that is
             # missing in the middle and arrives at the real frame (s3 big), or a middle step that jumps
+            cut_last = (s[3] >= 0.85 * T and max(s[0], s[1], s[2]) < 0.1 * T) or (T >= 12 and s[3] >= 0.6 * T and max(s[0], s[1], s[2]) < 0.2 * T)   # a cut or fade landing on the real frame (sprite motion is T < 12)
+            if cut_last:
+                continue
             if s[1] < 0.5 * even and s[2] < 0.5 * even and s[3] > 0.3 * T and (s[0] + s[3]) > 0.6 * T:
                 out.append(('frozen', rows[a][0], quadro, T, s))
             elif max(s) > 1.8 * (sum(s) / 4.0) and s.index(max(s)) != 0:
