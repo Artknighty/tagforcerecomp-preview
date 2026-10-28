@@ -24,7 +24,7 @@ def um(cid, mods, extra):
     with open(os.path.join(out, 'saida.txt'), 'w') as f:
         subprocess.run([sys.executable, TF, 'stop'], env=env, stdout=f, stderr=f)
         subprocess.run([sys.executable, TF, 'duelo', '--lento'], env=env, stdout=f, stderr=f, timeout=400)
-        subprocess.run([sys.executable, TF, 'run', ROTEIRO], env=env, stdout=f, stderr=f, timeout=900)
+        subprocess.run([sys.executable, TF, 'run', os.environ.get('TF3_LOTE_ROTEIRO', ROTEIRO)], env=env, stdout=f, stderr=f, timeout=900)
         subprocess.run([sys.executable, TF, 'stop'], env=env, stdout=f, stderr=f)
     for p in glob.glob(os.path.join(ROOT, 'gen', 'ctl_' + tag, '*.png')):
         shutil.copy(p, out)

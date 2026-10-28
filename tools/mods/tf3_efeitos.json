@@ -128,5 +128,13 @@
     "n": 3
    }
   }
+ },
+ "7842": {
+  "like": 6502,
+  "trigger_like": 4226,
+  "trigger_event": "summon",
+  "draw": {
+   "self": 1
+  }
  }
 }
