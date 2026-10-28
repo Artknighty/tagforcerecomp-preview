@@ -314,6 +314,15 @@ HLE(sceKernelGetSystemTimeLow) { time_poll(1, false); RET((uint32_t)g_now); }
 HLE(sceKernelGetSystemTimeWide) { time_poll(1, false); RET64(g_now); }
 HLE(sceRtcGetCurrentTick) { time_poll(1, false); wr64(ARG(0), g_now + 62135596800ull * 1000000ull); RET(0); }
 
+/* ScePspDateTime: u16 year, month, day, hour, minute, second + u32 microsecond (16 bytes). The deck-save screen reads the clock. */
+static void put_datetime(uint32_t p, const SYSTEMTIME &st) {
+    uint16_t *d = (uint16_t *)mem_ptr(p);
+    d[0] = st.wYear; d[1] = st.wMonth; d[2] = st.wDay; d[3] = st.wHour; d[4] = st.wMinute; d[5] = st.wSecond;
+    wr32(p + 12, (uint32_t)st.wMilliseconds * 1000);
+}
+HLE(sceRtcGetCurrentClockLocalTime) { SYSTEMTIME st; GetLocalTime(&st); put_datetime(ARG(0), st); RET(0); }
+HLE(sceRtcGetCurrentClock) { SYSTEMTIME st; GetSystemTime(&st); put_datetime(ARG(0), st); RET(0); }
+
 HLE(sceKernelCreateSema) { uint32_t u = new_uid(); g_sema[u] = Sema{(int)ARG(2), (int)ARG(3), {}}; RET(u); }
 #define KERR_WAIT_DELETE 0x800201b5u   /* o objeto esperado foi apagado */
 HLE(sceKernelDeleteSema) {   /* quem esperava acorda com WAIT_DELETE (antes ficava preso para sempre) */
