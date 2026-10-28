@@ -127,6 +127,7 @@ def montar_mod(pasta, ids):
     open(os.path.join(pasta, "trigger.bin"), "wb").write(tf3_efeitos_param.resolver_gatilhos(gids))
     open(os.path.join(pasta, "stat.bin"), "wb").write(tf3_efeitos_param.resolver_stats(gids))
     open(os.path.join(pasta, "amount.bin"), "wb").write(tf3_efeitos_param.resolver_valores(gids))
+    open(os.path.join(pasta, "destroy.bin"), "wb").write(tf3_efeitos_param.resolver_destruir(gids))
     with open(os.path.join(pasta, "ported.txt"), "w", encoding="utf-8", newline="\n") as f:
         for cid in ids:
             f.write("%d %d %d %s\n" % (gids[cid], cid, likes.get(cid, EFEITO.get(cid, 0)), novas[cid]["nome"]))

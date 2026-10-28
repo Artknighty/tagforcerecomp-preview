@@ -124,6 +124,35 @@ def resolver_valores(gids, spec=None):
     return b"TF3V" + struct.pack("<I", len(out)) + b"".join(out)
 
 
+LADOS_DESTRUIR = {"own": 1, "opp": 2, "both": 3}
+ZONAS_DESTRUIR = {"monster": 1, "st": 2, "all": 3}
+CONDS_DESTRUIR = {None: 0, "opp_monsters_full": 1, "opp_st_full": 2, "controls": 4}
+
+
+def resolver_destruir(gids, spec=None):
+    """-> destroy.bin bytes: "Destroy all" effects of the installed cards (see the plugin: hk_target_all). The card borrows the record of Dark Hole (4342, both
+    sides), Raigeki (4343, opponent) or Heavy Storm (4891, Spell / Trap zones too) with "like".
+    Spec: "destroy": {"side": own|opp|both, "zones": monster|st|all, "cond": {"kind": opp_monsters_full | opp_st_full | controls, "n": N, "filter": {...}}}
+      cond = "Activate only when ...": the opponent's 5 monster (or Spell / Trap) zones are all occupied; or you control N face-up monsters that match the filter"""
+    if spec is None:
+        spec = json.load(open(SPEC_AUTO, encoding="utf-8")) if os.path.exists(SPEC_AUTO) else {}
+        spec.update(json.load(open(SPEC, encoding="utf-8")))
+    prop = None
+    out = []
+    for k, e in sorted(spec.items(), key=lambda x: int(x[0])):
+        if int(k) not in gids or "destroy" not in e:
+            continue
+        d = e["destroy"]
+        c = d.get("cond") or {}
+        ids = []
+        if c.get("filter"):
+            prop = prop or propriedades(gids)
+            ids = sorted(i for i, p in prop.items() if combina(p, c["filter"]))
+        out.append(struct.pack("<HBBBBH", gids[int(k)], LADOS_DESTRUIR[d.get("side", "opp")], ZONAS_DESTRUIR[d.get("zones", "monster")],
+                               CONDS_DESTRUIR[c.get("kind")], c.get("n", 0), len(ids)) + struct.pack("<%dH" % len(ids), *ids))
+    return b"TF3D" + struct.pack("<I", len(out)) + b"".join(out)
+
+
 SPEC_STATS = os.path.join(os.path.dirname(os.path.abspath(__file__)), "tf3_stats.json")
 SPEC_STATS_AUTO = os.path.join(os.path.dirname(os.path.abspath(__file__)), "tf3_stats_auto.json")
 ESCOPOS = {"self": 0, "own": 1, "opp": 2, "all": 3, "equip": 4}

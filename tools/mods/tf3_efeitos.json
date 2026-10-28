@@ -82,5 +82,40 @@
    "opp": 2
   },
   "name": "The Gift of Greed"
+ },
+ "6899": {
+  "like": 4343,
+  "destroy": {
+   "side": "opp",
+   "zones": "monster",
+   "cond": {
+    "kind": "opp_monsters_full"
+   }
+  }
+ },
+ "6911": {
+  "like": 4342,
+  "destroy": {
+   "side": "opp",
+   "zones": "st",
+   "cond": {
+    "kind": "opp_st_full"
+   }
+  }
+ },
+ "7629": {
+  "like": 4342,
+  "destroy": {
+   "side": "opp",
+   "zones": "all",
+   "cond": {
+    "kind": "controls",
+    "n": 3,
+    "filter": {
+     "monster": true,
+     "name_has": "Batteryman"
+    }
+   }
+  }
  }
 }

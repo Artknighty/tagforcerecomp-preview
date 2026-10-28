@@ -73,6 +73,16 @@ Checked in a duel: Blizzed (draw 1) and Abaki (both players 2000 → 1500).
 
 Not wired yet: triggers the game tests outside the two gates above, such as "destroys a monster by battle", "inflicts Battle Damage" and "Special Summoned from the Graveyard".
 
+## "Destroy all" effects
+
+`"destroy": {"side": "own|opp|both", "zones": "monster|st|all", "cond": {...}}` makes a card borrow the record of Dark Hole (`"like": 4342`) and narrows what the game's destroy driver may hit. `cond` is the "Activate only when ..." part, checked while the game asks whether the card can be activated: `{"kind": "opp_monsters_full"}`, `{"kind": "opp_st_full"}` or `{"kind": "controls", "n": 3, "filter": {...}}` (N face-up monsters matching the filter). The numbers go to `destroy.bin`.
+
+```json
+{ "6899": { "like": 4342, "destroy": { "side": "opp", "zones": "monster", "cond": { "kind": "opp_monsters_full" } } } }
+```
+
+Checked in a duel: Flash of the Forbidden Spell cannot be activated while the opponent has free monster zones, and with the condition off it destroys the opponent's monsters; Short Circuit (condition off) destroys the opponent's monster. Destroying Spell / Trap cards through the same rule is not checked yet.
+
 ## Known limits
 
 * The first two new ids (6958, 6959) cannot be Normal Summoned as monsters (the card menu only offers "Show Details"); keep Spell/Trap cards there (`tools/mods/tf3_gids.txt` does).
