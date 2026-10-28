@@ -39,7 +39,7 @@ ATRAC3/3+) and H.264 movies through FFmpeg. Network/ad-hoc modes are not support
 
 The main download has **no mods**: it is as close to the original game as possible. Mods come separately: every one is a folder in `mods/`
 (next to the exe), switched on or off on the launcher's **Mods** page (applies on restart). Every mod ships **switched off**.
-Each release has four downloads:
+Each release has four downloads. Small updates may ship only the runtime and the mods: the Enhanced Textures pack and the Full pack are attached to the release that changed them, currently [v0.5.1](https://github.com/Artknighty/tagforcerecomp-preview/releases/tag/v0.5.1) and still valid for newer versions (use the newer runtime and mods with them).
 
 | File | What it is |
 |---|---|
@@ -79,7 +79,7 @@ slider settings in the menu. See [`docs/MODS.md`](docs/MODS.md) to build your ow
 
 ## Download and play
 
-1. Download `TagForceRecomp-<version>-win64.zip` (or the Full pack, see [Mods](#mods)) from the [Releases](../../releases) page and extract it anywhere (not inside `Program Files`).
+1. Download `TagForceRecomp-<version>-win64.zip` (or the Full pack, see [Mods](#mods)) from the [Releases](../../releases) page (the Enhanced Textures pack and the Full pack are on [v0.5.1](https://github.com/Artknighty/tagforcerecomp-preview/releases/tag/v0.5.1)) and extract it anywhere (not inside `Program Files`).
 2. Run `TagForceRecomp.exe`, click **Select ISO...** and pick **your own** copy of the game (European release, ULES-00600).
 3. Click **Install and play**. The first run copies the game files and translates the game's code on your machine (a few minutes,
    only once; the ISO is not needed afterwards). From then on just click **Play**.
