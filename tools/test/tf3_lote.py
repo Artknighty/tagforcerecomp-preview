@@ -13,7 +13,7 @@ from concurrent.futures import ThreadPoolExecutor
 
 ROOT = os.path.dirname(os.path.dirname(os.path.dirname(os.path.abspath(__file__))))
 TF = os.path.join(ROOT, 'tools', 'test', 'tf.py')
-ROTEIRO = ("w300 O w60 RIGHT w20 RIGHT w20 RIGHT w20 X w2400 shot:d1 DOWN w40 DOWN w40 LEFT w30 LEFT w30 LEFT w30 LEFT w30 LEFT w30 X w60 shot:d2 "
+ROTEIRO = ("w300 O w60 RIGHT w20 RIGHT w20 RIGHT w20 X w2400 shot:d1 DOWN w40 DOWN w40 LEFT w30 LEFT w30 LEFT w30 LEFT w30 LEFT w30 LEFT w30 shot:d1b X w60 shot:d2 "
            "X w100 shot:d3 X w200 shot:d4 w300 X w200 shot:d5")
 
 
