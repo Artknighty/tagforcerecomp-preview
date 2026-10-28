@@ -14,7 +14,7 @@ and then measures how the picture moves in every group  R M M M R:
 
 Ground-truth mode (--autoteste): the engine interpolates F0 -> F2 (at double the motion) and compares the result with the REAL in-between frame F1, pixel by pixel
 (TF_INTERP_SELFTEST). A pair is flagged when the error is > 1 % of the screen, the real frame F1 differs from F2 (hold > 0.5 %: otherwise the game itself
-stood still) and the interpolation is no better than 80 % of "just show F2" (kind `bad`, or `worse` when it is worse than doing nothing).
+stood still) and the interpolation is no better than 80 % of "just show F2" (kinds: `candidate` = the game moved, hold >= 2 %, and the error is >= 1.3x hold; `minor` = the rest, only counted).
 error == hold means the pair was not interpolated at all (scene change, taint...): counted as `skipped`, listed separately, informational.
 The report gives the screen cells (8x4 grid) that are wrong.
 
@@ -162,7 +162,9 @@ def analyse_autoteste(sess):
         total += 1
         vb, err, hold = int(m.group(1)), float(m.group(2)), float(m.group(3))
         if err > 1.0 and hold > 0.5 and err > 0.8 * hold:
-            kind = 'skipped' if abs(err - hold) <= 0.03 * hold + 0.05 else ('worse' if err > hold else 'bad')
+            # skipped: not interpolated (error == hold). candidate: the game moved (hold >= 2 %) and the interpolation is clearly worse than doing nothing
+            # (error >= 1.3x hold). minor: everything else (hold < 2 % = the game stood still / moved unevenly, so a linear in-between cannot match; small errors)
+            kind = 'skipped' if abs(err - hold) <= 0.03 * hold + 0.05 else ('candidate' if hold >= 2.0 and err >= 1.3 * hold else 'minor')
             rows = [r.split(',') for r in m.group(4).split()]
             cells = sorted(((int(c) if c.isdigit() else 0, ry, rx) for ry, r in enumerate(rows) for rx, c in enumerate(r)), reverse=True)[:3]
             out.append((kind, vb, err, hold, ['col%d,row%d:%d%%' % (rx, ry, v) for v, ry, rx in cells if v]))
@@ -213,10 +215,10 @@ def main():
                 replay_autoteste(sess, max_frames)
             bad, total = analyse_autoteste(sess)
             rep.append('## %s (autotest, %d pairs)' % (sess, total))
-            nsk = sum(1 for b in bad if b[0] == 'skipped')
-            print('%s: %d pairs measured, %d bad/worse, %d not interpolated (scene changes)' % (sess, total, len(bad) - nsk, nsk), flush=True)
-            rep.append('%d bad/worse, %d not interpolated' % (len(bad) - nsk, nsk))
-            for kind, vb, err, hold, cells in sorted([b for b in bad if b[0] != 'skipped'], key=lambda x: (x[0] != 'worse', -x[2]))[:10]:
+            nsk = sum(1 for b in bad if b[0] == 'skipped'); ncand = sum(1 for b in bad if b[0] == 'candidate'); nmin = len(bad) - nsk - ncand
+            print('%s: %d pairs measured, %d candidates, %d minor, %d not interpolated (scene changes)' % (sess, total, ncand, nmin, nsk), flush=True)
+            rep.append('%d candidates, %d minor, %d not interpolated' % (ncand, nmin, nsk))
+            for kind, vb, err, hold, cells in sorted([b for b in bad if b[0] == 'candidate'], key=lambda x: -x[2])[:10]:
                 line = '- %s vb %d: error %.1f %% (hold %.1f %%) %s' % (kind, vb, err, hold, ' '.join(cells))
                 rep.append(line)
                 print('   ' + line)
