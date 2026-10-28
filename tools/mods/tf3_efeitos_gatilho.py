@@ -37,7 +37,10 @@ TABELA = {
 for _g, _t in (("field_gy", 4054), ("battle_gy", 6506), ("effect_gy", 6799), ("summoned", 6151)):
     TABELA[(_g, "draw")] = (_t, 6502)
     TABELA[(_g, "lp")] = (_t, 6327)
-POS_ACAO = {"summoned", "flip", "battle_damage", "sp_summon_gy"}   # triggers the game detects while it scans the events of a finished action (09e89110)
+# "inflicts Battle Damage to your opponent": 4226 Masked Sorcerer is the donor of both the gate and the record (draw 1 for its controller); the plugin swaps the fighter id
+# while 09f28de8 runs (hk_battle_dmg, trigger_event "battle"). Checked in a duel: a new 2000 ATK card with this alias drew 1 card (own deck 36 -> 35) after dealing battle damage
+TABELA[("battle_damage", "draw")] = (4226, 4226)
+POS_ACAO = {"summoned", "flip", "sp_summon_gy"}   # triggers the game detects while it scans the events of a finished action (09e89110)
 GATILHOS = [
     ("field_gy", r"sent from the field to the Graveyard"),
     ("battle_gy", r"destroyed (?:and sent to the Graveyard )?(?:by battle|in battle|as a result of battle)(?: and sent to the Graveyard)?|sent to the Graveyard as a result of battle"),
@@ -85,9 +88,13 @@ def gerar():
                 n = int(mm.groupdict().get("n") or mm.groupdict().get("m"))
                 v = mk(n) if mk else {"self": -n, "opp": -n}
                 trig, rec = TABELA[(gat, kind)]
+                if gat == "battle_damage" and (kind != "draw" or n != 1):
+                    break
                 out[str(e["tf3_id"])] = {"like": rec, "trigger_like": trig, chave: v, "name": e["name"]}
-                if gat in POS_ACAO or gat == "battle_kill":
-                    out[str(e["tf3_id"])]["trigger_event"] = "battle" if gat == "battle_kill" else "summon"
+                if gat == "battle_damage":
+                    del out[str(e["tf3_id"])][chave]   # the record of the donor already draws 1
+                if gat in POS_ACAO or gat in ("battle_kill", "battle_damage"):
+                    out[str(e["tf3_id"])]["trigger_event"] = "battle" if gat in ("battle_kill", "battle_damage") else "summon"
                 break
         else:
             mm = None

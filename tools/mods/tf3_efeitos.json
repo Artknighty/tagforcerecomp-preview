@@ -128,5 +128,10 @@
     "n": 3
    }
   }
+ },
+ "7842": {
+  "like": 4226,
+  "trigger_like": 4226,
+  "trigger_event": "battle"
  }
 }

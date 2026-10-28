@@ -1039,7 +1039,8 @@ static int hk_post_action(TfCpu *c) {
 /* Battle triggers: the battle resolution 09ea28d8(side) reads the card ids of the two fighters from the battle records (0x38 bytes each, id at 09f77ddc + 0x38 * side)
  * and queues the events ("destroys a monster by battle", ...) through a chain of `id == N` branches. A new card flagged for it shows its donor's id there. */
 static const uint32_t F_BATTLE = 0x09ea28d8, BATTLE_ID = 0x09f77ddc;
-static int hk_battle(TfCpu *c) {
+static const uint32_t F_BATTLE_DMG = 0x09f28de8;   /* "inflicts Battle Damage": queues 0x1e22xxxx events through 09eb5640 */
+static int battle_gate(TfCpu *c, uint32_t fn) {
     uint32_t *ids[2] = {(uint32_t *)A->mem(BATTLE_ID), (uint32_t *)A->mem(BATTLE_ID + 0x38)};
     uint32_t saved[2] = {*ids[0], *ids[1]};
     bool any = false;
@@ -1052,10 +1053,12 @@ static int hk_battle(TfCpu *c) {
     }
     if (!any) return 0;
     if (getenv("TF3_DEBUG_FX")) A->log("battle gate: ids %u %u -> %u %u", saved[0], saved[1], *ids[0], *ids[1]);
-    A->call_original(c, F_BATTLE);
+    A->call_original(c, fn);
     for (int k = 0; k < 2; k++) if (*ids[k] != saved[k] && saved[k] > 0 && g_trig.count((uint16_t)saved[k])) *ids[k] = saved[k];
     return 1;
 }
+static int hk_battle(TfCpu *c) { return battle_gate(c, F_BATTLE); }
+static int hk_battle_dmg(TfCpu *c) { return battle_gate(c, F_BATTLE_DMG); }
 
 /* research aid (TF3_DEBUG_STREAM=1): dumps the card-art stream object when the game queues a read far beyond the file (BOOT 0882ead0:
  * a1 = stream object, a3 = file position; the object keeps the .cip header at +172, the index entries {unit, state} follow at +0x30) */
@@ -1135,7 +1138,7 @@ extern "C" __declspec(dllexport) int tfmod_init(const TfModApi *api) {
     if (getenv("TF3_DEBUG_TRIG")) A->hook(F_TRIGGER, hk_trigger_debug);
     else if (!g_trig.empty()) A->hook(F_TRIGGER, hk_trigger);
     if (!g_trig_summon.empty()) A->hook(F_POST_ACTION, hk_post_action);
-    if (!g_trig_battle.empty()) A->hook(F_BATTLE, hk_battle);
+    if (!g_trig_battle.empty()) { A->hook(F_BATTLE, hk_battle); A->hook(F_BATTLE_DMG, hk_battle_dmg); }
     if (!g_stat.empty()) A->hook(F_STATS, hk_stats);
     if (getenv("TF3_DEBUG_CAND")) { A->hook(F_CAND_RUN, hk_cand_run_debug); A->hook(F_CAND_COUNT, hk_cand_count_debug); }
     else if (!g_fx.empty()) { A->hook(F_CAND_RUN, hk_cand_run); A->hook(F_CAND_COUNT, hk_cand_count); }
