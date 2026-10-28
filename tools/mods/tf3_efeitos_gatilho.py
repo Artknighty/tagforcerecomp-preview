@@ -32,12 +32,12 @@ TABELA = {
 }
 # draw / life point effects keep the trigger of the donor above but play another record (the plugin looks it up while the alias runs): Broww draws, Mine Golem
 # changes life points; the numbers come from amount.bin
-# Not wired yet (the aliased id does not reach their gates: "destroys a monster by battle" 5962 KA-2 Des Scissors, "inflicts Battle Damage" 4226 Masked Sorcerer,
+# Not wired yet; "battle_kill" has an experimental alias (trigger_event "battle", plugin hk_battle): the event is queued under the donor id but the effect never starts (the aliased id does not reach their gates: "destroys a monster by battle" 5962 KA-2 Des Scissors, "inflicts Battle Damage" 4226 Masked Sorcerer,
 # "Special Summoned from the Graveyard" 5879 Molten Zombie; each is tested in other functions than 09f30ddc / 09e89110: 09e75258, 09f28de8, 09e8ab24)
 for _g, _t in (("field_gy", 4054), ("battle_gy", 6506), ("effect_gy", 6799), ("summoned", 6151)):
     TABELA[(_g, "draw")] = (_t, 6502)
     TABELA[(_g, "lp")] = (_t, 6327)
-POS_ACAO = {"summoned", "flip", "battle_kill", "battle_damage", "sp_summon_gy"}   # triggers the game detects while it scans the events of a finished action (09e89110)
+POS_ACAO = {"summoned", "flip", "battle_damage", "sp_summon_gy"}   # triggers the game detects while it scans the events of a finished action (09e89110)
 GATILHOS = [
     ("field_gy", r"sent from the field to the Graveyard"),
     ("battle_gy", r"destroyed (?:and sent to the Graveyard )?(?:by battle|in battle|as a result of battle)(?: and sent to the Graveyard)?|sent to the Graveyard as a result of battle"),
@@ -86,8 +86,8 @@ def gerar():
                 v = mk(n) if mk else {"self": -n, "opp": -n}
                 trig, rec = TABELA[(gat, kind)]
                 out[str(e["tf3_id"])] = {"like": rec, "trigger_like": trig, chave: v, "name": e["name"]}
-                if gat in POS_ACAO:
-                    out[str(e["tf3_id"])]["trigger_event"] = "summon"
+                if gat in POS_ACAO or gat == "battle_kill":
+                    out[str(e["tf3_id"])]["trigger_event"] = "battle" if gat == "battle_kill" else "summon"
                 break
         else:
             mm = None
@@ -101,8 +101,8 @@ def gerar():
                     break
                 trig, rec = TABELA[(gat, kind)]
                 out[str(e["tf3_id"])] = {"like": rec, "trigger_like": trig, "zone": zona, "filter": f, "name": e["name"]}
-                if gat in POS_ACAO:
-                    out[str(e["tf3_id"])]["trigger_event"] = "summon"
+                if gat in POS_ACAO or gat == "battle_kill":
+                    out[str(e["tf3_id"])]["trigger_event"] = "battle" if gat == "battle_kill" else "summon"
                 break
     return out
 

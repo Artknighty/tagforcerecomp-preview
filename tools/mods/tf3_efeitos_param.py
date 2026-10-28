@@ -99,7 +99,7 @@ def resolver_gatilhos(gids, spec=None):
     if spec is None:
         spec = json.load(open(SPEC_AUTO, encoding="utf-8")) if os.path.exists(SPEC_AUTO) else {}
         spec.update(json.load(open(SPEC, encoding="utf-8")))
-    pares = [(gids[int(k)], e["trigger_like"] | (0x8000 if e.get("trigger_event") == "summon" else 0)) for k, e in sorted(spec.items(), key=lambda x: int(x[0]))
+    pares = [(gids[int(k)], e["trigger_like"] | {"summon": 0x8000, "battle": 0x4000}.get(e.get("trigger_event"), 0)) for k, e in sorted(spec.items(), key=lambda x: int(x[0]))
              if int(k) in gids and "trigger_like" in e]
     return b"TF3T" + struct.pack("<I", len(pares)) + b"".join(struct.pack("<HH", a, b) for a, b in pares)
 

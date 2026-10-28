@@ -880,6 +880,7 @@ static int hk_trigger_debug(TfCpu *c) {
 /* Triggers (trigger.bin, "TF3T", u32 n, {u16 card id, u16 donor id}): the game decides WHEN a card's effect starts in one predicate, 09f30ddc(event, key, a2, flags),
  * a chain of `id == N` branches. A new card whose trigger is the same as a game card's ("when this card is sent to the Graveyard", "FLIP", ...) is asked as that
  * donor: the key's id is swapped while the predicate runs. The effect itself comes from the borrowed record and the data effect of the card. */
+static std::map<uint16_t, bool> g_trig_battle;   /* cards whose alias holds while the battle resolution runs (09ea28d8: "destroys a monster by battle", ...) */
 static std::map<uint16_t, bool> g_trig_summon;   /* cards whose alias also holds while the game scans the events of a finished action (Summon triggers) */
 
 static void trig_load(void) {
@@ -893,6 +894,7 @@ static void trig_load(void) {
             if (fread(e, 2, 2, f) != 2) break;
             g_trig[e[0]] = e[1] & 0x1fff;
             if (e[1] & 0x8000) g_trig_summon[e[0]] = true;
+            if (e[1] & 0x4000) g_trig_battle[e[0]] = true;
         }
     fclose(f);
     A->log("TF3 Cards: %u trigger aliases loaded", (unsigned)g_trig.size());
@@ -903,7 +905,7 @@ static int hk_trigger(TfCpu *c) {
     if (key < 0x08000000u || key > 0x0a000000u - 8) return 0;
     uint16_t *idp = (uint16_t *)A->mem(key);
     const auto it = g_trig.find(*idp & 0x1fff);
-    if (it == g_trig.end()) { g_trig_real.erase(*idp & 0x1fff); return 0; }   /* a game card asking as itself: a stale alias must not reach it */
+    if (it == g_trig.end()) return 0;
     const uint16_t saved = *idp;
     *idp = (uint16_t)((saved & ~0x1fff) | it->second);
     A->call_original(c, F_TRIGGER);
@@ -931,6 +933,27 @@ static int hk_post_action(TfCpu *c) {
     g_trig_real[it->second] = id;
     A->call_original(c, F_POST_ACTION);
     if (((*w >> 8) & 0x1fff) == it->second) *w = (*w & ~(0x1fffu << 8)) | (saved & (0x1fffu << 8));
+    return 1;
+}
+
+/* Battle triggers: the battle resolution 09ea28d8(side) reads the card ids of the two fighters from the battle records (0x38 bytes each, id at 09f77ddc + 0x38 * side)
+ * and queues the events ("destroys a monster by battle", ...) through a chain of `id == N` branches. A new card flagged for it shows its donor's id there. */
+static const uint32_t F_BATTLE = 0x09ea28d8, BATTLE_ID = 0x09f77ddc;
+static int hk_battle(TfCpu *c) {
+    uint32_t *ids[2] = {(uint32_t *)A->mem(BATTLE_ID), (uint32_t *)A->mem(BATTLE_ID + 0x38)};
+    uint32_t saved[2] = {*ids[0], *ids[1]};
+    bool any = false;
+    for (int k = 0; k < 2; k++) {
+        const auto it = g_trig.find((uint16_t)(saved[k] & 0xffff));
+        if (saved[k] > 0x1fff || it == g_trig.end() || !g_trig_battle.count((uint16_t)saved[k])) continue;
+        *ids[k] = it->second;
+        g_trig_real[it->second] = (uint16_t)saved[k];
+        any = true;
+    }
+    if (!any) return 0;
+    if (getenv("TF3_DEBUG_FX")) A->log("battle gate: ids %u %u -> %u %u", saved[0], saved[1], *ids[0], *ids[1]);
+    A->call_original(c, F_BATTLE);
+    for (int k = 0; k < 2; k++) if (*ids[k] != saved[k] && saved[k] > 0 && g_trig.count((uint16_t)saved[k])) *ids[k] = saved[k];
     return 1;
 }
 
@@ -1011,6 +1034,7 @@ extern "C" __declspec(dllexport) int tfmod_init(const TfModApi *api) {
     if (getenv("TF3_DEBUG_TRIG")) A->hook(F_TRIGGER, hk_trigger_debug);
     else if (!g_trig.empty()) A->hook(F_TRIGGER, hk_trigger);
     if (!g_trig_summon.empty()) A->hook(F_POST_ACTION, hk_post_action);
+    if (!g_trig_battle.empty()) A->hook(F_BATTLE, hk_battle);
     if (!g_stat.empty()) A->hook(F_STATS, hk_stats);
     if (getenv("TF3_DEBUG_CAND")) { A->hook(F_CAND_RUN, hk_cand_run_debug); A->hook(F_CAND_COUNT, hk_cand_count_debug); }
     else if (!g_fx.empty()) { A->hook(F_CAND_RUN, hk_cand_run); A->hook(F_CAND_COUNT, hk_cand_count); }
