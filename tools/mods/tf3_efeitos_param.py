@@ -77,8 +77,7 @@ def combina(p, f):
 def resolver(gids, spec=None):
     """-> (effects.bin bytes, {TF3 id: like}) for the cards of the spec that are among the installed ones (gids)"""
     if spec is None:
-        spec = json.load(open(SPEC_AUTO, encoding="utf-8")) if os.path.exists(SPEC_AUTO) else {}
-        spec.update(json.load(open(SPEC, encoding="utf-8")))         # the hand-written file wins
+        spec = _carregar(SPEC_AUTO, SPEC)         # the hand-written file wins
     prop = propriedades(gids)
     entradas, likes = [], {}
     for k, e in sorted(spec.items(), key=lambda x: int(x[0])):
@@ -97,8 +96,7 @@ def resolver_gatilhos(gids, spec=None):
     """-> trigger.bin bytes: {card: donor} for the spec entries with "trigger_like" (the donor's id is used while the game asks whether the effect starts);
     "trigger_event": "summon" also sets bit 15 of the donor: the alias holds while the game scans the events of a finished action (Summon triggers)"""
     if spec is None:
-        spec = json.load(open(SPEC_AUTO, encoding="utf-8")) if os.path.exists(SPEC_AUTO) else {}
-        spec.update(json.load(open(SPEC, encoding="utf-8")))
+        spec = _carregar(SPEC_AUTO, SPEC)
     pares = [(gids[int(k)], e["trigger_like"] | {"summon": 0x8000, "battle": 0x4000}.get(e.get("trigger_event"), 0)) for k, e in sorted(spec.items(), key=lambda x: int(x[0]))
              if int(k) in gids and "trigger_like" in e]
     return b"TF3T" + struct.pack("<I", len(pares)) + b"".join(struct.pack("<HH", a, b) for a, b in pares)
@@ -112,8 +110,7 @@ def resolver_valores(gids, spec=None):
     Spec keys: "draw": {"self": N, "opp": N}  cards drawn by the card's controller / by the other player;
                "lp": {"self": N, "opp": N}    life point change of each side (positive = gain, negative = damage)"""
     if spec is None:
-        spec = json.load(open(SPEC_AUTO, encoding="utf-8")) if os.path.exists(SPEC_AUTO) else {}
-        spec.update(json.load(open(SPEC, encoding="utf-8")))
+        spec = _carregar(SPEC_AUTO, SPEC)
     out = []
     for k, e in sorted(spec.items(), key=lambda x: int(x[0])):
         if int(k) not in gids:
@@ -135,8 +132,7 @@ def resolver_destruir(gids, spec=None):
     Spec: "destroy": {"side": own|opp|both, "zones": monster|st|all, "cond": {"kind": opp_monsters_full | opp_st_full | controls, "n": N, "filter": {...}}}
       cond = "Activate only when ...": the opponent's 5 monster (or Spell / Trap) zones are all occupied; or you control N face-up monsters that match the filter"""
     if spec is None:
-        spec = json.load(open(SPEC_AUTO, encoding="utf-8")) if os.path.exists(SPEC_AUTO) else {}
-        spec.update(json.load(open(SPEC, encoding="utf-8")))
+        spec = _carregar(SPEC_AUTO, SPEC)
     prop = None
     out = []
     for k, e in sorted(spec.items(), key=lambda x: int(x[0])):
@@ -155,6 +151,17 @@ def resolver_destruir(gids, spec=None):
 
 SPEC_STATS = os.path.join(os.path.dirname(os.path.abspath(__file__)), "tf3_stats.json")
 SPEC_STATS_AUTO = os.path.join(os.path.dirname(os.path.abspath(__file__)), "tf3_stats_auto.json")
+
+
+def _carregar(auto, mao):
+    """Generated specs, then the hand-written ones (they win), then the temporary ones of TF3_SPEC_EXTRA (a JSON file: used by tools/test/tf3_lote.py --spec to try a spec without touching the project files)."""
+    spec = json.load(open(auto, encoding="utf-8")) if os.path.exists(auto) else {}
+    spec.update(json.load(open(mao, encoding="utf-8")))
+    extra = os.environ.get("TF3_SPEC_EXTRA")
+    if extra and os.path.exists(extra):
+        e = json.load(open(extra, encoding="utf-8"))
+        spec.update(e.get("stats", {}) if mao == SPEC_STATS else e.get("effects", {}))
+    return spec
 ESCOPOS = {"self": 0, "own": 1, "opp": 2, "all": 3, "equip": 4}
 LADOS = {None: 0, "own": 1, "opp": 2, "any": 3}
 
@@ -166,8 +173,7 @@ def resolver_stats(gids, spec=None):
       source "st": the card is a Spell / Trap (continuous Spell) and the rule works while it is face-up in a Spell / Trap zone of either side
       cond: the rule only works while a face-up monster matching the filter is on that side (relative to the card); per = once per such monster; excl = not counting the card"""
     if spec is None:
-        spec = json.load(open(SPEC_STATS_AUTO, encoding="utf-8")) if os.path.exists(SPEC_STATS_AUTO) else {}
-        spec.update(json.load(open(SPEC_STATS, encoding="utf-8")))
+        spec = _carregar(SPEC_STATS_AUTO, SPEC_STATS)
     prop = propriedades(gids)
     out = []
     regras = [(k, r) for k, v in sorted(spec.items(), key=lambda x: int(x[0])) for r in (v if isinstance(v, list) else [v])]   # a card may list several rules
