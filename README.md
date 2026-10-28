@@ -59,14 +59,18 @@ Behavior mods in this repository (sources in [`plugins/src/`](plugins/src/)):
 
 | Mod | What it does |
 |---|---|
-| **Better AI** (`BetterAI`) | makes CPU duelists play better: adaptive posture, smarter summons/attacks/Dark Hole, and an optional **small language model** (bundled `llama.cpp` server) that picks among legal moves. See [`docs/AI.md`](docs/AI.md) |
-| **Better Decks** (`BetterDecks`) | replaces the decks of duelists with edited ones, without touching the game files. See [`docs/DECKS.md`](docs/DECKS.md) |
-| **CPU vs CPU** (`CPUvsCPU`) | lets the CPU play your side too; also the engine of the AI/deck test arena |
+| **Better AI** (`BetterAI`) | *experimental*: makes CPU duelists play better: adaptive posture, smarter summons/attacks/Dark Hole, and an optional **small language model** (bundled `llama.cpp` server) that picks among legal moves. See [`docs/AI.md`](docs/AI.md) |
+| **Better Decks** (`BetterDecks`) | *experimental*: replaces the decks of duelists with edited ones, without touching the game files. See [`docs/DECKS.md`](docs/DECKS.md) |
+| **CPU vs CPU** (`CPUvsCPU`) | *experimental*: lets the CPU play your side too; also the engine of the AI/deck test arena |
 | **Booster box** (`BoosterBox`) | buy all remaining packs of a booster at once in the shop |
 | **Card Randomizer** (`CardRandomizer`) | every deck of every duel is refilled with random cards from the whole card pool |
 | **Player / Opponent Deck Randomizer** (`PlayerDeckRandomizer`, `OpponentDeckRandomizer`) | every duel, your / the opponent's deck becomes a random whole recipe of the game, with its own deck name; use one or both |
 | **Story Duel LP** (`StoryLP`) | story duels start with 4000 LP for both duelists instead of 8000 (value in `config.ini`) |
 | **Monsters on the field** (`MonstersOnField`) | *experimental prototype*: shows your face-up monsters larger over their zone |
+| **Mouse Menus** (`MouseMenus`) | *experimental*: hover a row of the game's menu lists to move the cursor, click to confirm |
+| **TF3 Cards** (`TF3Cards`) | *experimental*: adds the cards that exist only in Tag Force 3 (art and texts in five languages); some already have their effect. See its README |
+
+Only the randomizers, Booster box and Story Duel LP are considered reasonably stable; everything marked *experimental* may misbehave.
 
 The Enhanced Textures pack (HD menus, HD opening movie, EU cards, Xbox buttons) is a release download, not part of the repository.
 

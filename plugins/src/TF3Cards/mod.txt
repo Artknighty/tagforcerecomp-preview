@@ -1,4 +1,4 @@
 name=TF3 Cards
 author=Tag Force Recomp contributors
 version=0.2
-description=Cards ported from Yu-Gi-Oh! GX Tag Force 3: No Entry!! and Gift Card (each takes over an unused card of the game; see README). Test aid in config.ini.
+description=EXPERIMENTAL: Cards ported from Yu-Gi-Oh! GX Tag Force 3: No Entry!! and Gift Card (each takes over an unused card of the game; see README). Test aid in config.ini.

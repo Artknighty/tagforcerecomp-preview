@@ -144,7 +144,7 @@ result, `r31` = return address) and returns `0` = continue with the original (th
 | `set_speed(n)` (v6) | game speed, 1 = normal, 2..8 = n times faster (frame limiter at n times the normal rate; the music is time-stretched, same pitch). The plugin owns the setting: call it again on load (Cheats starts at 1x). |
 | `quad_near(x, y, tol, wmin, wmax)` (v5) | 1 if the game drew a textured 3D quad (a card on the field...) centered near (x, y) in the frame on screen — tells whether a field slot is really visible (not hidden by a cut-in) |
 | `use_menu(menu)` (v4) | kept for compatibility; no effect since the window menu bar was removed |
-| `set_bgm(wav_path)` (v7) | replace the next looping music the game starts with a WAV file (PCM 16-bit stereo 44100 Hz, looped); `NULL` goes back to the game's music. Example: `plugins/src/Yugi` |
+| `set_bgm(wav_path)` (v7) | replace the next looping music the game starts with a WAV file (PCM 16-bit stereo 44100 Hz, looped); `NULL` goes back to the game's music. |
 
 The API only grows: a plugin built for version N runs on runtimes with version ≥ N. Use `api->version >= N` before calling
 newer functions. Everything runs on the game thread inside the frame: never block or wait.

@@ -1,4 +1,4 @@
 name=CPU vs CPU
 author=Tag Force Recomp
 version=0.2
-description=In duels the CPU also plays your side (use it in Free Duel to watch the AI play your own deck); also the engine of the AI/deck test arena. Toggle in the Mods menu
+description=EXPERIMENTAL: In duels the CPU also plays your side (use it in Free Duel to watch the AI play your own deck); also the engine of the AI/deck test arena. Toggle in the Mods menu

@@ -1,4 +1,4 @@
 name=Better Decks
 author=Tag Force Recomp
 version=1.0
-description=Replaces duelist decks with tuned ones without touching the game files (main-cast characters in a ladder: each deck a step above the previous one, keeping the character's identity). Deck files: decks/RCPnnn.txt
+description=EXPERIMENTAL: Replaces duelist decks with tuned ones without touching the game files (main-cast characters in a ladder: each deck a step above the previous one, keeping the character's identity). Deck files: decks/RCPnnn.txt

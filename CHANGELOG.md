@@ -2,6 +2,22 @@
 
 Format: [Keep a Changelog](https://keepachangelog.com/en/1.1.0/). Versioning: [SemVer](https://semver.org/).
 
+## [0.5.2] - 2026-10-28
+
+### Added
+- **TF3 Cards** mod (experimental, switched off by default): adds the cards that exist only in Tag Force 3, with art and texts in five languages, three copies of each in the trunk and a 72-card deck limit guard. Some cards already have their effect (passive ATK/DEF, equipment bonuses, draw and life point effects, destroy-all, summon, FLIP and battle damage/kill triggers); the rest are plain monsters and spells. See the mod's README.
+
+### Fixed
+- 120 FPS: map rooms no longer freeze between real frames, and floor shadows no longer jump.
+- The deck save screen reads the system clock instead of failing.
+- A Field Spell added by a mod without a background file of its own uses the default background instead of hanging the duel.
+
+### Changed
+- Better AI, Better Decks, CPU vs CPU and TF3 Cards are now labelled experimental in the Mods page and in the README; only the randomizers, Booster box and Story Duel LP are considered reasonably stable.
+
+### Removed
+- The **Yugi** mod (an extra Free Duel opponent in an empty character slot) is no longer part of the repository or the Mods download: it did not work well enough.
+
 ## [0.5.1] - 2026-10-25
 
 ### Added

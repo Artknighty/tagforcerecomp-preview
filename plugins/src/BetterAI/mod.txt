@@ -1,4 +1,4 @@
 name=Better AI
 author=Tag Force Recomp
 version=1.1
-description=Makes CPU duelists play better: adaptive posture, smarter summons and attacks, Dark Hole only when it pays off, spells the original AI never plays, and an optional small language model that picks among legal moves
+description=EXPERIMENTAL: Makes CPU duelists play better: adaptive posture, smarter summons and attacks, Dark Hole only when it pays off, spells the original AI never plays, and an optional small language model that picks among legal moves
