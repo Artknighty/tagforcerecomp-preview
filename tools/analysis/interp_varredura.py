@@ -12,6 +12,12 @@ and then measures how the picture moves in every group  R M M M R:
   uneven   T >= 5 and a later step is > 1.8x the mean (an in-between that jumps). [T,0,0,0] = a cut shown early on purpose: skipped
   held     T < 0.6 between two moving pairs (the real frame repeated: game hold or a late frame; informational)
 
+Ground-truth mode (--autoteste): the engine interpolates F0 -> F2 (at double the motion) and compares the result with the REAL in-between frame F1, pixel by pixel
+(TF_INTERP_SELFTEST). A pair is flagged when the error is > 1 % of the screen, the real frame F1 differs from F2 (hold > 0.5 %: otherwise the game itself
+stood still) and the interpolation is no better than 80 % of "just show F2" (kind `bad`, or `worse` when it is worse than doing nothing).
+error == hold means the pair was not interpolated at all (scene change, taint...): counted as `skipped`, listed separately, informational.
+The report gives the screen cells (8x4 grid) that are wrong.
+
 A scene cut (T >= 35) is not a defect. Output: gen/varredura/relatorio.md (+ one line per finding on stdout).
 The numbers point at WHERE to look (session, mark, frame): send the frame strips to the player or read the [iring]/[iaudit] log.
 
@@ -19,6 +25,7 @@ Usage:
   python tools/analysis/interp_varredura.py --ultimas 5                # the 5 newest sessions
   python tools/analysis/interp_varredura.py sessao_20261027_193849 ...  # named sessions
   python tools/analysis/interp_varredura.py --so-analisar ...          # reuse gen/replay/<sessao>_varr, do not replay again
+  python tools/analysis/interp_varredura.py --autoteste --ultimas 8     # ground-truth mode (see below)
   options: --max-quadros N (replay at most N game frames per session, default 4000), --passo N (frames between marks, default 170)
 """
 import glob, os, re, shutil, subprocess, sys
@@ -128,6 +135,40 @@ def analyse_seq(seq_dir):
     return out
 
 
+def replay_autoteste(sess, max_frames):
+    last = last_input_frame(sess)
+    end = min(max_frames, last + 600) if last else max_frames
+    ini = make_ini()
+    env = dict(os.environ, TAG='_at', ENDF=str(end), INI=ini, PESADO='1', PACE='1', TF_FPS='60',
+               TF_INTERP_SELFTEST='1', TF_INTERP_SELFTEST_V='1', TF_INTERP_NOSUSP='1')
+    print('autotest %s: %d frames ...' % (sess, end), flush=True)
+    subprocess.run([shutil.which('sh') or 'sh', 'tools/test/replay.sh', sess, '100000', '900'], cwd=ROOT, env=env,
+                   stdout=subprocess.DEVNULL, stderr=subprocess.DEVNULL)
+
+
+def analyse_autoteste(sess):
+    """[(vb, error %, hold %, hot cells)] flagged from the selftest lines of gen/replay/<sess>_at/log.txt"""
+    fn = os.path.join(ROOT, 'gen', 'replay', sess + '_at', 'log.txt')
+    out, total = [], 0
+    try:
+        lines = open(fn, encoding='utf-8', errors='replace').read().splitlines()
+    except OSError:
+        return out, 0
+    pat = re.compile(r'\[selftest\] vb (\d+): erro ([\d.]+)% \(hold ([\d.]+)%\) grade:(.*)')
+    for ln in lines:
+        m = pat.match(ln)
+        if not m:
+            continue
+        total += 1
+        vb, err, hold = int(m.group(1)), float(m.group(2)), float(m.group(3))
+        if err > 1.0 and hold > 0.5 and err > 0.8 * hold:
+            kind = 'skipped' if abs(err - hold) <= 0.03 * hold + 0.05 else ('worse' if err > hold else 'bad')
+            rows = [r.split(',') for r in m.group(4).split()]
+            cells = sorted(((int(c) if c.isdigit() else 0, ry, rx) for ry, r in enumerate(rows) for rx, c in enumerate(r)), reverse=True)[:3]
+            out.append((kind, vb, err, hold, ['col%d,row%d:%d%%' % (rx, ry, v) for v, ry, rx in cells if v]))
+    return out, total
+
+
 def analyse_session(sess):
     base = os.path.join(ROOT, 'gen', 'replay', sess + '_varr')
     found, seen = [], set()
@@ -167,6 +208,20 @@ def main():
     rep = ['# 120 FPS interpolation scan', '',
            'frozen = in-betweens stand still and the motion jumps at the real frame; uneven = one step much bigger than the others; held = real frame repeated (informational).', '']
     for sess in names:
+        if '--autoteste' in sys.argv:
+            if '--so-analisar' not in sys.argv:
+                replay_autoteste(sess, max_frames)
+            bad, total = analyse_autoteste(sess)
+            rep.append('## %s (autotest, %d pairs)' % (sess, total))
+            nsk = sum(1 for b in bad if b[0] == 'skipped')
+            print('%s: %d pairs measured, %d bad/worse, %d not interpolated (scene changes)' % (sess, total, len(bad) - nsk, nsk), flush=True)
+            rep.append('%d bad/worse, %d not interpolated' % (len(bad) - nsk, nsk))
+            for kind, vb, err, hold, cells in sorted([b for b in bad if b[0] != 'skipped'], key=lambda x: (x[0] != 'worse', -x[2]))[:10]:
+                line = '- %s vb %d: error %.1f %% (hold %.1f %%) %s' % (kind, vb, err, hold, ' '.join(cells))
+                rep.append(line)
+                print('   ' + line)
+            rep.append('')
+            continue
         if '--so-analisar' not in sys.argv:
             replay(sess, max_frames, step)
         found = analyse_session(sess)
