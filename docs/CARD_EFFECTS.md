@@ -71,9 +71,7 @@ FLIP effects (donor 5769) are set up the same way but do not fire yet when the c
 The `like` donors are Pot of Greed (draw) and Tremendous Fire (life points). A trigger spec may combine any trigger donor with these records: while the aliased trigger runs, the record lookup uses the card's own `like` instead of the trigger donor's. `tools/mods/tf3_efeitos_gatilho.py` writes them for texts such as "When this card is destroyed by battle and sent to the Graveyard, draw 1 card" / "both players take 500 damage".
 Checked in a duel: Blizzed (draw 1) and Abaki (both players 2000 → 1500).
 
-"Inflicts Battle Damage to your opponent" works through the post-action gate with `"trigger_like": 4226` (Masked Sorcerer) and `"trigger_event": "summon"`; the effect record is any draw / life point / search record (checked in a duel: a new 2000 ATK card with a draw record drew 1 card after dealing battle damage).
-
-Not wired yet: "destroys a monster by battle" and "Special Summoned from the Graveyard".
+Not wired yet: triggers the game tests outside the two gates above, such as "destroys a monster by battle", "inflicts Battle Damage" and "Special Summoned from the Graveyard".
 
 ## "Destroy all" effects
 

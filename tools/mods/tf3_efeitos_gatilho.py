@@ -37,9 +37,6 @@ TABELA = {
 for _g, _t in (("field_gy", 4054), ("battle_gy", 6506), ("effect_gy", 6799), ("summoned", 6151)):
     TABELA[(_g, "draw")] = (_t, 6502)
     TABELA[(_g, "lp")] = (_t, 6327)
-# "inflicts Battle Damage to your opponent": Masked Sorcerer 4226 answers the gate (checked in a duel: a new Level 4 2000 ATK card with this alias drew 1 card on battle damage)
-for _k, _r in (("add", 6506), ("summon", 4930), ("draw", 6502), ("lp", 6327)):
-    TABELA[("battle_damage", _k)] = (4226, _r)
 POS_ACAO = {"summoned", "flip", "battle_damage", "sp_summon_gy"}   # triggers the game detects while it scans the events of a finished action (09e89110)
 GATILHOS = [
     ("field_gy", r"sent from the field to the Graveyard"),
