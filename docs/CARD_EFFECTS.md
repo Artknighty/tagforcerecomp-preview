@@ -73,7 +73,9 @@ Checked in a duel: Blizzed (draw 1) and Abaki (both players 2000 → 1500).
 
 "When this card inflicts Battle Damage to your opponent, draw 1 card" works with `"like": 4226, "trigger_like": 4226, "trigger_event": "battle"` (Masked Sorcerer): while the game resolves battle damage (09f28de8) the plugin shows it the donor's id. Checked in a duel: a new 2000 ATK card drew a card for its controller after hitting the opponent.
 
-Not wired yet: "destroys a monster by battle" and "Special Summoned from the Graveyard".
+"When this card destroys an opponent's monster by battle and sends it to the Graveyard, you can Special Summon ... from your Deck" works with `"like": 6479, "trigger_like": 6479, "trigger_event": "battle"` plus `zone` / `filter` (donor Hydrogeddon). Checked in a duel: after the kill the game asks "Activate the effect of <new card>?" and the chosen monster arrives from the Deck. A trigger donor only works with a record of its own family (a draw record from another trigger does not start).
+
+Not wired yet: "Special Summoned from the Graveyard".
 
 ## "Destroy all" effects
 

@@ -40,6 +40,9 @@ for _g, _t in (("field_gy", 4054), ("battle_gy", 6506), ("effect_gy", 6799), ("s
 # "inflicts Battle Damage to your opponent": 4226 Masked Sorcerer is the donor of both the gate and the record (draw 1 for its controller); the plugin swaps the fighter id
 # while 09f28de8 runs (hk_battle_dmg, trigger_event "battle"). Checked in a duel: a new 2000 ATK card with this alias drew 1 card (own deck 36 -> 35) after dealing battle damage
 TABELA[("battle_damage", "draw")] = (4226, 4226)
+# "destroys an opponent's monster by battle and sends it to the Graveyard, you can Special Summon 1 ... from your Deck": Hydrogeddon 6479 (hk_battle swaps the id in 09ea28d8).
+# Checked in a duel: "Activate the effect of <new card>?" after the kill, then the chosen monster arrives from the Deck. The earlier try with 5962 never started: the record must be of the gate's family
+TABELA[("battle_kill", "summon")] = (6479, 6479)
 POS_ACAO = {"summoned", "flip", "sp_summon_gy"}   # triggers the game detects while it scans the events of a finished action (09e89110)
 GATILHOS = [
     ("field_gy", r"sent from the field to the Graveyard"),
