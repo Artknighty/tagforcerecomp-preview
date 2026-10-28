@@ -2,7 +2,7 @@
 
 Each case forces the card into the opening hand, ends turn 1 so the CPU plays, then opens the hand on turn 3 and activates / summons the first card.
 Results: gen/lote/<card id>/ (screenshots + the log) and gen/lote/folha.png (last shots of every case side by side, labelled).
-Usage:  python tools/test/tf3_lote.py [-j 8] [--mods gen/tf3sum] [--fn 09ebcce8,...] [--debug-fx] ID [ID ...]
+Usage:  python tools/test/tf3_lote.py [-j 8, never above 8: 10 pinned the CPU at 100%] [--mods gen/tf3sum] [--fn 09ebcce8,...] [--debug-fx] ID [ID ...]
 """
 import os
 import shutil
@@ -53,7 +53,7 @@ def folha(ids):
 
 def main():
     a = sys.argv[1:]
-    j = int(a[a.index('-j') + 1]) if '-j' in a else 8
+    j = min(int(a[a.index('-j') + 1]) if '-j' in a else 8, 8)   # Leo's PC: 10 instances = 100% CPU, so 8 is the ceiling
     mods = a[a.index('--mods') + 1] if '--mods' in a else 'gen/tf3sum'
     extra = {}
     if '--fn' in a:
