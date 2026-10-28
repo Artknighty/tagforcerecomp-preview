@@ -95,6 +95,10 @@ Attack traps borrow Mirror Force (`"like": 4887`): the game's own "opponent decl
 
 Checked in a duel: Burden of the Mighty took 400 ATK from a Level 4 opponent monster (1400 -> 1000). Acidic Downpour and Wetlands use the same path (not duelled separately).
 
+## Equip Spells
+
+`tools/mods/tf3_efeitos_equip.py` writes the borrowed record and a `"scope": "equip"` stat rule for texts such as "Equip only to a DARK monster. It gains 400 ATK." Type / Attribute restrictions use a Tag Force 1 equip card with the same restriction as `like`, so the game itself limits the targets. A restriction by name (`Equip only to a "Crystal Beast" monster`) has no donor: the card borrows an unrestricted equip and the stat rule carries the name filter, so it can be attached to any monster but only adds its bonus to a matching one. Extra clauses (return to the deck, draw, destroy instead) are not played.
+
 ## Known limits
 
 * The first two new ids (6958, 6959) cannot be Normal Summoned as monsters (the card menu only offers "Show Details"); keep Spell/Trap cards there (`tools/mods/tf3_gids.txt` does).

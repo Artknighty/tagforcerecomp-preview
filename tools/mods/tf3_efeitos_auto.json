@@ -197,5 +197,25 @@
    "self": 1
   },
   "name": "Blizzed, Guard of the Ice Barrier"
+ },
+ "6842": {
+  "like": 4310,
+  "name": "Ancient Gear Tank"
+ },
+ "7000": {
+  "like": 4310,
+  "name": "Legendary Ebon Steed"
+ },
+ "7309": {
+  "like": 4310,
+  "name": "Gladiator Beast's Battle Gladius"
+ },
+ "7390": {
+  "like": 4310,
+  "name": "Crystal Release"
+ },
+ "7749": {
+  "like": 4310,
+  "name": "Lightsworn Sabre"
  }
 }

@@ -18,6 +18,13 @@ ATRIBUTOS = ["LIGHT", "DARK", "WATER", "FIRE", "EARTH", "WIND"]
 
 
 def restricao(t):
+    m = re.match(r'Equip only to an? "([^"]+)" monster\.', t)
+    if m:   # no record of the game restricts by name: the bonus rule filters instead (the card may be attached to any monster, it only pays off on this one)
+        return ("name_has", m.group(1)), t[m.end():]
+    m = re.match(r"Equip this card to an? (%s)(?:-Type)? monster you control\." % "|".join(TIPOS + ATRIBUTOS), t)
+    if m:
+        v = m.group(1)
+        return ("attribute", v.lower()) if v in ATRIBUTOS else ("type", v.lower()), t[m.end():]
     m = re.match(r"Equip only to an? (%s)(?:-Type)? monster\." % "|".join(TIPOS + ATRIBUTOS), t)
     if m:
         v = m.group(1)
@@ -65,10 +72,11 @@ def gerar():
         if r is False:
             continue
         atk, dfs = bonus(resto)
-        if (atk, dfs) == (0, 0) or r not in doadores or "for each" in resto:
+        doador = doadores.get(r) or doadores.get((None, None))   # no donor with this restriction (names, or a type the game has no equip for): the bonus rule filters
+        if (atk, dfs) == (0, 0) or doador is None or "for each" in resto:
             continue
         # only the plain cases: nothing else in the text besides the bonus and a "when destroyed" clause the game does not play
-        efeitos[str(e["tf3_id"])] = {"like": doadores[r], "name": e["name"]}
+        efeitos[str(e["tf3_id"])] = {"like": doador, "name": e["name"]}
         s = {"scope": "equip", "atk": atk, "def": dfs}
         if r[0]:
             s["target"] = {"monster": True, r[0]: r[1]}

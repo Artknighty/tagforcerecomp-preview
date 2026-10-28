@@ -1,4 +1,22 @@
 {
+ "6842": {
+  "scope": "equip",
+  "atk": 600,
+  "def": 0,
+  "target": {
+   "monster": true,
+   "name_has": "Ancient Gear"
+  }
+ },
+ "7000": {
+  "scope": "equip",
+  "atk": 200,
+  "def": 200,
+  "target": {
+   "monster": true,
+   "name_has": "Six Samurai"
+  }
+ },
  "7125": {
   "scope": "equip",
   "atk": 500,
@@ -13,6 +31,24 @@
    "attribute": "dark"
   }
  },
+ "7309": {
+  "scope": "equip",
+  "atk": 300,
+  "def": 0,
+  "target": {
+   "monster": true,
+   "name_has": "Gladiator Beast"
+  }
+ },
+ "7390": {
+  "scope": "equip",
+  "atk": 800,
+  "def": 0,
+  "target": {
+   "monster": true,
+   "name_has": "Crystal Beast"
+  }
+ },
  "7446": {
   "scope": "equip",
   "atk": 300,
@@ -22,5 +58,14 @@
   "scope": "equip",
   "atk": 500,
   "def": 0
+ },
+ "7749": {
+  "scope": "equip",
+  "atk": 700,
+  "def": 0,
+  "target": {
+   "monster": true,
+   "name_has": "Lightsworn"
+  }
  }
 }
