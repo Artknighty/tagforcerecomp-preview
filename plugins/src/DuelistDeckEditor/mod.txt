@@ -1,0 +1,4 @@
+name=Duelist Deck Editor
+author=Tag Force Recomp
+version=0.0
+description=WORK IN PROGRESS: edit the decks of the duelists in the game's own deck editor (Load Recipe > Character tab); edits stay with your save and each deck can be restored to the original

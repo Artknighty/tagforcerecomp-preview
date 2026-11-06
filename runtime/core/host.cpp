@@ -122,8 +122,8 @@ static void (*find_fn(uint32_t addr))(CPU *) {
  * com os oito argumentos inteiros e f12..f17; sp mascarado nos scripts de comparacao (tools/decomp/decomp_calls.sh) */
 extern uint64_t display_frames(void);
 static void call_trace(CPU *c, uint32_t addr) {
-    fprintf(stderr, "[call] %llu %08x(%08x %08x %08x %08x %08x %08x %08x %08x) f=%08x %08x %08x %08x %08x %08x\n", (unsigned long long)display_frames(), addr,
-            c->r[4], c->r[5], c->r[6], c->r[7], c->r[8], c->r[9], c->r[10], c->r[11], c->f[12].u, c->f[13].u, c->f[14].u, c->f[15].u, c->f[16].u, c->f[17].u);
+    fprintf(stderr, "[call] %llu %08x(%08x %08x %08x %08x %08x %08x %08x %08x) f=%08x %08x %08x %08x %08x %08x ra=%08x\n", (unsigned long long)display_frames(), addr,
+            c->r[4], c->r[5], c->r[6], c->r[7], c->r[8], c->r[9], c->r[10], c->r[11], c->f[12].u, c->f[13].u, c->f[14].u, c->f[15].u, c->f[16].u, c->f[17].u, c->r[31]);
 }
 
 void psp_call(CPU *c, uint32_t addr) {
