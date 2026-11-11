@@ -116,7 +116,7 @@ static bool make_img(Img &o, int w, int h, VkFormat fmt, VkImageUsageFlags usage
 static void free_img(Img &o) { if (o.v) vkDestroyImageView(g_dev, o.v, nullptr); if (o.i) vkDestroyImage(g_dev, o.i, nullptr); free_mem(o.m); o = Img(); }
 
 /* ------------------------------------------------------------------ quadros em voo */
-static const int NF = 3;
+static const int NF = 8;
 static const size_t VB_SIZE = 16u << 20, ST_SIZE = 48u << 20;
 struct Dead { Img img; VkDescriptorSet set; uint64_t tag; };
 struct Slot {

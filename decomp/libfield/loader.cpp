@@ -13,8 +13,12 @@
 namespace {
 using namespace field;
 
-constexpr uint32_t kHeapMemory = 0x09212900, kHeapBytes = 0x780000;   /* where the module's heap lives and how big it is */
-constexpr uint32_t kPoolMemory = 0x0920B700, kPoolBytes = 0x7200;
+constexpr uint32_t kLoaderState = 0x09992900;
+/* kPoolMemory: cardh art stream buffer. Original was 0x7200 (29 KB), but mods with expanded card counts (e.g. TF3Cards)
+ * expand the cardh .cip index to >32 KB, overflowing into the field heap if pool is too small. Give it 192 KB (0x30000). */
+constexpr uint32_t kPoolMemory = 0x0920B700, kPoolBytes = 0x30000;
+/* where the module's heap lives and how big it is (starts cleanly after the pool, ends at kLoaderState) */
+constexpr uint32_t kHeapMemory = 0x09240000, kHeapBytes = kLoaderState - kHeapMemory;
 constexpr uint32_t kFileDevice = 3;
 constexpr uint32_t kPathFormat = 0x091FDE98;   /* "%s/%s": directory and file of a resource entry */
 
@@ -50,7 +54,6 @@ struct LoaderState {
     int32_t reading;               /* +0x10 a file read is under way */
 };
 static_assert(sizeof(LoaderState) == 0x14, "LoaderState layout");
-constexpr uint32_t kLoaderState = 0x09992900;
 LoaderState &loader(SwapCtx &x) { return datum<LoaderState>(x, kLoaderState); }
 
 /* ---- FUN_091cc198: starts the loader: the heap, the pool and the resource table ---- */

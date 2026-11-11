@@ -94,6 +94,12 @@ class Atlas:
         page = np.frombuffer(bytes(self.lin[p]), np.uint8).reshape(PAGE, PAGE)
         return self.pal[p][page[y + 2:y + CH, x:x + CW]].astype(np.float32)
 
+    def cell_full(self, i):
+        """full 22x30 RGB of cell i"""
+        p, x, y = self.cell_xy(i)
+        page = np.frombuffer(bytes(self.lin[p]), np.uint8).reshape(PAGE, PAGE)
+        return self.pal[p][page[y:y + CH, x:x + CW]].astype(np.float32)
+
     @staticmethod
     def squeeze(img):
         """a card face (64x64) as it looks in a cell (22x28)"""
@@ -204,7 +210,8 @@ def extend(gim, filetbl, cardm_tf3, gids):
     """appends the faces of TF3 cards to the atlas: cells go after the last one, in the order of gids (TF3 id -> new game id, ascending);
     pages that receive faces get a new palette (median cut of old and new colors). Returns (cis_all.gim, fileTbl.dat)"""
     a = Atlas(gim)
-    ids = list(struct.unpack_from("<%dH" % (len(filetbl) // 2 - 2), filetbl, 4))
+    count_in = struct.unpack_from("<H", filetbl, 0)[0]
+    ids = list(struct.unpack_from("<%dH" % count_in, filetbl, 2))
     count0, n_new = len(ids), len(gids)
     total = count0 + n_new
     pages = -(-total // PER_PAGE)
@@ -215,10 +222,34 @@ def extend(gim, filetbl, cardm_tf3, gids):
     while len(rgb) < pages:
         rgb.append(np.zeros((PAGE, PAGE, 3), np.uint8))
     touched = set()
+
+    raiz = os.path.dirname(os.path.dirname(os.path.dirname(os.path.abspath(__file__))))
+    tf3_deck = os.path.join(raiz, "ref", "tf3", "deck_e")
+    tf3_gim_p = os.path.join(tf3_deck, "cis_all.gim")
+    tf3_tbl_p = os.path.join(tf3_deck, "fileTbl.dat")
+    tf3_atlas = None
+    tf3_id_to_cell = {}
+    if os.path.exists(tf3_gim_p) and os.path.exists(tf3_tbl_p):
+        tf3_atlas = Atlas(open(tf3_gim_p, "rb").read())
+        tf3_tbl_data = open(tf3_tbl_p, "rb").read()
+        cnt_tf3 = struct.unpack_from("<H", tf3_tbl_data, 0)[0]
+        tf3_ids_list = struct.unpack_from("<%dH" % cnt_tf3, tf3_tbl_data, 2)
+        tf3_id_to_cell = {cid: idx for idx, cid in enumerate(tf3_ids_list)}
+
     for k, (tf3, gid) in enumerate(sorted(gids.items(), key=lambda x: x[1])):
         cell = count0 + k
         p, x, y = divmod(cell, PER_PAGE)[0], (cell % PER_PAGE % COLS) * CW, (cell % PER_PAGE // COLS) * CH
-        rgb[p][y + 2:y + CH, x:x + CW] = a.squeeze(face(cardm_tf3, tf3)).astype(np.uint8)
+        if tf3 in tf3_id_to_cell and tf3_atlas is not None:
+            tcell = tf3_id_to_cell[tf3]
+            tp, tx, ty = tf3_atlas.cell_xy(tcell)
+            tpage = np.frombuffer(bytes(tf3_atlas.lin[tp]), np.uint8).reshape(PAGE, PAGE)
+            native_cell = tf3_atlas.pal[tp][tpage[ty:ty + CH, tx:tx + CW]].astype(np.uint8)
+            rgb[p][y:y + CH, x:x + CW] = native_cell
+        else:
+            sq = a.squeeze(face(cardm_tf3, tf3)).astype(np.uint8)
+            rgb[p][y + 2:y + CH, x:x + CW] = sq
+            rgb[p][y + 1:y + 2, x:x + CW] = sq[0:1]
+            rgb[p][y:y + 1, x:x + CW] = (sq[0:1].astype(float) * 0.6).astype(np.uint8)
         touched.add(p)
         ids.append(gid)
     lin, pal = [], []
@@ -236,5 +267,5 @@ def extend(gim, filetbl, cardm_tf3, gids):
                 pl = np.zeros((256, 3), np.uint8)
         pal.append(np.concatenate([pl, np.full((256, 1), 255, np.uint8)], axis=1).tobytes())
     pix = b"".join(_swizzle(l, PAGE, PAGE) for l in lin)
-    ft = struct.pack("<HH", len(ids), 0) + struct.pack("<%dH" % len(ids), *ids)
+    ft = struct.pack("<H", len(ids)) + struct.pack("<%dH" % len(ids), *ids)
     return _gim_blocks(gim, pages, pix, b"".join(pal)), ft

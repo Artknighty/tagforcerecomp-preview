@@ -35,6 +35,7 @@ struct Ported { uint16_t slot, tf3, like; std::string name; };
 static std::vector<Ported> PORTED;
 static std::map<uint16_t, uint16_t> g_trig;         /* card id -> donor id of its trigger (trigger.bin) */
 static std::map<uint16_t, uint16_t> g_trig_real;   /* donor id of an aliased trigger -> the new card that triggered (see hk_trigger) */
+static std::map<uint16_t, uint16_t> g_trigger_record_kinds;
 struct TriggerSource { uint16_t donor, card; uint8_t side; uint16_t token = 0xffff; bool allowed = true; };
 static std::vector<TriggerSource> g_trigger_scope;
 static std::map<uint16_t, uint16_t> g_trigger_conditions;
@@ -613,12 +614,21 @@ static uint32_t collection_entry(TfCpu *c, uint32_t id) {
 /* grant_copies: a ported card the player does not own yet is added to the collection (marked "new") so it shows up in the trunk. The game reloads
  * the save when Continue is pressed, so this runs every half second once a save is in memory; it only touches cards with 0 copies. */
 static void slifer_end_phase(TfCpu *c);
+static void lightsworn_end_phase(TfCpu *c);
+static void dakini_end_phase(TfCpu *c);
 static int hk_frame(TfCpu *c) {
     static uint64_t dbg_next;
     {   /* End Phase: the duel step word 09f787b8 goes through 4 (just before 5 = turn change) when a turn ends */
         static uint32_t phase = ~0u;
         const uint32_t now = *(const uint32_t *)A->mem(0x09f787b8);
-        if (now != phase) { phase = now; if (now == 4) slifer_end_phase(c); }
+        if (now != phase) {
+            phase = now;
+            if (now == 4) {
+                slifer_end_phase(c);
+                lightsworn_end_phase(c);
+                dakini_end_phase(c);
+            }
+        }
     }
     if (getenv("TF3_DEBUG_PHASE")) {   /* research aid: logs every change of the duel step words */
         static uint32_t last[4] = {~0u, ~0u, ~0u, ~0u};
@@ -660,6 +670,10 @@ static int hk_frame(TfCpu *c) {
     return 0;
 }
 
+static const uint32_t DUEL_SIDES = 0x09f80000u - 25364u, DUEL_SIDE_SIZE = 4012;
+static uint16_t slot_of(uint16_t tf3);
+static uint32_t call_game(TfCpu *c, uint32_t fn, uint32_t a0, uint32_t a1, uint32_t a2, uint32_t a3);
+
 /* libduel_eng 09ee3efc: the life point change of the life point cards, by card id. a0 = the effect object (u16 id at +0, byte +2 bit 0 = side, byte +3 bit 1 = swapped
  * side), a1 = out int[2] (LP delta per player index; the caller damages the negative ones and heals the positive ones). Ookazi writes -800 to the opponent's index. */
 static int hk_lp_amounts(TfCpu *c) {
@@ -672,12 +686,33 @@ static int hk_lp_amounts(TfCpu *c) {
         A->call_original(c, F_LP_AMOUNTS);
         const int32_t *d = (const int32_t *)A->mem(out);
         A->log("LP amounts: card %u byte2 %02x byte3 %02x -> player0 %d, player1 %d", id, o[2], o[3], d[0], d[1]);
+        const uint32_t *w = (const uint32_t *)A->mem(0x09f77dcc);   /* battle records: 2 x 14 words (gid at +4, ATK at +7) */
+        for (int k = 0; k < 28; k += 7) A->log("  battle words %2d: %u %u %u %u %u %u %u", k, w[k], w[k + 1], w[k + 2], w[k + 3], w[k + 4], w[k + 5], w[k + 6]);
         return 1;
     }
     if (const Amount *am = amount_of(*(const uint16_t *)o, 2, o[2] & 1, obj)) {
         const uint32_t side = (uint32_t)((o[2] & 1) ^ ((o[3] >> 6) & 1));
         if (getenv("TF3_DEBUG_FX")) A->log("life point effect of id %u: controller %d, other player %d", *(const uint16_t *)o, am->self, am->opp);
-        const Amount n = amount_scaled(am, *(const uint16_t *)o, 2, o[2] & 1, obj);
+        Amount n = amount_scaled(am, *(const uint16_t *)o, 2, o[2] & 1, obj);
+        if (n.opp == INT32_MIN + 1 || n.opp == INT32_MIN + 2) {   /* damage = DEF / ATK of the monster destroyed in this battle (battle records at 09f77dcc: side, ..., gid at +4, current ATK +7, DEF +8) */
+            const uint32_t *w = (const uint32_t *)A->mem(0x09f77dcc);
+            int32_t dmg = 0;
+            for (int k = 0; k < 28; k += 14)
+                if (w[k] == 1 - side && w[k + 4]) dmg = (int32_t)w[k + (n.opp == INT32_MIN + 1 ? 8 : 7)];
+            n.opp = -dmg;
+        }
+        if (slot_of(6991) && *(const uint16_t *)o == slot_of(6991)) {
+            const uint32_t base = DUEL_SIDES + side * DUEL_SIDE_SIZE;
+            const uint32_t gy_count = *(const uint32_t *)A->mem(base + 20);
+            int32_t normal_count = 0;
+            for (uint32_t i = 0; i < gy_count && i < 160; ++i) {
+                const uint16_t gid = *(const uint16_t *)A->mem(base + 1808 + i * 4) & 0x1fff;
+                if (!gid) continue;
+                if (call_game(c, 0x09f67918, gid, 0, 0, 0) == 0) normal_count++;
+            }
+            n.opp = -(normal_count * 200);
+            if (getenv("TF3_DEBUG_FX")) A->log("Lycanthrope battle burn: %d normal monsters in GY of side %u -> %d damage", normal_count, side, -n.opp);
+        }
         int32_t *d = (int32_t *)A->mem(out);
         d[side] = n.self;
         d[1 - side] = n.opp;
@@ -765,6 +800,12 @@ static int hk_draw(TfCpu *c) {
     if (!am) return 0;
     const uint32_t side = (uint32_t)((o[2] & 1) ^ ((o[3] & 0x7f) >> 6));
     Amount n = amount_scaled(am, *(const uint16_t *)o, 1, o[2] & 1, obj);
+    if (slot_of(7623) && *(const uint16_t *)o == slot_of(7623)) {
+        const char *forced = getenv("TF3_FORCE_COIN");
+        const uint32_t heads = forced ? (atoi(forced) & 1) : call_game(c, F_RANDOM, 2, 0, 0, 0) & 1;
+        call_game(c, F_COIN_ANIM, side, (o[2] >> 1) & 31, 1, heads);
+        if (!heads) { n.opp = n.self; n.self = 0; }
+    }
     bool paid = true;
     {
         auto ct = g_amt_cost.find({*(const uint16_t *)o, 1});
@@ -823,7 +864,6 @@ static int hk_effect_driver(TfCpu *c) {
     return 1;
 }
 
-static const uint32_t DUEL_SIDES = 0x09f80000u - 25364u, DUEL_SIDE_SIZE = 4012;
 static uint32_t zone_card(uint32_t side, uint32_t slot);
 
 /* "Destroy all" effects as data (destroy.bin, written by tools/mods/tf3_efeitos_param.py): the card borrows the record of Dark Hole / Raigeki / Heavy Storm; the
@@ -962,6 +1002,46 @@ template <uint32_t F> static int hk_id_alias(TfCpu *c) {
     return 0;
 }
 
+static const uint32_t F_LP_COST = 0x09ec6d64;
+static uint32_t g_twister_record;
+
+static int hk_twister_cost(TfCpu *c) {
+    const uint32_t obj = A->reg(c, 4);
+    if (!is_card(obj, 6999)) return 0;
+    // Battery Charger's native 500-LP formula also honors Spell Economics.
+    uint16_t *id = (uint16_t *)A->mem(obj);
+    const uint16_t saved = *id;
+    *id = 6348;
+    A->call_original(c, F_LP_COST);
+    *id = saved;
+    return 1;
+}
+
+static void twister_record(TfCpu *c) {
+    const uint32_t native = A->reg(c, 2);
+    if (native < 0x08000000u || native > 0x0a000000u - 24) return;
+    if (!g_twister_record) g_twister_record = A->guest_alloc(24);
+    if (!g_twister_record) return;
+    memcpy(A->mem(g_twister_record), A->mem(native), 24);
+    // Burning Beast's target predicate selects face-up Spells/Traps on either side.
+    *(uint32_t *)A->mem(g_twister_record + 8) = 0x09ebc8ec;
+    *(uint32_t *)A->mem(g_twister_record + 16) = 0x09ec7bf8;
+    A->set_reg(c, 2, g_twister_record);
+}
+
+static void trigger_record_lookup(TfCpu *c, uint32_t object, uint16_t real, uint16_t donor) {
+    uint16_t *id = (uint16_t *)A->mem(object);
+    uint8_t *flags = A->mem(object + 3);
+    const uint16_t saved_id = *id;
+    const uint8_t saved_flags = *flags;
+    const auto kind = g_trigger_record_kinds.find(real);
+    *id = donor;
+    if (((saved_flags >> 4) & 3) == 1 && kind != g_trigger_record_kinds.end())
+        *flags = (uint8_t)((saved_flags & ~0x30) | (kind->second << 4));
+    A->call_original(c, F_EFFECT_RECORD);
+    *flags = saved_flags; *id = saved_id;
+}
+
 static int hk_effect_record(TfCpu *c) {   /* looks the record up as the card it plays like, then puts the key back */
     const uint32_t p = A->reg(c, 4);
     if (p < 0x08000000u || p > 0x0a000000u - 8) return 0;
@@ -1001,17 +1081,16 @@ static int hk_effect_record(TfCpu *c) {   /* looks the record up as the card it 
             const auto override_record = g_trigger_record_donors.find(real);
             const uint16_t record = override_record != g_trigger_record_donors.end() ? override_record->second : a.like;
             if (a.slot != real || !record || t == g_trig.end() || t->second == record) continue;
-            const uint16_t donor = *key;
-            *key = record;
-            A->call_original(c, F_EFFECT_RECORD);
-            *key = donor;
+            trigger_record_lookup(c, p, real, record);
             return 1;
         }
     for (const auto &a : PORTED) {
         if (*key != a.slot || !a.like) continue;
-        *key = a.like;
-        A->call_original(c, F_EFFECT_RECORD);
-        *key = a.slot;
+        const auto field_override = g_trigger_record_donors.find(a.slot);
+        // Real-ID events reach this branch directly, without a trigger alias key.
+        const bool field_record = ((A->mem(p)[3] >> 4) & 3) == 1;
+        trigger_record_lookup(c, p, a.slot, field_record && field_override != g_trigger_record_donors.end() ? field_override->second : a.like);
+        if (a.tf3 == 6999 && a.like == 4909 && ((A->mem(p)[3] >> 4) & 3) == 0) twister_record(c);
         return 1;
     }
     return 0;
@@ -1050,15 +1129,62 @@ static void fx_load(void) {
  * Special Summoned (as 2, plus the game's summon check 09f55288 of Call of the Haunted), 4 = hand: the game calls the function once per hand slot (a2 = slot,
  * ids at side+288, kind 11, plus the summon check 09f43db8 of Magnet Circle LV2) */
 static const uint32_t F_SUMMON_CHECK_GY = 0x09f55288, F_SUMMON_CHECK_HAND = 0x09f43db8;
+static std::map<uint16_t, uint16_t> g_summon_rules;
+static bool summon_blocked(uint32_t target, uint16_t candidate = 0, TfCpu *c = nullptr);
+/* This predicate is shared by hand/Deck special summons and ordinary revival.
+ * Normal Summon and Set have separate native command checks. */
+static int hk_special_summon_check(TfCpu *c) {
+    const uint16_t id = (uint16_t)A->reg(c, 5);
+    if (summon_blocked(A->reg(c, 4) & 1, id, c)) { A->set_reg(c, 2, 0); return 1; }
+    const auto rule = g_summon_rules.find(id);
+    if (!(slot_of(6938) && id == slot_of(6938)) &&
+        !(rule != g_summon_rules.end() && (rule->second & 4))) return 0;
+    A->set_reg(c, 2, 0);
+    return 1;
+}
+static int hk_special_summon_grave(TfCpu *c) {
+    const uint32_t side = A->reg(c, 5) & 1, slot = A->reg(c, 6);
+    if (slot >= 160) return 0;
+    const uint16_t id = *(uint16_t *)A->mem(DUEL_SIDES + side * DUEL_SIDE_SIZE + 0x710 + 4 * slot) & 0x1fff;
+    if (summon_blocked(A->reg(c, 4) & 1, id, c)) { A->set_reg(c, 2, 0); return 1; }
+    const auto rule = g_summon_rules.find(id);
+    if (rule == g_summon_rules.end() || !(rule->second & 4)) return 0;
+    A->set_reg(c, 2, 0); return 1;
+}
+static int hk_special_summon_banished(TfCpu *c) {
+    const uint32_t side=A->reg(c,5)&1, slot=A->reg(c,6);
+    if (slot>=160) return 0;
+    const uint16_t id=*(uint16_t *)A->mem(DUEL_SIDES+side*DUEL_SIDE_SIZE+0xa80+4*slot)&0x1fff;
+    if (summon_blocked(A->reg(c,4)&1,id,c)) { A->set_reg(c,2,0); return 1; }
+    const auto rule=g_summon_rules.find(id);
+    if (rule==g_summon_rules.end() || !(rule->second&4)) return 0;
+    A->set_reg(c,2,0); return 1;
+}
 static void fx_scan(TfCpu *c, uint32_t side_arg, uint32_t slot, const DataEffect &e) {
     const uint32_t base = DUEL_SIDES + (side_arg & 1) * DUEL_SIDE_SIZE;
     const auto wanted = [&](uint32_t off, uint32_t i) { return std::binary_search(e.ids.begin(), e.ids.end(), (uint16_t)(*(const uint16_t *)A->mem(base + off + i * 4) & 0x1fff)); };
+    if (e.zone == 5) {
+        // The native Chrysalis record retains Neo Space, self-Tribute,
+        // selection and resolution. Only its named hand/Deck target varies.
+        for (const uint32_t kind : {11u, 13u}) {
+            const uint32_t off = kind == 11 ? 288 : 928;
+            const uint32_t n = *(const uint32_t *)A->mem(base + (kind == 11 ? 12 : 16));
+            for (uint32_t i = 0; i < n && i < 160; ++i) {
+                if (!wanted(off, i)) continue;
+                const uint16_t id = *(const uint16_t *)A->mem(base + off + i * 4) & 0x1fff;
+                if (call_game(c, F_SUMMON_CHECK_HAND, side_arg, id, 0, 0))
+                    call_game(c, F_CAND_ADD, side_arg, kind, i, 0);
+            }
+        }
+        return;
+    }
     if (e.zone == 4) {
         if (slot < 40 && wanted(288, slot) && call_game(c, F_SUMMON_CHECK_HAND, side_arg, *(const uint16_t *)A->mem(base + 288 + slot * 4) & 0x1fff, 0, 0))
             call_game(c, F_CAND_ADD, side_arg, 11, slot, 0);
         return;
     }
-    const uint32_t off = e.zone == 1 ? 928 : 1808, n = *(const uint32_t *)A->mem(base + (e.zone == 1 ? 16 : 20)), kind = e.zone == 1 ? 13 : 14;
+    const bool deck = e.zone == 1 || e.zone == 6;
+    const uint32_t off = deck ? 928 : 1808, n = *(const uint32_t *)A->mem(base + (deck ? 16 : 20)), kind = deck ? 13 : 14;
     for (uint32_t i = 0; i < n && i < 160; i++) {
         if (!wanted(off, i)) continue;
         if (e.zone == 3 && !call_game(c, F_SUMMON_CHECK_GY, side_arg, side_arg, i, 0)) continue;
@@ -1070,6 +1196,76 @@ static uint16_t fx_card(uint16_t id, uint32_t side) {   /* the card whose data e
     if (g_fx.count(id)) return id;
     const uint16_t real = trigger_card(id, side);
     return g_fx.count(real) ? real : id;
+}
+
+/* King of the Swamp discards itself through native callbacks, but its resolution
+ * searches for a fixed Polymerization ID. Reuse that path for single-name Deck
+ * searches; scope the substitution to this source's driver invocation. */
+static const uint32_t F_HAND_SEARCH = 0x09eeca3c, F_HAND_SEARCH_COST = 0x09edd77c;
+static const uint32_t F_DECK_FIND_ID = 0x09f4b01c;
+static uint16_t g_hand_search_target;
+
+static uint16_t hand_search_target(uint32_t obj) {
+    if (obj < 0x08000000u || obj > 0x0a000000u - 24) return 0;
+    const uint16_t id = *(const uint16_t *)A->mem(obj);
+    const auto fx = g_fx.find(id);
+    if (fx == g_fx.end() || (fx->second.zone != 1 && fx->second.zone != 6) || fx->second.extra ||
+        fx->second.to_deck || fx->second.draw || fx->second.ids.size() != 1) return 0;
+    for (const auto &p : PORTED)
+        if (p.slot == id && p.like == 6044) return fx->second.ids[0];
+    return 0;
+}
+
+static int hk_hand_search_cost(TfCpu *c) {
+    const uint32_t obj = A->reg(c, 4);
+    const uint16_t target = hand_search_target(obj);
+    if (!target) return 0;
+    const uint32_t side = A->mem(obj)[2] & 1;
+    if ((int32_t)call_game(c, F_DECK_FIND_ID, side, target, 0, 0) < 0) {
+        A->set_reg(c, 2, 0);
+        return 1;
+    }
+    A->call_original(c, F_HAND_SEARCH_COST);
+    return 1;
+}
+
+static int hk_hand_search(TfCpu *c) {
+    const uint16_t target = hand_search_target(A->reg(c, 4));
+    if (!target && !g_hand_search_target) return 0;
+    const uint16_t saved = g_hand_search_target;
+    g_hand_search_target = target;
+    A->call_original(c, F_HAND_SEARCH);
+    g_hand_search_target = saved;
+    return 1;
+}
+
+static int hk_hand_search_find(TfCpu *c) {
+    if (g_hand_search_target && getenv("TF3_DEBUG_FX")) A->log("hand search lookup: id %u caller %08x target %u", A->reg(c, 5), A->reg(c, 31), g_hand_search_target);
+    if (!g_hand_search_target || A->reg(c, 5) != 4837 || A->reg(c, 31) != 0x09eeca88) return 0;
+    A->set_reg(c, 5, g_hand_search_target);
+    A->call_original(c, F_DECK_FIND_ID);
+    return 1;
+}
+
+/* Extend the native continuous self-destruction scan, not Kozaky's record
+ * (which also includes unrelated burn damage). Native eligibility and marking
+ * preserve negation, pending removals, destruction timing and event handling.
+ * As in TF1, process only one source before the engine repeats its scan. */
+static int hk_required_field_scan(TfCpu *c) {
+    A->call_original(c, 0x09f26b70);
+    if (A->reg(c, 2)) return 1;
+    for (uint32_t side = 0; side < 2; ++side) for (uint32_t slot = 0; slot < 5; ++slot) {
+        const uint16_t id = *(const uint16_t *)A->mem(DUEL_SIDES + side * DUEL_SIDE_SIZE + 0x30 + 20 * slot) & 0x1fff;
+        const auto rule = g_fx.find(id);
+        if (rule == g_fx.end() || rule->second.zone != 6 || rule->second.ids.size() != 1) continue;
+        if (!call_game(c, 0x09f4c238, side, slot, id, 0)) continue;
+        if (call_game(c, 0x09f4d2b8, rule->second.ids[0], 0, 0, 0)) continue;
+        call_game(c, 0x09f3592c, side, slot, 0, 0);
+        A->set_reg(c, 2, 1);
+        return 1;
+    }
+    A->set_reg(c, 2, 0);
+    return 1;
 }
 
 static int hk_cand_run(TfCpu *c) {   /* (side, effect card id, step): the queue starts empty; returns how many cards were queued */
@@ -1091,6 +1287,20 @@ static int hk_cand_count(TfCpu *c) {   /* same scan, but only counts: the queue 
     fx_scan(c, A->reg(c, 4), A->reg(c, 6), it->second);
     A->set_reg(c, 2, *ctr - before);
     *ctr = before;
+    return 1;
+}
+
+static int hk_chrysalis_cost(TfCpu *c) {
+    const uint32_t object = A->reg(c, 4);
+    if (object < 0x08000000u || object > 0x0a000000u - 24) return 0;
+    const auto it = g_fx.find(*(uint16_t *)A->mem(object));
+    if (it == g_fx.end() || it->second.zone != 5) return 0;
+    // The original assumes a nonempty Deck may contain its fixed target.
+    // Imported named lists can check actual availability before paying Tribute.
+    if (!call_game(c, F_CAND_COUNT, A->mem(object)[2] & 1, it->first, 0, 0)) {
+        A->set_reg(c, 2, 0); return 1;
+    }
+    A->call_original(c, 0x09ee3038);
     return 1;
 }
 
@@ -1146,6 +1356,10 @@ static std::map<uint16_t, int16_t> g_equip_level;
 struct AttackProtection { uint8_t exclude, type, attribute; };
 static std::map<uint16_t, AttackProtection> g_attack_protect;
 static std::set<uint16_t> g_control_lock;
+struct BattleGuard { uint16_t stat; uint32_t minimum; };
+static std::map<uint16_t, BattleGuard> g_battle_guard;
+static std::map<uint16_t, uint16_t> g_battle_light_bonus;
+static std::map<uint16_t, uint16_t> g_battle_role_bonus;
 
 static void stat_load(void) {
     const std::wstring p = std::wstring(A->mod_dir) + L"\\stat.bin";
@@ -1181,6 +1395,21 @@ static void stat_load(void) {
                     if (fread(&id, 2, 1, f) != 1) break;
                     g_control_lock.insert(id);
                 }
+            } else if (tail[0] == 0x31504742) {
+                for (uint32_t i = 0; i < tail[1]; ++i) {
+                    uint16_t head[2]; uint32_t minimum;
+                    if (fread(head, 2, 2, f) != 2 || fread(&minimum, 4, 1, f) != 1) break;
+                    if (head[0] <= 8191 && head[1] == 1 && minimum && minimum <= 32767)
+                        g_battle_guard[head[0]] = BattleGuard{head[1], minimum};
+                }
+            } else if (tail[0] == 0x31504142 || tail[0] == 0x31524142) {
+                auto &bonuses = tail[0] == 0x31504142 ? g_battle_light_bonus : g_battle_role_bonus;
+                for (uint32_t i = 0; i < tail[1]; ++i) {
+                    uint16_t row[2];
+                    if (fread(row, 2, 2, f) != 2) break;
+                    if (row[0] >= 4000 && row[0] <= 8191 && row[1] && row[1] <= 9990 && !(row[1] % 10))
+                        bonuses[row[0]] = row[1];
+                }
             } else break;
         }
     }
@@ -1202,6 +1431,269 @@ static bool zone_effect_active(uint32_t side, uint32_t slot) {
     return (~((flags & 3) >> 1) & enabled & ~((flags & 0x3f) >> 5)) != 0;
 }
 
+static void summon_load() {
+    const std::wstring path = std::wstring(A->mod_dir) + L"/summon.bin";
+    FILE *f = _wfopen(path.c_str(), L"rb");
+    if (!f) return;
+    uint32_t header[2];
+    if (fread(header, sizeof header, 1, f) == 1 && header[0] == 0x53334654 && header[1] <= 8192) {
+        std::map<uint16_t, uint16_t> rules;
+        bool valid = true;
+        for (uint32_t i = 0; i < header[1]; ++i) {
+            uint16_t row[2];
+            if (fread(row, sizeof row, 1, f) != 1 || row[0] < 4000 || row[0] > 8191 ||
+                !row[1] || (row[1] & ~0x707u) || (row[1] >> 8) > 6 ||
+                ((row[1] >> 8) && (row[1] & 7)) || rules.count(row[0])) { valid = false; break; }
+            rules[row[0]] = row[1];
+        }
+        if (valid && fgetc(f) == EOF) g_summon_rules.swap(rules);
+    }
+    fclose(f);
+}
+
+// Additional candidate restrictions preserve every native summon condition.
+static bool summon_blocked(uint32_t target, uint16_t candidate, TfCpu *c) {
+    uint32_t attribute = 0;
+    for (uint32_t side = 0; side < 2; ++side) for (uint32_t slot = 0; slot < 5; ++slot) {
+        const auto rule = g_summon_rules.find((uint16_t)zone_card(side, slot));
+        if (rule == g_summon_rules.end() || !zone_effect_active(side, slot)) continue;
+        if ((rule->second & 1) || ((rule->second & 2) && side != target)) {
+            return true;
+        }
+        const uint32_t allowed = rule->second >> 8;
+        if (allowed && candidate && c) {
+            // Attribute changes on the field do not change a monster in a
+            // hand/Deck/Graveyard/banished zone. Query native card properties.
+            if (!attribute) attribute = call_game(c, 0x09f678f8, candidate, 0, 0, 0);
+            if (attribute != allowed) return true;
+        }
+    }
+    return false;
+}
+static int hk_special_summon_command(TfCpu *c) {
+    const uint32_t side = A->reg(c,4) & 1, index = A->reg(c,5);
+    if (index >= 160) return 0;
+    const uint16_t id = *(uint16_t *)A->mem(DUEL_SIDES + 8044 + 4*index) & 0x1fff;
+    if (!summon_blocked(side,id,c)) return 0;
+    // Preserve every other native command bit, including Normal/Set.
+    A->call_original(c,0x09e8f790);
+    A->set_reg(c,2,A->reg(c,2) & ~4u);
+    return 1;
+}
+
+/* Ritual Spells with a fixed Ritual Monster (ritual.bin, written by tf3_efeitos_param.resolver_rituais). The native Ritual table at 09f767ac holds one 32-bit word
+ * per Ritual: bits 0-12 Ritual Monster id, 13-25 Ritual Spell id, 26-31 total Levels. It has 26 words and a zero word as terminator, and the candidate-scan
+ * table starts right behind it, so it cannot simply grow. Only seven native functions read it (09f16e38, 09f16eb4, 09f17138, 09f17818, 09f1792c, 09f17c10,
+ * 09f17ca8); the static call graph below them never reaches the candidate scan (09f243c8/09f24428). So while the outermost of them runs, the imported rows
+ * are written over the terminator and the first words of the scan table, and the original bytes are put back when it returns. */
+static const uint32_t RITUAL_TABLE = 0x09f767ac;
+static const uint32_t RITUAL_NATIVE = 26;
+static std::vector<uint32_t> g_rituals;
+static std::set<uint16_t> g_ritual_exact;
+static uint16_t g_ritual_exact_context;
+static int g_ritual_depth;
+static void ritual_load() {
+    const std::wstring path = std::wstring(A->mod_dir) + L"/ritual.bin";
+    FILE *f = _wfopen(path.c_str(), L"rb");
+    if (!f) return;
+    uint32_t header[2];
+    if (fread(header, sizeof header, 1, f) == 1 && header[0] == 0x52334654 && header[1] <= 24) {
+        std::vector<uint32_t> rows;
+        std::set<uint16_t> exact;
+        bool valid = true;
+        for (uint32_t i = 0; i < header[1]; ++i) {
+            uint16_t ids[2]; uint8_t level;
+            if (fread(ids, sizeof ids, 1, f) != 1 || fread(&level, 1, 1, f) != 1 || ids[0] < 4000 || ids[0] > 8191 ||
+                ids[1] < 4000 || ids[1] > 8191 || (level & 0x7f) < 1 || (level & 0x7f) > 63) { valid = false; break; }
+            if (level & 0x80) exact.insert(ids[0]);
+            level &= 0x7f;
+            rows.push_back(uint32_t(ids[1]) | (uint32_t(ids[0]) << 13) | (uint32_t(level) << 26));
+        }
+        if (valid && fgetc(f) == EOF) { g_rituals.swap(rows); g_ritual_exact.swap(exact); }
+    }
+    fclose(f);
+}
+template <uint32_t F> static int ritual_exact_call(TfCpu *c) {
+    if constexpr (F == 0x09f16e38) {
+        if (!g_ritual_exact_context || A->reg(c, 4) != 6617) return 0;
+        A->set_reg(c, 4, g_ritual_exact_context);
+        A->call_original(c, F);
+        A->set_reg(c, 4, 6617);
+        return 1;
+    }
+    if constexpr (F == 0x09f1792c || F == 0x09f17138) {
+        auto *effect = (uint16_t *)A->mem(A->reg(c, 4));
+        const uint16_t spell = effect[0];
+        if (!g_ritual_exact.count(spell)) return 0;
+        // End of the World's native material search requires an exact sum.
+        // Alias only this calculation; row ownership still uses the real Spell.
+        const uint16_t saved = g_ritual_exact_context;
+        g_ritual_exact_context = spell;
+        effect[0] = 6617;
+        A->call_original(c, F);
+        effect[0] = spell;
+        g_ritual_exact_context = saved;
+        return 1;
+    }
+    return 0;
+}
+template <uint32_t F> static int hk_ritual_table(TfCpu *c) {
+    if (g_rituals.empty()) return 0;
+    if (g_ritual_depth) return ritual_exact_call<F>(c);
+    uint32_t *words = (uint32_t *)A->mem(RITUAL_TABLE);
+    // Layout check: last native word set, native terminator zero. Otherwise leave the native behavior alone.
+    if (!words[RITUAL_NATIVE - 1] || words[RITUAL_NATIVE]) return 0;
+    const size_t n = g_rituals.size();
+    std::vector<uint32_t> saved(words + RITUAL_NATIVE, words + RITUAL_NATIVE + n + 1);
+    memcpy(words + RITUAL_NATIVE, g_rituals.data(), n * 4);
+    words[RITUAL_NATIVE + n] = 0;
+    const uint32_t obj = A->reg(c, 4);
+    static const bool trace = getenv("TF3_DEBUG_RITUAL") != nullptr;
+    const uint32_t pre8 = trace && obj >= 0x08000000 && obj < 0x0a000000 ? *(uint16_t *)A->mem(obj + 8) : 0;
+    ++g_ritual_depth;
+    bool selected = false;
+    if constexpr (F == 0x09f17ca8) {
+        auto *effect = (uint16_t *)A->mem(obj);
+        const uint32_t spell = effect[0], side = effect[1] & 1;
+        size_t rows = 0;
+        for (uint32_t row : g_rituals) if (((row >> 13) & 0x1fff) == spell) ++rows;
+        if (rows > 1 && *(uint32_t *)A->mem(0x09f78788) == 128 && !(effect[2] & 4)) {
+            // Native step 128 skips monster selection for ordinary Ritual Spells.
+            // Use its existing multi-target selection route with the real Spell ID:
+            // 1792c checks row ownership and 127 records the chosen monster's row.
+            *(uint32_t *)A->mem(0x09f7878c) = 0;
+            effect[6] = 0;
+            uint32_t next = 0;
+            if (call_game(c, 0x09f17c10, obj, 0, 0, 0)) {
+                next = 127;
+                if (*(uint32_t *)A->mem(0x09f77888 + side * 4) == 1) {
+                    const uint32_t count = *(uint32_t *)A->mem(DUEL_SIDES + side * 0xfac + 12);
+                    for (uint32_t k = 0; k < count; ++k) {
+                        if (!call_game(c, 0x09f17818, side, 11, k, 0)) continue;
+                        const uint32_t monster = *(uint32_t *)A->mem(DUEL_SIDES + side * 0xfac + 0x120 + k * 4) & 0x1fff;
+                        for (size_t j = 0; j < n; ++j)
+                            if ((g_rituals[j] & 0x1fff) == monster && ((g_rituals[j] >> 13) & 0x1fff) == spell)
+                                effect[4] = uint16_t(RITUAL_NATIVE + j);
+                        next = 126;
+                        break;
+                    }
+                } else {
+                    call_game(c, 0x09eb109c, side, 0x11e, 0, 0);
+                    call_game(c, 0x09e9c734, 0x09f17818, 0, 0, 0);
+                }
+            }
+            A->set_reg(c, 2, next);
+            selected = true;
+        }
+    }
+    if constexpr (F == 0x09f17138) {
+        if (slot_of(7188)) {
+            const uint32_t side = A->reg(c, 5) & 1;
+            const uint32_t zone = A->reg(c, 6);
+            const uint32_t slot = A->reg(c, 7);
+            uint16_t cand_id = 0;
+            if (zone == 0xb) {
+                cand_id = *(const uint16_t *)A->mem(DUEL_SIDES + side * DUEL_SIDE_SIZE + 0x120 + slot * 4) & 0x1fff;
+            } else if (zone + slot < 5) {
+                cand_id = (uint16_t)zone_card(side, zone + slot);
+            }
+            if (cand_id == slot_of(7188)) {
+                const auto *rec = (const short *)A->mem(A->reg(c, 4));
+                const uint32_t row = (uint32_t)(uint16_t)rec[4];
+                const uint32_t r_word = ((const uint32_t *)A->mem(RITUAL_TABLE))[row];
+                const uint16_t r_monster = r_word & 0x1fff;
+                if (call_game(c, 0x09f678f8, r_monster, 0, 0, 0) == 2) {
+                    A->set_reg(c, 2, 1);
+                    selected = true;
+                }
+            }
+        }
+    }
+    if constexpr (F == 0x09f1792c) {
+        if (slot_of(7188)) {
+            const uint32_t row = A->reg(c, 5);
+            const uint32_t r_word = ((const uint32_t *)A->mem(RITUAL_TABLE))[row];
+            const uint16_t r_monster = r_word & 0x1fff;
+            if (call_game(c, 0x09f678f8, r_monster, 0, 0, 0) == 2) {
+                const uint32_t side = (*(const uint8_t *)A->mem(A->reg(c, 4) + 2)) & 1;
+                const uint16_t raven_id = slot_of(7188);
+                bool has_raven = false;
+                const uint32_t hand_cnt = *(const uint32_t *)A->mem(DUEL_SIDES + side * DUEL_SIDE_SIZE + 12);
+                for (uint32_t i = 0; i < hand_cnt && i < 20; ++i) {
+                    if ((*(const uint16_t *)A->mem(DUEL_SIDES + side * DUEL_SIDE_SIZE + 0x120 + i * 4) & 0x1fff) == raven_id) {
+                        has_raven = true; break;
+                    }
+                }
+                if (!has_raven) {
+                    for (uint32_t i = 0; i < 5; ++i) {
+                        if (zone_card(side, i) == raven_id) { has_raven = true; break; }
+                    }
+                }
+                if (has_raven) {
+                    A->set_reg(c, 2, 1);
+                    selected = true;
+                }
+            }
+        }
+    }
+    if (!selected && !ritual_exact_call<F>(c)) A->call_original(c, F);
+    --g_ritual_depth;
+    if (trace && obj >= 0x08000000 && obj < 0x0a000000)
+        A->log("ritual %08x a0=%08x a1=%u id=%u +8: %u -> %u ret=%u", F, obj, A->reg(c, 5), *(uint16_t *)A->mem(obj), pre8, *(uint16_t *)A->mem(obj + 8), A->reg(c, 2));
+    memcpy(words + RITUAL_NATIVE, saved.data(), saved.size() * 4);
+    return 1;
+}
+
+struct DoubleTributeRule { uint16_t donor; std::vector<uint16_t> targets; };
+static std::map<uint16_t, DoubleTributeRule> g_double_tribute;
+static const uint32_t F_DOUBLE_TRIBUTE = 0x09f4e884;
+static void tribute_load() {
+    const std::wstring path = std::wstring(A->mod_dir) + L"/tribute.bin";
+    FILE *f = _wfopen(path.c_str(), L"rb");
+    if (!f) return;
+    uint32_t header[2];
+    if (fread(header, sizeof header, 1, f) == 1 && header[0] == 0x42334654 && header[1] <= 8192) {
+        std::map<uint16_t, DoubleTributeRule> rules;
+        bool valid = true;
+        for (uint32_t i = 0; i < header[1]; ++i) {
+            uint16_t ids[2]; uint32_t count;
+            if (fread(ids, sizeof ids, 1, f) != 1 || fread(&count, sizeof count, 1, f) != 1 ||
+                ids[0] < 4000 || ids[0] > 8191 || count > 8192 || rules.count(ids[0]) ||
+                (ids[1] != 5409 && ids[1] != 6040 && ids[1] != 6120 && ids[1] != 6260 && ids[1] != 6121 && ids[1] != 6259)) {
+                valid = false; break;
+            }
+            DoubleTributeRule rule; rule.donor = ids[1]; rule.targets.resize(count);
+            if (fread(rule.targets.data(), sizeof(uint16_t), count, f) != count ||
+                !std::is_sorted(rule.targets.begin(), rule.targets.end()) ||
+                std::adjacent_find(rule.targets.begin(), rule.targets.end()) != rule.targets.end() ||
+                (!rule.targets.empty() && (rule.targets.front() < 4000 || rule.targets.back() > 8191))) {
+                valid = false; break;
+            }
+            rules.emplace(ids[0], std::move(rule));
+        }
+        if (valid && fgetc(f) == EOF) g_double_tribute.swap(rules);
+    }
+    fclose(f);
+}
+
+// Keep native face-down, controller and negation rules. Only this read-only
+// predicate sees the donor; the real field word is restored before returning.
+static int hk_double_tribute(TfCpu *c) {
+    const uint32_t side = A->reg(c, 6), slot = A->reg(c, 7);
+    if (side > 1 || slot >= 5) return 0;
+    uint16_t *word = (uint16_t *)A->mem(DUEL_SIDES + side * DUEL_SIDE_SIZE + 0x30 + 20 * slot);
+    const uint16_t saved = *word;
+    const auto rule = g_double_tribute.find(saved & 0x1fff);
+    if (rule == g_double_tribute.end()) return 0;
+    if (!std::binary_search(rule->second.targets.begin(), rule->second.targets.end(), (uint16_t)A->reg(c, 5))) {
+        A->set_reg(c, 2, 0); return 1;
+    }
+    *word = (saved & ~0x1fff) | rule->second.donor;
+    A->call_original(c, F_DOUBLE_TRIBUTE);
+    *word = saved;
+    return 1;
+}
+
 // Experimental: identify a protected native Spell/Trap event.
 static bool venus_protects_event(TfCpu *c, uint32_t target) {
     if (target < 0x08000000 || target > 0x0a000000 - 24) return false;
@@ -1218,10 +1710,129 @@ static bool venus_protects_event(TfCpu *c, uint32_t target) {
     return false;
 }
 
-static int hk_venus_negation(TfCpu *c) {
-    if (!venus_protects_event(c, A->reg(c, 5))) return 0;
-    A->set_reg(c, 2, 0);
-    return 1;
+static int hk_counter_trap_resolve(TfCpu *c) {
+    if (getenv("TF3_TEST_VENUS") && venus_protects_event(c, A->reg(c, 5))) {
+        A->set_reg(c, 2, 0);
+        return 1;
+    }
+    const uint32_t p1 = A->reg(c, 4);
+    const uint32_t p2 = A->reg(c, 5); (void)p2;
+    if (p1 >= 0x08000000u && p1 <= 0x0a000000u - 24) {
+        const uint16_t id1 = *(const uint16_t *)A->mem(p1) & 0x1fff;
+        if (slot_of(7349) && id1 == slot_of(7349)) { // Dark Bribe
+            A->call_original(c, 0x09ee55c8);
+            const uint8_t side = A->mem(p1)[2] & 1;
+            call_game(c, F_DRAW_CARDS, 1 - side, 1, 0, 0);
+            A->set_reg(c, 2, 0);
+            return 1;
+        }
+    }
+    return 0;
+}
+
+static int hk_counter_trap_condition(TfCpu *c) {
+    const uint32_t p1 = A->reg(c, 4);
+    const uint32_t p2 = A->reg(c, 5);
+    if (p1 < 0x08000000u || p1 > 0x0a000000u - 24) return 0;
+    const uint16_t id1 = *(const uint16_t *)A->mem(p1) & 0x1fff;
+
+    // Dark Bribe (TF3 7349): Negate opponent's Spell or Trap activation
+    if (slot_of(7349) && id1 == slot_of(7349)) {
+        if (!p2 || p2 < 0x08000000u || p2 > 0x0a000000u - 24) {
+            A->set_reg(c, 2, 0);
+            return 1;
+        }
+        const uint8_t *ev1 = A->mem(p1);
+        const uint8_t *ev2 = A->mem(p2);
+        const uint8_t side1 = ev1[2] & 1;
+        const uint8_t side2 = ev2[2] & 1;
+        if (side1 == side2) {
+            A->set_reg(c, 2, 0);
+            return 1;
+        }
+        if (((ev2[2] & 0x3f) >> 1) > 10) {
+            A->set_reg(c, 2, 0);
+            return 1;
+        }
+        if (((ev2[3] & 0x3f) >> 4) != 0) {
+            A->set_reg(c, 2, 0);
+            return 1;
+        }
+        const uint16_t target_card = *(const uint16_t *)ev2 & 0x1fff;
+        if (call_game(c, 0x0884e61c, target_card, 0, 0, 0) != 0) {
+            A->set_reg(c, 2, 0);
+            return 1;
+        }
+        const uint32_t type = call_game(c, 0x09f678f0, target_card, 0, 0, 0);
+        if (type == 22 || type == 23) {
+            A->set_reg(c, 2, 1);
+            return 1;
+        }
+        A->set_reg(c, 2, 0);
+        return 1;
+    }
+
+    // Counter Counter (TF3 7236): Negate activation of a Counter Trap Card
+    if (slot_of(7236) && id1 == slot_of(7236)) {
+        if (!p2 || p2 < 0x08000000u || p2 > 0x0a000000u - 24) {
+            A->set_reg(c, 2, 0);
+            return 1;
+        }
+        const uint8_t *ev2 = A->mem(p2);
+        if (((ev2[3] & 0x3f) >> 4) != 0) {
+            A->set_reg(c, 2, 0);
+            return 1;
+        }
+        const uint16_t target_card = *(const uint16_t *)ev2 & 0x1fff;
+        const uint32_t type = call_game(c, 0x09f678f0, target_card, 0, 0, 0);
+        const uint32_t icon = call_game(c, 0x09f67908, target_card, 0, 0, 0);
+        if (type == 23 && icon == 1) {
+            A->set_reg(c, 2, 1);
+            return 1;
+        }
+        A->set_reg(c, 2, 0);
+        return 1;
+    }
+
+    // Ported cards borrowing Counter Trap timing (Magic Jammer 4862, Seven Tools 4863, Divine Wrath 6217, etc.)
+    for (const auto &a : PORTED) {
+        if (a.slot == id1 && (a.like == 4862 || a.like == 4863 || a.like == 5263 || a.like == 6217 || a.like == 6365 || a.like == 6366)) {
+            if (!p2 || p2 < 0x08000000u || p2 > 0x0a000000u - 24) {
+                A->set_reg(c, 2, 0);
+                return 1;
+            }
+            uint16_t *id_ptr = (uint16_t *)A->mem(p1);
+            const uint16_t saved = *id_ptr;
+            *id_ptr = a.like;
+            A->call_original(c, 0x09ed49e0);
+            *id_ptr = saved;
+            return 1;
+        }
+    }
+
+    return 0;
+}
+
+static int hk_divine_wrath_condition(TfCpu *c) {
+    const uint32_t p1 = A->reg(c, 4);
+    const uint32_t p2 = A->reg(c, 5);
+    if (p1 < 0x08000000u || p1 > 0x0a000000u - 24) return 0;
+    if (!p2 || p2 < 0x08000000u || p2 > 0x0a000000u - 24) {
+        A->set_reg(c, 2, 0);
+        return 1;
+    }
+    const uint16_t id1 = *(const uint16_t *)A->mem(p1) & 0x1fff;
+    for (const auto &a : PORTED) {
+        if (a.slot == id1 && a.like == 6217) {
+            uint16_t *id_ptr = (uint16_t *)A->mem(p1);
+            const uint16_t saved = *id_ptr;
+            *id_ptr = a.like;
+            A->call_original(c, 0x09edec94);
+            *id_ptr = saved;
+            return 1;
+        }
+    }
+    return 0;
 }
 
 static unsigned g_venus_effect_scope;
@@ -1361,21 +1972,100 @@ static int hk_equipment_cleanup(TfCpu *c) {
     g_tribute_equips.resize(size);
     return 1;
 }
-static uint32_t ebon_replacement(TfCpu *c, uint32_t side, uint32_t slot) {
+static uint32_t zone_type(TfCpu *c, uint32_t side, uint32_t slot);
+static bool is_god(uint32_t id);
+
+static uint32_t check_destruction_replacement(TfCpu *c, uint32_t side, uint32_t slot, bool battle_only = false) {
     if (side > 1 || slot >= 5) return 0xffff;
     const uint16_t target = (uint16_t)zone_card(side, slot);
-    const uint16_t steed = slot_of(7000);
-    if (!target || !steed) return 0xffff;
+    if (!target) return 0xffff;
     const uint32_t immunity = call_game(c, 0x09f53430, side, slot, 0, 0);
-    for (const auto &rule : g_stat) {
-        if (rule.src != steed || (rule.scope & 15) != 4 ||
-            !std::binary_search(rule.target.begin(), rule.target.end(), target)) continue;
+
+    // 1. Equip protectors (destroy protecting equip instead of monster)
+    // 7000 Ebon Steed, 7298 Spirit of Six Sam, 7459 GB Shield, 7412 Armored Cybern,
+    // 7682 Mirror of Yata, 7739 Fighting Spirit
+    static const uint16_t s_equip_protectors[] = { 7000, 7298, 7459, 7412, 7682, 7739 };
+    for (uint16_t tf3_id : s_equip_protectors) {
+        const uint16_t equip_id = slot_of(tf3_id);
+        if (!equip_id) continue;
         for (uint32_t ss = 0; ss < 2; ++ss) for (uint32_t sk = 5; sk < 10; ++sk) {
             if (*(const uint32_t *)A->mem(0x09f7bc48) & (1u << (sk + ss * 16))) continue;
-            if (zone_card(ss, sk) == steed && zone_effect_active(ss, sk) &&
-                !(immunity & (ss == side ? 1 : 2)) && equipped_to(ss, sk, side, slot)) return ss | (sk << 8);
+            if (zone_card(ss, sk) == equip_id && zone_effect_active(ss, sk) &&
+                !(immunity & (ss == side ? 1 : 2)) && equipped_to(ss, sk, side, slot)) {
+                return ss | (sk << 8);
+            }
         }
     }
+
+    // 1b. Vicious Claw (7446): only during battle destruction replacement
+    if (battle_only && slot_of(7446)) {
+        const uint16_t claw_id = slot_of(7446);
+        for (uint32_t ss = 0; ss < 2; ++ss) for (uint32_t sk = 5; sk < 10; ++sk) {
+            if (*(const uint32_t *)A->mem(0x09f7bc48) & (1u << (sk + ss * 16))) continue;
+            if (zone_card(ss, sk) == claw_id && zone_effect_active(ss, sk) &&
+                equipped_to(ss, sk, side, slot)) {
+                return ss | (sk << 8);
+            }
+        }
+    }
+
+    // 2. Cyberdark monsters & Allure Queens: destroy equipped card instead
+    static const uint16_t s_cyberdark_allure[] = {
+        6830, 6831, 6832, 6833, 6870, 6871, 6872
+    };
+    bool is_cyberdark = false;
+    for (uint16_t tf3_id : s_cyberdark_allure) {
+        if (target == slot_of(tf3_id)) { is_cyberdark = true; break; }
+    }
+    if (is_cyberdark && zone_effect_active(side, slot)) {
+        for (uint32_t sk = 5; sk < 10; ++sk) {
+            if (*(const uint32_t *)A->mem(0x09f7bc48) & (1u << (sk + side * 16))) continue;
+            if (zone_card(side, sk) && zone_effect_active(side, sk) && equipped_to(side, sk, side, slot)) {
+                return side | (sk << 8);
+            }
+        }
+    }
+
+    // 3. Six Samurai monsters: destroy another Six Samurai monster on your side instead
+    static const uint16_t s_six_samurai[] = {
+        6963, 6964, 6965, 6966, 6967, 6968, 6969
+    };
+    bool is_six_sam = false;
+    for (uint16_t tf3_id : s_six_samurai) {
+        if (target == slot_of(tf3_id)) { is_six_sam = true; break; }
+    }
+    if (is_six_sam && zone_effect_active(side, slot)) {
+        for (uint32_t other_slot = 0; other_slot < 5; ++other_slot) {
+            if (other_slot == slot) continue;
+            if (*(const uint32_t *)A->mem(0x09f7bc48) & (1u << (other_slot + side * 16))) continue;
+            const uint16_t other_card = (uint16_t)zone_card(side, other_slot);
+            if (!other_card || !zone_effect_active(side, other_slot)) continue;
+            for (uint16_t tf3_id : s_six_samurai) {
+                if (other_card == slot_of(tf3_id)) {
+                    return side | (other_slot << 8);
+                }
+            }
+        }
+    }
+
+    // 4. Telekinetic Shocker (7720): pay 500 LP and destroy this card instead when a Psychic monster is destroyed
+    if (slot_of(7720) && zone_effect_active(side, slot)) {
+        const uint32_t ptype = zone_type(c, side, slot);
+        if (ptype == 21 && !is_god(target)) {
+            const int32_t lp = *(const int32_t *)A->mem(DUEL_SIDES + side * DUEL_SIDE_SIZE);
+            if (lp >= 500) {
+                const uint16_t shocker_id = slot_of(7720);
+                for (uint32_t other_slot = 0; other_slot < 5; ++other_slot) {
+                    if (other_slot == slot) continue;
+                    if (*(const uint32_t *)A->mem(0x09f7bc48) & (1u << (other_slot + side * 16))) continue;
+                    if ((uint16_t)zone_card(side, other_slot) == shocker_id && zone_effect_active(side, other_slot)) {
+                        return side | (other_slot << 8);
+                    }
+                }
+            }
+        }
+    }
+
     return 0xffff;
 }
 
@@ -1384,13 +2074,13 @@ static int hk_replacement_present(TfCpu *c) {
     if (g_venus_chain_scope && id == 5728) { A->set_reg(c, 2, 0); return 1; }
     A->call_original(c, 0x09f454b8);
     // Include the mass-destruction prepass in the native replacement mechanism.
-    if (id == 6181 && !A->reg(c, 2) && ebon_replacement(c, side, slot) != 0xffff) A->set_reg(c, 2, 1);
+    if (id == 6181 && !A->reg(c, 2) && check_destruction_replacement(c, side, slot) != 0xffff) A->set_reg(c, 2, 1);
     return 1;
 }
 
 static int hk_replacement_equip(TfCpu *c) {
     if (!g_replacement_depth || A->reg(c, 6) != 1) return 0;
-    const uint32_t source = ebon_replacement(c, A->reg(c, 4), A->reg(c, 5));
+    const uint32_t source = check_destruction_replacement(c, A->reg(c, 4), A->reg(c, 5));
     if (source == 0xffff) return 0;
     // Select the protecting equip explicitly, never an unrelated first equip.
     A->set_reg(c, 2, source);
@@ -1409,6 +2099,11 @@ static int replacement_wrap(TfCpu *c, uint32_t address) {
             g_deck_equips.push_back({(uint16_t)(packed & 0x1fff), token});
         }
     }
+    if (address == 0x09f34d64 && g_replacement_depth && side < 2 && slot < 5 &&
+        (uint16_t)zone_card(side, slot) == slot_of(7720)) {
+        int32_t *lp = (int32_t *)A->mem(DUEL_SIDES + side * DUEL_SIDE_SIZE);
+        if (*lp >= 500) *lp -= 500;
+    }
     ++g_replacement_depth;
     A->call_original(c, address);
     --g_replacement_depth;
@@ -1417,6 +2112,92 @@ static int replacement_wrap(TfCpu *c, uint32_t address) {
 }
 static int hk_destroy_mark(TfCpu *c) { return replacement_wrap(c, 0x09f3332c); }
 static int hk_destroy_remove(TfCpu *c) { return replacement_wrap(c, 0x09f34d64); }
+static int hk_battle_guard_calculate(TfCpu *c) {
+    if (*(uint32_t *)A->mem(0x09f77da8)) return 0; // Native direct-attack marker.
+    const uint32_t base = 0x09f77dcc;
+    uint32_t saved[2]; bool changed = false;
+    for (uint32_t k = 0; k < 2; ++k) {
+        uint32_t *record = (uint32_t *)A->mem(base + 0x38*k);
+        const uint32_t *other = (const uint32_t *)A->mem(base + 0x38*(1-k));
+        saved[k] = record[4];
+        const auto guard = g_battle_guard.find((uint16_t)saved[k]);
+        if (saved[k] > 8191 || guard == g_battle_guard.end() || record[0] > 1 || record[1] >= 5 ||
+            zone_card(record[0], record[1]) != saved[k] || !zone_effect_active(record[0], record[1]) ||
+            !other[4] || (int32_t)other[7] < (int32_t)guard->second.minimum) continue;
+        // Borrow only Spirit Reaper's native battle-calculation immunity. The
+        // native ATK/DEF snapshot and field identity stay real, so battle damage,
+        // targeting and later events cannot acquire its other effects.
+        record[4] = 5526;
+        changed = true;
+    }
+    if (!changed && slot_of(7703)) {
+        for (uint32_t k = 0; k < 2; ++k) {
+            uint32_t *record = (uint32_t *)A->mem(base + 0x38*k);
+            const uint32_t *other = (const uint32_t *)A->mem(base + 0x38*(1-k));
+            if (record[0] > 1 || record[1] >= 5 || !other[4] || (int32_t)other[7] <= (int32_t)record[7]) continue;
+            const uint32_t side = record[0];
+            const uint32_t pl_base = DUEL_SIDES + side * DUEL_SIDE_SIZE;
+            uint32_t *gn = (uint32_t *)A->mem(pl_base + 20);
+            const uint16_t sw_id = slot_of(7703);
+            for (uint32_t gk = 0; gk < *gn && gk < 160; ++gk) {
+                uint16_t *gy_entry = (uint16_t *)A->mem(pl_base + 1808 + gk * 4);
+                if ((*gy_entry & 0x1fff) == sw_id) {
+                    for (uint32_t m = gk; m + 1 < *gn && m < 159; ++m) {
+                        *(uint32_t *)A->mem(pl_base + 1808 + m * 4) = *(uint32_t *)A->mem(pl_base + 1808 + (m + 1) * 4);
+                    }
+                    if (*gn > 0) (*gn)--;
+                    saved[k] = record[4];
+                    record[4] = 5526;
+                    changed = true;
+                    if (getenv("TF3_DEBUG_FX")) A->log("Shield Warrior banished from GY of side %u to protect monster %u", side, record[1]);
+                    break;
+                }
+            }
+            if (changed) break;
+        }
+    }
+    // Piercing damage for TF3 piercing cards and Cyber Angel - Dakini aura
+    const uint32_t att_side = *(const uint32_t *)A->mem(0x09f77da0);
+    const uint32_t *rec0 = (const uint32_t *)A->mem(base);
+    const uint32_t att_k = (rec0[0] == att_side) ? 0 : 1;
+    const uint32_t def_k = 1 - att_k;
+    uint32_t *att_rec = (uint32_t *)A->mem(base + 0x38 * att_k);
+    const uint32_t *def_rec = (const uint32_t *)A->mem(base + 0x38 * def_k);
+    if (def_rec[2] != 0 && (int32_t)att_rec[7] > (int32_t)def_rec[8]) {
+        static const uint16_t s_pierce_ids[] = {
+            3787, 6830, 6835, 6932, 7046, 7176, 7231, 7252, 7253, 7257, 7258, 7263, 7333, 7369, 7563, 7598, 7616, 7680, 7871, 7983
+        };
+        bool is_piercing = false;
+        const uint16_t att_id = (uint16_t)saved[att_k];
+        if (att_rec[1] < 5 && zone_card(att_side, att_rec[1]) == att_id && zone_effect_active(att_side, att_rec[1])) {
+            for (uint16_t p : s_pierce_ids) {
+                if (slot_of(p) && att_id == slot_of(p)) { is_piercing = true; break; }
+            }
+        }
+        if (!is_piercing && slot_of(6847)) {
+            const uint16_t dakini_id = slot_of(6847);
+            bool has_dakini = false;
+            for (uint32_t s = 0; s < 5; ++s) {
+                if (zone_card(att_side, s) == dakini_id && zone_effect_active(att_side, s)) {
+                    has_dakini = true; break;
+                }
+            }
+            if (has_dakini) {
+                const uint32_t cat = call_game(c, 0x09f67918, att_id, 0, 0, 0);
+                if (cat == 4 || cat == 5) is_piercing = true;
+            }
+        }
+        if (is_piercing) {
+            att_rec[4] = 5142; // Mad Sword Beast: native piercing damage
+            changed = true;
+            if (getenv("TF3_DEBUG_FX")) A->log("piercing applied: attacker %u side %u slot %u vs def %u", att_id, att_side, att_rec[1], def_rec[4]);
+        }
+    }
+    if (!changed) return 0;
+    A->call_original(c, 0x09eae5fc);
+    for (uint32_t k = 0; k < 2; ++k) *(uint32_t *)A->mem(base + 0x38*k + 16) = saved[k];
+    return 1;
+}
 static int hk_battle_destroy_replace(TfCpu *c) {
     // The native battle path stages doomed monsters outside their field zones.
     // Replace before that move, so the existing monster instance stays in place.
@@ -1425,11 +2206,23 @@ static int hk_battle_destroy_replace(TfCpu *c) {
     const uint32_t slot = *(uint16_t *)A->mem(0x09f788c2);
     const uint32_t participant = *(uint16_t *)A->mem(0x09f788c4);
     if (participant > 1) return 0;
-    const uint32_t source = ebon_replacement(c, side, slot);
+    const uint32_t source = check_destruction_replacement(c, side, slot, true);
     if (getenv("TF3_DEBUG_REPLACE")) A->log("replacement staging: stage %u side %u slot %u participant %u source %04x", stage, side, slot, participant, source);
     if (stage != 1) return 0;
     if (source == 0xffff) return 0;
-    if (!call_game6(c, 0x09f34d64, source & 255, source >> 8, 14, 2, 0, 0)) return 0;
+    const uint32_t src_side = source & 255, src_slot = source >> 8;
+    const uint16_t src_card = (uint16_t)zone_card(src_side, src_slot);
+    if (src_card == slot_of(7720)) {
+        int32_t *lp = (int32_t *)A->mem(DUEL_SIDES + src_side * DUEL_SIDE_SIZE);
+        if (*lp >= 500) *lp -= 500;
+    }
+    if (src_card == slot_of(7446)) {
+        int32_t *opp_lp = (int32_t *)A->mem(DUEL_SIDES + (1 - src_side) * DUEL_SIDE_SIZE);
+        if (*opp_lp >= 600) *opp_lp -= 600;
+        else *opp_lp = 0;
+    }
+    const uint32_t dest_zone = (src_card == slot_of(7446)) ? 11 : 14;
+    if (!call_game6(c, 0x09f34d64, src_side, src_slot, dest_zone, 2, 0, 0)) return 0;
     const uint32_t battle = 0x09f77dcc + 0x38 * participant;
     *(uint32_t *)A->mem(battle + 44) = 0;
     *(uint32_t *)A->mem(battle + 48) = 1;
@@ -1437,9 +2230,10 @@ static int hk_battle_destroy_replace(TfCpu *c) {
     return 1;
 }
 
-/* How many cards match the condition of a stat rule (`cond`: face-up monsters, or Graveyard cards when cond_side bit 2 is set, of the side relative to the source
- * card's controller `ss`); `excl_slot` is the source's own monster zone that does not count when the rule says so. */
-static int32_t stat_cond_count(const StatRule &r, uint32_t ss, int excl_slot) {
+/* Aggregate a source-relative stat condition: field monsters, Graveyard/hand cards,
+ * or face-up Spell/Trap cards (cond_side bit 4). Flag per bit 3 sums current native
+ * levels instead of counting monsters. excl_slot omits the source when requested. */
+static int32_t stat_cond_count(TfCpu *c, const StatRule &r, uint32_t ss, int excl_slot) {
     int32_t n = 0;
     for (uint32_t cs = 0; cs < 2; cs++) {
         const bool own = cs == ss;
@@ -1449,28 +2243,88 @@ static int32_t stat_cond_count(const StatRule &r, uint32_t ss, int excl_slot) {
             n += (int32_t)*(const uint32_t *)A->mem(DUEL_SIDES + cs * DUEL_SIDE_SIZE + 12);
             continue;
         }
+        if (r.cond_side & 32) {   /* count all cards on the field of that side (The Wicked Eraser) */
+            for (uint32_t ck = 0; ck < 10; ck++) {
+                if (zone_card(cs, ck)) n++;
+            }
+            continue;
+        }
         if (r.cond_side & 4) {   /* count the Graveyard cards of the id set instead of the monsters of the field */
             const uint32_t base = DUEL_SIDES + cs * DUEL_SIDE_SIZE, gn = *(const uint32_t *)A->mem(base + 20);
             for (uint32_t gk = 0; gk < gn && gk < 160; gk++)
                 if (std::binary_search(r.cond.begin(), r.cond.end(), (uint16_t)(*(const uint16_t *)A->mem(base + 1808 + gk * 4) & 0x1fff))) n++;
             continue;
         }
-        for (uint32_t ck = 0; ck < 5; ck++) {
+        const uint32_t first = (r.cond_side & 16) ? 5 : 0;
+        for (uint32_t ck = first; ck < first + 5; ck++) {
             if (r.excl && cs == ss && (int)ck == excl_slot) continue;
-            const uint32_t id = zone_card(cs, ck);
-            if (id && std::binary_search(r.cond.begin(), r.cond.end(), (uint16_t)id)) n++;
+            if (first && !(A->mem(DUEL_SIDES + cs * DUEL_SIDE_SIZE + 0x30 + ck * 20 + 8)[0] & 1)) continue;
+            const uint32_t id = first ? (*(const uint16_t *)A->mem(DUEL_SIDES + cs * DUEL_SIDE_SIZE + 0x30 + ck * 20) & 0x1fff) : zone_card(cs, ck);
+            if (id && std::binary_search(r.cond.begin(), r.cond.end(), (uint16_t)id))
+                n += (r.per & 8) ? (int32_t)call_game(c, F_LEVEL, cs, ck, 0, 0) : 1;
         }
     }
     return n;
 }
 
 static int32_t g_ra_stat[2][5][2];   /* Ra: ATK / DEF taken from its 3 Tributes, per zone (see hk_summon_exec) */
+
+static const uint32_t F_DRAW_CHECK = 0x09ed4754;
+static int hk_golden_draw_check(TfCpu *c) {
+    const uint32_t obj = A->reg(c, 4);
+    if (!is_card(obj, 7635)) return 0;
+    const uint8_t *o = A->mem(obj);
+    const uint32_t side = (o[2] & 1) ^ ((o[3] >> 6) & 1);
+    // Broken Bamboo Sword is the only Bamboo Sword Equip Spell in TF3.
+    // This is an activation requirement; losing it later does not stop the draw.
+    StatRule requirement = {};
+    requirement.cond_side = 17; requirement.cond = {slot_of(7225)};
+    if (!slot_of(7225) || !stat_cond_count(c, requirement, side, -1)) {
+        A->set_reg(c, 2, 0); return 1;
+    }
+    // Pot of Greed requires two cards in the Deck; an unknown ID defaults to one.
+    uint16_t *id = (uint16_t *)A->mem(obj);
+    const uint16_t saved = *id;
+    *id = 4844;
+    A->call_original(c, F_DRAW_CHECK);
+    *id = saved;
+    return 1;
+}
 static bool g_ra_has[2][5];
 static int hk_stats(TfCpu *c) {
     const uint32_t side = A->reg(c, 4) & 1, slot = A->reg(c, 5), out = A->reg(c, 6);
     static const bool dbg = getenv("TF3_DEBUG_STATS") != nullptr;
     if (dbg) { static int n; if (n++ < 10) A->log("stat entry: side %u slot %u output %08x", side, slot, out); }
+    uint32_t bonus_node = 0; uint16_t saved_bonus_id = 0, saved_bonus_value = 0;
+    if (side < 2 && slot < 5) {
+        // Match the actual instance even while negated: native modifier
+        // creation/removal owns eligibility, and an existing node owns amount.
+        const uint16_t source_id = *(uint16_t *)A->mem(DUEL_SIDES + side*DUEL_SIDE_SIZE + 0x30 + slot*20) & 0x1fff;
+        const auto light = g_battle_light_bonus.find(source_id), role = g_battle_role_bonus.find(source_id);
+        const uint16_t donor = light != g_battle_light_bonus.end() ? 6125 : 6386;
+        const uint16_t amount = light != g_battle_light_bonus.end() ? light->second : role != g_battle_role_bonus.end() ? role->second : 0;
+        if (amount) {
+            const uint16_t head = *(uint16_t *)A->mem(DUEL_SIDES + side*DUEL_SIDE_SIZE + 0x30 + slot*20 + 10);
+            bonus_node = call_game(c, 0x09f4631c, head, donor, 4, 0);
+            if (bonus_node >= 0x08000000 && bonus_node < 0x0a000000 - 8) {
+                saved_bonus_id = *(uint16_t *)A->mem(bonus_node);
+                saved_bonus_value = *(uint16_t *)A->mem(bonus_node + 4);
+                // Keep Penumbral's native kind-4 lifetime and cleanup tag. Only
+                // this stat calculation uses Riryoku's variable additive amount;
+                // unrelated Riryoku effects retain their own ID and lifetime.
+                const bool decrease = donor == 6386 && saved_bonus_value == 0;
+                // Riryoku's low-bit-zero branch sets ATK rather than subtracting
+                // an amount. Use the native variable debuff for decreases.
+                *(uint16_t *)A->mem(bonus_node) = decrease ? 6580 : 5009;
+                *(uint16_t *)A->mem(bonus_node + 4) = decrease ? amount : (uint16_t)((amount / 10)*2 + 1);
+            } else bonus_node = 0;
+        }
+    }
     A->call_original(c, F_STATS);
+    if (bonus_node) {
+        *(uint16_t *)A->mem(bonus_node) = saved_bonus_id;
+        *(uint16_t *)A->mem(bonus_node + 4) = saved_bonus_value;
+    }
     if (slot >= 5 || out < 0x08000000u || out > 0x0a000000u - 64) return 1;
     const uint32_t me = zone_card(side, slot);
     if (!me) return 1;
@@ -1494,7 +2348,7 @@ static int hk_stats(TfCpu *c) {
             if (id == r.src && !(flags & 0x22) && zone_effect_active(ss, k + 5) && equipped_to(ss, k + 5, side, slot) && spell_affects(ss)) {
                 int32_t mult = 1;
                 if (r.cond_side) {   /* "gains N ATK for each ...": the count is taken relative to the equip card's controller */
-                    const int32_t n = stat_cond_count(r, ss, -1);
+                    const int32_t n = stat_cond_count(c, r, ss, -1);
                     if (!n) continue;
                     mult = (r.per & 1) ? n : 1;
                 }
@@ -1511,6 +2365,9 @@ static int hk_stats(TfCpu *c) {
                     const uint32_t e = DUEL_SIDES + ss * DUEL_SIDE_SIZE + 0x30 + 100 + 20 * sk;
                     if ((*(const uint16_t *)A->mem(e) & 0x1fff) != r.src || (*(const uint32_t *)A->mem(e + 0x10) & 0x22)) continue;
                 } else if (zone_card(ss, sk) != r.src) continue;
+                // Slate Warrior's native FLIP resolver sets persistent field flag 4.
+                // Native Set/removal clears it; no host-side instance state is needed.
+                if ((r.per & 16) && !(*(const uint32_t *)A->mem(DUEL_SIDES + ss * DUEL_SIDE_SIZE + 0x30 + 20 * sk + 16) & 16)) continue;
                 if (!zone_effect_active(ss, sk + ((r.scope & 16) ? 5 : 0))) continue;
                 if ((r.scope & 16) && !spell_affects(ss)) continue;
                 const bool mine = ss == side;
@@ -1518,7 +2375,7 @@ static int hk_stats(TfCpu *c) {
                 if (sc != 0 && ((r.scope & 32) || !r.target.empty()) && !std::binary_search(r.target.begin(), r.target.end(), (uint16_t)me)) continue;
                 int32_t mult = 1;
                 if (r.cond_side) {
-                    const int32_t n = stat_cond_count(r, ss, (int)sk);
+                    const int32_t n = stat_cond_count(c, r, ss, (int)sk);
                     if (!n && !(r.per & 4)) continue;
                     mult = (r.per & 1) ? n : 1;
                 }
@@ -1534,6 +2391,32 @@ static int hk_stats(TfCpu *c) {
                     if (seen.insert(key).second) A->log("stat rule: source %u target %u side %u slot %u -> ATK %d DEF %d", r.src, me, side, slot, *atk, *def);
                 }
             }
+    // Morphtronic Radion (7879):
+    // While in Attack Position: "Morphtronic" monsters you control gain 800 ATK.
+    // While in Defense Position: "Morphtronic" monsters you control gain 1000 DEF.
+    const uint16_t radion_slot = slot_of(7879);
+    if (radion_slot) {
+        bool target_is_morphtronic = false;
+        for (uint16_t m = 7874; m <= 7880; ++m) {
+            if (me == slot_of(m)) {
+                target_is_morphtronic = true;
+                break;
+            }
+        }
+        if (target_is_morphtronic) {
+            for (uint32_t sk = 0; sk < 5; ++sk) {
+                if (zone_card(side, sk) == radion_slot && zone_effect_active(side, sk)) {
+                    const uint8_t *rentry = A->mem(DUEL_SIDES + side * DUEL_SIDE_SIZE + 0x30 + sk * 20);
+                    const uint16_t rpos = *(const uint16_t *)(rentry + 6);
+                    if (rpos == 0) {
+                        *atk += 800;
+                    } else {
+                        *def += 1000;
+                    }
+                }
+            }
+        }
+    }
     if (*atk < 0) *atk = 0;
     if (*def < 0) *def = 0;
     return 1;
@@ -1582,6 +2465,27 @@ static int hk_attack_target(TfCpu *c) {
     return 1;
 }
 
+// Native control ownership dispatches on four Charmer IDs. Alias only those
+// dispatch reads; the following Attribute read must see the actual source.
+static int hk_charmer_source_id(TfCpu *c) {
+    const uint32_t caller = A->reg(c, 31);
+    const bool battle_bonus = (!g_battle_light_bonus.empty() || !g_battle_role_bonus.empty()) && (caller == 0x09ea0930 || caller == 0x09ea0bf4);
+    if (!battle_bonus && caller != 0x09f2d534 && caller != 0x09f53168) return 0;
+    A->call_original(c, 0x09f4abf0);
+    const uint32_t id = A->reg(c, 2);
+    if (battle_bonus) {
+        if (g_battle_light_bonus.count((uint16_t)id)) A->set_reg(c, 2, 6125);
+        else if (g_battle_role_bonus.count((uint16_t)id)) A->set_reg(c, 2, 6386);
+        return 1;
+    }
+    for (const auto &card : PORTED) {
+        if (card.slot == id && card.like >= 6335 && card.like <= 6338) {
+            A->set_reg(c, 2, card.like); break;
+        }
+    }
+    return 1;
+}
+
 static int hk_control(TfCpu *c) {
     const uint32_t side = A->reg(c, 4), slot = A->reg(c, 5);
     if (side > 1 || slot >= 5 || !g_control_lock.count((uint16_t)zone_card(side, slot)) || !zone_effect_active(side, slot)) return 0;
@@ -1609,6 +2513,34 @@ static bool is_god(uint32_t id) {
     return false;
 }
 static bool any_god() { return slot_of(4998) || slot_of(4999) || slot_of(5000); }
+
+/* The Lords ("must be Tribute Summoned by Tributing 3 <Type>-Type monsters"): lord.bin ("TF3L": u32 count, then u16 duel id / u8 Type) maps a card to the Type its
+ * 3 Tributes must have. The Type numbers are the ones 09f678f0(card id) returns (Warrior 15, Spellcaster 18, ...). They ride the 3-Tribute flow of the Gods. */
+static std::map<uint16_t, uint8_t> g_lords;
+static void lord_load() {
+    const std::wstring path = std::wstring(A->mod_dir) + L"/lord.bin";
+    FILE *f = _wfopen(path.c_str(), L"rb");
+    if (!f) return;
+    uint32_t header[2];
+    if (fread(header, sizeof header, 1, f) == 1 && header[0] == 0x4c334654 && header[1] <= 256) {
+        std::map<uint16_t, uint8_t> rules;
+        bool valid = true;
+        for (uint32_t i = 0; i < header[1]; ++i) {
+            uint16_t id; uint8_t type;
+            if (fread(&id, sizeof id, 1, f) != 1 || fread(&type, 1, 1, f) != 1 || id < 4000 || id > 8191 || type > 21 || rules.count(id)) { valid = false; break; }
+            rules.emplace(id, type);
+        }
+        if (valid && fgetc(f) == EOF) g_lords.swap(rules);
+    }
+    fclose(f);
+}
+static bool is_lord(uint32_t id) { return id && g_lords.count((uint16_t)id); }
+static bool three_tribute(uint32_t id) { return is_god(id) || is_lord(id); }
+/* the Type of the card in a field zone (face-up or Set, as the player may Tribute either); 0 when the zone is empty */
+static uint32_t zone_type(TfCpu *c, uint32_t side, uint32_t slot) {
+    const uint32_t id = *(const uint16_t *)A->mem(DUEL_SIDES + side * DUEL_SIDE_SIZE + 0x30 + 20 * slot) & 0x1fff;
+    return id ? call_game(c, 0x09f678f0, id, 0, 0, 0) : 0;
+}
 
 /* The Gods cannot be targeted. 09f538ac(effect object, side, slot) is the game's "may this effect target the monster of that zone" test shared by
  * the target filters of the Spells / Traps / monster effects; it already refuses the face-up cards 4998 / 4999 / 5000 of the base game, so a face-up Slifer is
@@ -1693,12 +2625,13 @@ static void trig_load(void) {
         }
     uint32_t trailer[2];
     while (fread(trailer, 4, 2, f) == 2 && trailer[1] <= 0x10000) {
-        if (trailer[0] != 0x31434754 && trailer[0] != 0x31524754) break;
+        if (trailer[0] != 0x31434754 && trailer[0] != 0x31524754 && trailer[0] != 0x314b5254) break;
         for (uint32_t i = 0; i < trailer[1]; ++i) {
             uint16_t entry[2];
             if (fread(entry, sizeof entry, 1, f) != 1) break;
             if (trailer[0] == 0x31434754) g_trigger_conditions[entry[0]] = entry[1];
-            else g_trigger_record_donors[entry[0]] = entry[1];
+            else if (trailer[0] == 0x31524754) g_trigger_record_donors[entry[0]] = entry[1];
+            else if (entry[1] < 4) g_trigger_record_kinds[entry[0]] = entry[1];
         }
     }
     fclose(f);
@@ -1761,19 +2694,23 @@ static int hk_flip_kind(TfCpu *c) {
 /* Summon triggers: after every action the game scans the events it caused in 09e89110, a long chain of `id == N` branches over the id of the card that acted,
  * which the action record at 09f788a4 keeps in bits 8..20 of its first word. While the scan runs, a new card flagged as a Summon trigger shows its donor's id
  * there, so the scan queues the donor's event; the effect object then carries the donor id and fx_card() maps it back to the new card. */
-static const uint32_t F_POST_ACTION = 0x09e89110, ACTION_STATE = 0x09f80000u - 30556u;
-static int post_action_inner(TfCpu *c);
+static const uint32_t F_POST_ACTION = 0x09e89110, F_POST_SPECIAL = 0x09e8ab24, ACTION_STATE = 0x09f80000u - 30556u;
+static int post_action_inner(TfCpu *c, uint32_t fn);
 static void slifer_after_action(TfCpu *c, const uint32_t *rec);
 static int hk_post_action(TfCpu *c) {
     static const bool all = getenv("TF3_DEBUG_POST_ALL") != nullptr;
     uint32_t rec[6];   /* the action record as it was before the scan */
     memcpy(rec, A->mem(ACTION_STATE), sizeof rec);
     if (all) { static int n; if (n++ < 400) A->log("post action: type %u record %08x %08x %08x %08x %08x %08x", A->mem(0x09f80000u - 30532u)[0], rec[0], rec[1], rec[2], rec[3], rec[4], rec[5]); }
-    if (!post_action_inner(c)) A->call_original(c, F_POST_ACTION);
+    if (!post_action_inner(c, F_POST_ACTION)) A->call_original(c, F_POST_ACTION);
     slifer_after_action(c, rec);
     return 1;
 }
-static int post_action_inner(TfCpu *c) {
+static int hk_post_special(TfCpu *c) {
+    if (!post_action_inner(c, F_POST_SPECIAL)) A->call_original(c, F_POST_SPECIAL);
+    return 1;
+}
+static int post_action_inner(TfCpu *c, uint32_t fn) {
     uint32_t *w = (uint32_t *)A->mem(ACTION_STATE);
     const uint16_t id = (uint16_t)((*w >> 8) & 0x1fff);
     static const bool dbg = getenv("TF3_DEBUG_TRIG2") != nullptr;
@@ -1781,6 +2718,13 @@ static int post_action_inner(TfCpu *c) {
     if ((dbg && id >= 6958) || (dbg_id && id == dbg_id)) { static int n; if (n++ < 300) A->log("post action: record %08x id %u (action type %u)", *w, id, A->mem(0x09f80000u - 30532u)[0]); }
     const auto it = g_trig.find(id);
     if (it == g_trig.end() || !g_trig_summon.count(id)) { g_trig_real.erase(id); return 0; }   /* the caller runs the native scan */
+    // Green Gadget accepts multiple summon kinds. These effects require Normal Summon.
+    // Native action bits 6..7 distinguish Normal (0), Flip (1), Special (2).
+    if ((id == slot_of(6938) || id == slot_of(7809)) && (fn == F_POST_SPECIAL || (*w & 0xc0))) {
+        const auto previous = g_trig_real.find(it->second);
+        if (previous != g_trig_real.end() && previous->second == id) g_trig_real.erase(previous);
+        return 0;
+    }
     const uint32_t saved = *w;
     const size_t scope = g_trigger_scope.size();
     // The action record stores its controller in bit 0.
@@ -1792,7 +2736,7 @@ static int post_action_inner(TfCpu *c) {
     }
     *w = (saved & ~(0x1fffu << 8)) | ((uint32_t)it->second << 8);
     if (!real_event_ids()) g_trig_real[it->second] = id;
-    A->call_original(c, F_POST_ACTION);
+    A->call_original(c, fn);
     g_trigger_scope.resize(scope);
     if (((*w >> 8) & 0x1fff) == it->second) *w = (*w & ~(0x1fffu << 8)) | (saved & (0x1fffu << 8));
     return 1;
@@ -1809,13 +2753,13 @@ static bool g_sl_special[2][5];   /* a face-up God that was Special Summoned (it
 static int32_t g_ra_pending[2][2] = {{-1, 0}, {-1, 0}};   /* Ra: summed ATK / DEF of its 3 Tributes, per side, until Ra lands (ATK -1 = none) */
 static void slifer_after_action(TfCpu *c, const uint32_t *rec) {
     const uint16_t sl = slot_of(4999);
-    if (!any_god() || g_sl_busy) return;
+    if (!(any_god() || !g_lords.empty()) || g_sl_busy) return;
     const uint32_t actor = (rec[0] >> 8) & 0x1fff;
     g_sl_busy = true;
     uint32_t cur[2][5];
     for (uint32_t s = 0; s < 2; s++) for (uint32_t k = 0; k < 5; k++) cur[s][k] = zone_card(s, k);
     static const bool dbg = getenv("TF3_DEBUG_SLIFER") != nullptr;
-    if (g_sl_third_ref >= 0 && is_god(actor)) {   /* the God's own Summon / Set just ended: send the third Tribute to the Graveyard */
+    if (g_sl_third_ref >= 0 && three_tribute(actor)) {   /* the God's own Summon / Set just ended: send the third Tribute to the Graveyard */
         const uint32_t ts = g_sl_third_ref & 0xff, tk = (uint32_t)g_sl_third_ref >> 8;
         g_sl_third_ref = -1;
         if (dbg) A->log("god: third Tribute side %u slot %u", ts, tk);
@@ -1874,13 +2818,28 @@ static int hk_summon_exec(TfCpu *c) {
     uint8_t *step = A->mem(SUMMON_STEP), *count = A->mem(SUMMON_COUNT);
     const uint32_t rec = *(const uint32_t *)A->mem(SUMMON_REC), card = (rec >> 8) & 0x1fff, side = rec & 1;
     if (getenv("TF3_DEBUG_SLIFER_ALL") && is_god(card)) A->log("summon exec: card %u step %u count %u picks %08x", card, *step, *count, *(const uint32_t *)A->mem(SUMMON_PICKS));
-    if (!is_god(card) || getenv("TF3_SLIFER_NO3")) return 0;
+    if (!three_tribute(card) || getenv("TF3_SLIFER_NO3")) return 0;
     if (*step == 20) { g_sl_third_asked = false; g_sl_third_ref = -1; g_ra_pending[side][0] = -1; }   /* a new summon (also after a cancelled one) */
     if (*step != 21 && *step != 22) return 0;
-    const uint8_t before = *step;
+    const uint8_t before = *step, picked = *count;
     A->call_original(c, 0x09e91fe8);
     static const bool dbg = getenv("TF3_DEBUG_SLIFER") != nullptr;
     if (dbg) A->log("god summon: step %u -> %u, picks %u, third asked %d, v0 %x", before, *step, *count, g_sl_third_asked, A->reg(c, 2));
+    if (before == 22 && is_lord(card) && *count > picked && *count <= 3) {   /* a Lord takes only Tributes of its Type: refuse the new pick and ask again */
+        const uint8_t req_type = g_lords[(uint16_t)card];
+        if (req_type != 0) {
+            const uint16_t ref = *(const uint16_t *)A->mem(SUMMON_PICKS + 2 * (*count - 1));
+            const uint32_t ts = ref & 0xff, tk = ref >> 8, type = ts < 2 && tk < 5 ? zone_type(c, ts, tk) : 0;
+            if (dbg) A->log("lord: pick %u is side %u slot %u, Type %u (needs %u)", *count, ts, tk, type, req_type);
+            if (type != req_type) {
+                *(uint16_t *)A->mem(SUMMON_PICKS + 2 * (*count - 1)) = 0;
+                *count = picked;
+                *step = 21;
+                A->set_reg(c, 2, 0);
+                return 1;
+            }
+        }
+    }
     if (before != 22) return 1;
     /* the step stays 22 and v0 = 1 when the picks are complete (v0 = 0 while the executor keeps running) */
     if (!g_sl_third_asked && *count == 2 && A->reg(c, 2) == 1) {   /* two picked: ask for the third */
@@ -1915,9 +2874,12 @@ static int hk_summon_exec(TfCpu *c) {
  * 09f79cec + 8044 + ref * 4 (as 09f55818 reads it). The engine only knows 1 or 2 Tributes, so Slifer gets no command while its side has fewer than 3 monsters. */
 static int hk_summon_mask(TfCpu *c) {
     const uint32_t side = A->reg(c, 4) & 1, ref = A->reg(c, 5);
-    if (ref >= 200 || !is_god(*(const uint16_t *)A->mem(DUEL_SIDES + 8044 + ref * 4) & 0x1fff)) return 0;
+    const uint32_t card = ref < 200 ? *(const uint16_t *)A->mem(DUEL_SIDES + 8044 + ref * 4) & 0x1fff : 0;
+    if (!three_tribute(card)) return 0;
     uint32_t n = 0;
-    for (uint32_t k = 0; k < 5; k++) n += zone_card_any(side, k);
+    const bool lord = is_lord(card);   /* a Lord needs 3 monsters of its Type */
+    const uint8_t req_type = lord ? g_lords[(uint16_t)card] : 0;
+    for (uint32_t k = 0; k < 5; k++) n += req_type ? (zone_type(c, side, k) == req_type) : zone_card_any(side, k);
     if (n >= 3) return 0;
     A->set_reg(c, 2, 0);
     return 1;
@@ -1932,6 +2894,68 @@ static void slifer_end_phase(TfCpu *c) {
         if (getenv("TF3_DEBUG_SLIFER")) A->log("god: End Phase, sending the Special Summoned card %u (side %u slot %u) to the Graveyard", g, s, k);
         g_sl_special[s][k] = false;
         call_game6(c, 0x09f34d64, s, k, 14, 2, g, 0);
+    }
+}
+/* Lightsworn End Phase Mill */
+static void lightsworn_end_phase(TfCpu *c) {
+    const uint32_t turn_side = *(const uint32_t *)A->mem(0x09f787ac);
+    if (turn_side > 1) return;
+    for (uint32_t k = 0; k < 5; ++k) {
+        const uint32_t card = zone_card(turn_side, k);
+        if (!card || !zone_effect_active(turn_side, k)) continue;
+        uint32_t mill_count = 0;
+        if (card == slot_of(7591)) mill_count = 2; // Jain, Lightsworn Paladin
+        else if (card == slot_of(7592)) mill_count = 3; // Lyla, Lightsworn Sorceress
+        else if (card == slot_of(7594)) mill_count = 3; // Lumina, Lightsworn Summoner
+        else if (card == slot_of(7598)) mill_count = 3; // Gragonith, Lightsworn Dragon
+        else if (card == slot_of(7599)) mill_count = 4; // Judgment Dragon
+        if (mill_count > 0) {
+            if (getenv("TF3_DEBUG_LIGHTSWORN")) A->log("lightsworn: End Phase, card %u (slot %u) milling %u cards for side %u", card, k, mill_count, turn_side);
+            call_game(c, 0x09f2a7ec, turn_side, mill_count, 0, 0);
+        }
+    }
+    for (uint32_t k = 5; k < 10; ++k) {
+        const uint32_t card = zone_card(turn_side, k);
+        if (!card || !zone_effect_active(turn_side, k)) continue;
+        if (card == slot_of(7644)) { // Glorious Illusion (Continuous Trap)
+            if (getenv("TF3_DEBUG_LIGHTSWORN")) A->log("lightsworn: End Phase, trap %u (slot %u) milling 2 cards for side %u", card, k, turn_side);
+            call_game(c, 0x09f2a7ec, turn_side, 2, 0, 0);
+        }
+    }
+}
+
+static void dakini_end_phase(TfCpu *c) {
+    if (!slot_of(6847)) return;
+    const uint32_t turn_side = *(const uint32_t *)A->mem(0x09f787ac);
+    if (turn_side > 1) return;
+    const uint16_t dakini_id = slot_of(6847);
+    const uint16_t mar_id = slot_of(6850);
+    bool has_active_dakini = false;
+    for (uint32_t k = 0; k < 5; ++k) {
+        if (zone_card(turn_side, k) == dakini_id && zone_effect_active(turn_side, k)) {
+            has_active_dakini = true;
+            break;
+        }
+    }
+    if (!has_active_dakini) return;
+    const uint32_t base = DUEL_SIDES + turn_side * DUEL_SIDE_SIZE;
+    const uint32_t hand_count = *(const uint32_t *)A->mem(base + 12);
+    if (hand_count >= 20) return;
+    const uint32_t gy_count = *(const uint32_t *)A->mem(base + 20);
+    if (!gy_count) return;
+    for (int32_t i = (int32_t)gy_count - 1; i >= 0; --i) {
+        const uint16_t id = *(const uint16_t *)A->mem(base + 1808 + i * 4) & 0x1fff;
+        if (!id) continue;
+        const uint32_t cat = call_game(c, 0x09f67918, id, 0, 0, 0);
+        const bool is_ritual = (cat == 4 || cat == 5) || (mar_id && id == mar_id);
+        if (is_ritual) {
+            call_game(c, 0x09f4be50u, turn_side, 14, (uint32_t)i, 0);
+            call_game(c, 0x09f4bff8u, turn_side, 11, *(const uint32_t *)A->mem(base + 12), 0x09f80000u - 28456u);
+            if (getenv("TF3_DEBUG_RITUAL") || getenv("TF3_DEBUG_FX")) {
+                A->log("dakini: End Phase, recovered card %u from Graveyard to hand for side %u", id, turn_side);
+            }
+            break;
+        }
     }
 }
 
@@ -1974,7 +2998,13 @@ static int battle_gate(TfCpu *c, uint32_t fn) {
     return 1;
 }
 static int hk_battle(TfCpu *c) { return battle_gate(c, F_BATTLE); }
-static int hk_battle_dmg(TfCpu *c) { return battle_gate(c, F_BATTLE_DMG); }
+static int hk_battle_dmg(TfCpu *c) {
+    if (slot_of(7094)) {
+        const uint32_t *attacker = (const uint32_t *)A->mem(BATTLE_ID);
+        if (*attacker == slot_of(7094)) return 1; // Exploder Dragon attacking: 0 battle damage to both players
+    }
+    return battle_gate(c, F_BATTLE_DMG);
+}
 
 /* Reuse the native Goblin Attack Force attack marker and timed position lock.
  * The draw trigger keeps its own donor; position behavior is independent. */
@@ -2108,6 +3138,10 @@ extern "C" __declspec(dllexport) int tfmod_init(const TfModApi *api) {
     amt_load();
     stat_load();
     destroy_load();
+    summon_load();
+    tribute_load();
+    lord_load();
+    ritual_load();
     ext_init();
     cfg_load();
     const char *off = getenv("TF3_OFF");   /* research aid: letters of the hook groups to leave out (d deck/duel, r record, f frame, c collection, t trunk, s art stream, e tables) */
@@ -2115,6 +3149,12 @@ extern "C" __declspec(dllexport) int tfmod_init(const TfModApi *api) {
     if (on('d')) { A->hook(F_READ_DECK, hk_read_deck); A->hook(F_PREPARE_DUEL, hk_prepare_duel); }
     if (on('r')) A->hook(F_EFFECT_RECORD, hk_effect_record);
     if (on('r')) A->hook(0x0884e3fc, hk_id_alias<0x0884e3fc>);
+    if (on('r') && slot_of(6999)) A->hook(F_LP_COST, hk_twister_cost);
+    if (on('r') && !g_fx.empty()) {
+        A->hook(F_HAND_SEARCH, hk_hand_search);
+        A->hook(F_HAND_SEARCH_COST, hk_hand_search_cost);
+        A->hook(F_DECK_FIND_ID, hk_hand_search_find);
+    }
     if (on('f')) A->hook(F_FRAME, hk_frame);
     if (on('c')) A->hook(F_COLLECTION_ENTRY, hk_collection_entry);
     A->hook(F_DUEL_START, hk_duel_start);
@@ -2129,21 +3169,39 @@ extern "C" __declspec(dllexport) int tfmod_init(const TfModApi *api) {
     if (getenv("TF3_DEBUG_TRIG")) A->hook(F_TRIGGER, hk_trigger_debug);
     else if (!g_trig.empty()) A->hook(F_TRIGGER, hk_trigger);
     if (!g_trig.empty()) A->hook(0x0884d1b8, hk_flip_kind);
+    if (!g_rituals.empty()) {
+        A->hook(0x09f16e38, hk_ritual_table<0x09f16e38>); A->hook(0x09f16eb4, hk_ritual_table<0x09f16eb4>);
+        A->hook(0x09f17138, hk_ritual_table<0x09f17138>); A->hook(0x09f17818, hk_ritual_table<0x09f17818>);
+        A->hook(0x09f1792c, hk_ritual_table<0x09f1792c>); A->hook(0x09f17c10, hk_ritual_table<0x09f17c10>);
+        A->hook(0x09f17ca8, hk_ritual_table<0x09f17ca8>);
+    }
+    if (!g_double_tribute.empty()) A->hook(F_DOUBLE_TRIBUTE, hk_double_tribute);
+    bool source_dispatch = !g_battle_light_bonus.empty() || !g_battle_role_bonus.empty();
+    for (const auto &card : PORTED) if (card.like >= 6335 && card.like <= 6338) source_dispatch = true;
+    if (source_dispatch) A->hook(0x09f4abf0, hk_charmer_source_id);
     if (!g_after_attack_defense.empty()) {
         A->hook(0x09ea00fc, hk_after_attack_mark);
         A->hook(0x09ea53f4, hk_after_attack_defense);
     }
-    if (!g_trig_summon.empty() || any_god() || getenv("TF3_DEBUG_POST_ALL")) A->hook(F_POST_ACTION, hk_post_action);
+    if (!g_trig_summon.empty() || any_god() || !g_lords.empty() || getenv("TF3_DEBUG_POST_ALL")) A->hook(F_POST_ACTION, hk_post_action);
+    if (!g_trig_summon.empty()) A->hook(F_POST_SPECIAL, hk_post_special);
+    if (slot_of(6938) || !g_summon_rules.empty()) A->hook(F_SUMMON_CHECK_HAND, hk_special_summon_check);
+    if (!g_summon_rules.empty()) {
+        A->hook(0x09e8f790,hk_special_summon_command);
+        A->hook(F_SUMMON_CHECK_GY, hk_special_summon_grave);
+        A->hook(0x09f5549c,hk_special_summon_banished);
+    }
     if (real_event_ids() && !g_trig.empty()) A->hook(0x09eb53b0, hk_event_store);
     if (!g_trig_battle.empty() || getenv("TF3_DEBUG_BATTLE")) { A->hook(F_BATTLE, hk_battle); A->hook(F_BATTLE_DMG, hk_battle_dmg); }
-    if (!g_stat.empty()) {
+    if (!g_stat.empty() || !g_battle_light_bonus.empty() || !g_battle_role_bonus.empty()) {
         A->hook(F_STATS, hk_stats);
         A->hook(0x09eb9fc8, hk_equip_target);
     }
     if (!g_equip_level.empty()) A->hook(F_LEVEL, hk_level);
     if (!g_attack_protect.empty()) A->hook(0x09f5153c, hk_attack_target);
     if (!g_control_lock.empty()) A->hook(0x09f53358, hk_control);
-    if (slot_of(7000) || gladius_return_enabled() || getenv("TF3_TEST_VENUS_CHAIN")) {
+    A->hook(0x09eae5fc, hk_battle_guard_calculate);
+    if (slot_of(7000) || slot_of(7298) || slot_of(7459) || slot_of(7412) || slot_of(6830) || slot_of(6963) || slot_of(7720) || slot_of(7446) || gladius_return_enabled() || getenv("TF3_TEST_VENUS_CHAIN")) {
         A->hook(0x09f454b8, hk_replacement_present);
         A->hook(0x09f45fec, hk_replacement_equip);
         A->hook(0x09f3332c, hk_destroy_mark);
@@ -2157,8 +3215,10 @@ extern "C" __declspec(dllexport) int tfmod_init(const TfModApi *api) {
         A->hook(0x09f2a7ec, hk_sabre_mill);
         A->hook(0x09f15694, hk_sabre_mill_event);
     }
+    A->hook(0x09ee55c8, hk_counter_trap_resolve);
+    A->hook(0x09ed49e0, hk_counter_trap_condition);
+    A->hook(0x09edec94, hk_divine_wrath_condition);
     if (getenv("TF3_TEST_VENUS")) {
-        A->hook(0x09ee55c8, hk_venus_negation);
         A->hook(0x09ed26d0, hk_venus_effect_negation);
         A->hook(0x09ed2568, hk_venus_continuous_negation);
     }
@@ -2169,8 +3229,14 @@ extern "C" __declspec(dllexport) int tfmod_init(const TfModApi *api) {
     }
     if (getenv("TF3_DEBUG_CAND")) { A->hook(F_CAND_RUN, hk_cand_run_debug); A->hook(F_CAND_COUNT, hk_cand_count_debug); }
     else if (!g_fx.empty()) { A->hook(F_CAND_RUN, hk_cand_run); A->hook(F_CAND_COUNT, hk_cand_count); A->hook(F_MOVE_PICKED, hk_move_to_hand); }
-    if (any_god()) { A->hook(0x09f538ac, hk_target_legal); A->hook(0x09e91fe8, hk_summon_exec); A->hook(0x09e8edf4, hk_summon_mask); if (getenv("TF3_SLIFER_LEVEL")) A->hook(0x0884b77c, hk_exp_level); }
+    if (!g_fx.empty()) {
+        A->hook(0x09ee3038, hk_chrysalis_cost);
+        A->hook(0x09f26b70, hk_required_field_scan);
+    }
+    if (any_god()) A->hook(0x09f538ac, hk_target_legal);
+    if (any_god() || !g_lords.empty()) { A->hook(0x09e91fe8, hk_summon_exec); A->hook(0x09e8edf4, hk_summon_mask); if (getenv("TF3_SLIFER_LEVEL")) A->hook(0x0884b77c, hk_exp_level); }
     if (!g_amt.empty()) A->hook(F_DRAW, hk_draw);
+    if (slot_of(7635)) A->hook(F_DRAW_CHECK, hk_golden_draw_check);
     A->hook(F_LP_AMOUNTS, hk_lp_amounts);
     A->hook(F_EFFECT_DRIVER, hk_effect_driver);
     A->hook(F_TARGET_ALL, hk_target_all);

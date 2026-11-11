@@ -114,7 +114,7 @@ def pacote_do_caso(cid, mods, spec):
     from tf3_porte_carta import EFEITO
     dest = os.path.join(ROOT, 'gen', 'lotepack', str(cid)); shutil.rmtree(dest, ignore_errors=True)
     src = os.path.join(ROOT, mods)
-    reescritos = {'effects.bin', 'trigger.bin', 'stat.bin', 'amount.bin', 'destroy.bin', 'ported.txt'}
+    reescritos = set(P.RULE_FILES) | {'ported.txt'}
     for raiz, _, arqs in os.walk(src):
         rel = os.path.relpath(raiz, src); os.makedirs(os.path.join(dest, rel), exist_ok=True)
         for a in arqs:
@@ -131,9 +131,8 @@ def pacote_do_caso(cid, mods, spec):
     ported = os.path.join(src, 'TF3Cards', 'ported.txt')
     rows = [l.split(' ', 3) for l in open(ported, encoding='utf-8').read().splitlines() if l.strip()]
     gids = {int(r[1]): int(r[0]) for r in rows}
-    fx, likes = P.resolver(gids)
-    for nome, dados in (('effects.bin', fx), ('trigger.bin', P.resolver_gatilhos(gids)), ('stat.bin', P.resolver_stats(gids)),
-                        ('amount.bin', P.resolver_valores(gids)), ('destroy.bin', P.resolver_destruir(gids))):
+    outputs, likes = P.rule_outputs(gids)
+    for nome, dados in outputs:
         open(os.path.join(pack, nome), 'wb').write(dados)
     with open(os.path.join(pack, 'ported.txt'), 'w', encoding='utf-8', newline='\n') as f:
         for r in rows:

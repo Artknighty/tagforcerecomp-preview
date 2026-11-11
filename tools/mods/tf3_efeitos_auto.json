@@ -217,5 +217,101 @@
  "7749": {
   "like": 4310,
   "name": "Lightsworn Sabre"
+ },
+ "7105": {
+  "like": 6044,
+  "zone": "deck_field_required",
+  "filter": {
+   "name_is": "Skyscraper"
+  },
+  "name": "Elemental Hero Captain Gold"
+ },
+ "7106": {
+  "like": 6044,
+  "zone": "deck",
+  "filter": {
+   "name_is": "Necrovalley"
+  },
+  "name": "Gravekeeper's Commandant"
+ },
+ "7107": {
+  "like": 6044,
+  "zone": "deck",
+  "filter": {
+   "name_is": "A Legendary Ocean"
+  },
+  "name": "Warrior of Atlantis"
+ },
+ "7108": {
+  "like": 6044,
+  "zone": "deck",
+  "filter": {
+   "name_is": "Jurassic World"
+  },
+  "name": "Destroyersaurus"
+ },
+ "7109": {
+  "like": 6044,
+  "zone": "deck_field_required",
+  "filter": {
+   "name_is": "The Sanctuary in the Sky"
+  },
+  "name": "Zeradias, Herald of Heaven"
+ },
+ "7110": {
+  "like": 6044,
+  "zone": "deck_field_required",
+  "filter": {
+   "name_is": "Pandemonium"
+  },
+  "name": "Archfiend General"
+ },
+ "7155": {
+  "like": 6764,
+  "zone": "hand_deck_summon",
+  "filter": {
+   "name_is": "Neo-Spacian Air Hummingbird"
+  },
+  "name": "Chrysalis Chicky"
+ },
+ "7156": {
+  "like": 6764,
+  "zone": "hand_deck_summon",
+  "filter": {
+   "name_is": "Neo-Spacian Dark Panther"
+  },
+  "name": "Chrysalis Pantail"
+ },
+ "7157": {
+  "like": 6764,
+  "zone": "hand_deck_summon",
+  "filter": {
+   "name_is": "Neo-Spacian Glow Moss"
+  },
+  "name": "Chrysalis Pinny"
+ },
+ "7172": {
+  "like": 6764,
+  "zone": "hand_deck_summon",
+  "filter": {
+   "name_is": "Neo-Spacian Flare Scarab"
+  },
+  "name": "Chrysalis Larva"
+ },
+ "7173": {
+  "like": 6764,
+  "zone": "hand_deck_summon",
+  "filter": {
+   "name_is": "Neo-Spacian Grand Mole"
+  },
+  "name": "Chrysalis Mole"
+ },
+ "7572": {
+  "like": 6044,
+  "zone": "deck",
+  "filter": {
+   "name_is": "Valhalla, Hall of the Fallen"
+  },
+  "name": "Hecatrice"
  }
 }

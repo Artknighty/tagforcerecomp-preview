@@ -32,5 +32,7 @@ void interp_audit_flush(unsigned mark);   /* F8: writes the last pairings (ring 
 uint32_t interp_fb_version(int fb);                            /* muda a cada desenho/copia no quadro sombra (o display.cpp nao reapresenta uma imagem igual) */
 bool interp_has_new(int gfb);                                    /* ha desenho novo no quadro exibido desde a ultima apresentacao? */
 bool interp_mid_ready(int gfb, uint64_t vblank, bool allow);     /* o quadro novo esta pronto e vai ganhar o intermediario: o chamador pode apresentar sem esperar a grade de vblanks */
+uint64_t interp_pending_gap(uint64_t vblank);                 /* distancia em vblanks para o ultimo quadro novo (1 = 60 fps nativo, 2 = 30 fps) */
+uint64_t interp_last_gap(void);                             /* gap do ultimo quadro preparado por interp_prepare */
 bool interp_defer_release(uint32_t tex);   /* gpu_tex_release: true = a textura sera liberada depois do proximo quadro intermediario */
 void gpu_tex_release_now(uint32_t h);

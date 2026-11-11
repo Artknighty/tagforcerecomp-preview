@@ -2,6 +2,8 @@
 can play with the effect of a Tag Force 1 card plus an id filter (see tf3_efeitos_param.py):
 
   spell  "Add 1 <filter> from your Deck to your hand."                       like 5328 Reinforcement of the Army   zone deck
+  monster "You can discard this card to the Graveyard to add 1 <name> from your Deck to your hand."
+                                                                            like 6044 King of the Swamp         zone deck
   spell  "Special Summon 1 <filter> from your hand."                         like 6572 Magnet Circle LV2           zone hand
   spell  "Select 1 <filter> in your Graveyard and add it to your hand." /
          "Add 1 <filter> from your Graveyard to your hand."                  like 5330 The Warrior Returning Alive zone grave
@@ -81,6 +83,9 @@ def filtro(s):
 REVIVE_TAIL = (r" and Special Summon it in (?:face-up )?Attack Position\. When this card is removed from the field, destroy that monster\. "
                r"When that monster is (?:removed from the field|destroyed), destroy this card\.$")
 PADROES = [
+    ("monster", r'^You can discard this card to the Graveyard to add 1 (?P<f>"[^"]+") from your Deck to your hand\. If this card is on the field but (?P=f) is not on the field, destroy this card\.$', 6044, "deck_field_required"),
+    ("monster", r'^You can Tribute this card while "Neo Space" is on the field to Special Summon 1 (?P<f>"Neo-Spacian [^"]+") from your hand or Deck\.$', 6764, "hand_deck_summon"),
+    ("monster", r'^You can discard this card to the Graveyard to add 1 (?P<f>"[^"]+") from your Deck to your hand\.$', 6044, "deck"),
     ("spell", r"^Add 1 (?P<f>.+?) from your Deck to your hand\.$", 5328, "deck"),
     ("spell", r"^Special Summon 1 (?P<f>.+?) from your hand\.$", 6572, "hand"),
     ("spell", r"^Select 1 (?P<f>.+?) in your Graveyard and add it to your hand\.$", 5330, "grave"),

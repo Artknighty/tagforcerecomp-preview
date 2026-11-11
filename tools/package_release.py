@@ -170,8 +170,8 @@ def main():
             else: shutil.copy2(source, target)
         srcs = sorted(glob.glob(os.path.join(src, '*.cpp')) + glob.glob(os.path.join(src, '*.c')))
         if srcs:
-            run(['g++', '-std=c++17', '-O2', '-Wall', '-Wno-misleading-indentation', '-shared', '-static', '-s',
-                 '-Iplugins/sdk', '-o', os.path.join(dst, 'plugin.dll')] + srcs + ['-lwinhttp', '-lws2_32'], env=env)
+            run(['g++', '-std=c++17', '-O2', '-Wall', '-Wno-misleading-indentation', '-shared', '-s',
+                 '-Iplugins/sdk', '-o', os.path.join(dst, 'plugin.dll')] + srcs + ['-Wl,-Bstatic', '-lstdc++', '-lpthread', '-static-libgcc', '-static-libstdc++', '-Wl,-Bdynamic', '-lwinhttp', '-lws2_32'], env=env)
         with open(os.path.join(dst, 'disabled'), 'w') as f:   # same marker the Mods page writes: the player opts in
             f.write('Mod switched off in the Mods menu. Delete this file (or use the menu) to switch it on.\n')
     open(os.path.join(mods_pkg, 'INSTALL.txt'), 'w').write(

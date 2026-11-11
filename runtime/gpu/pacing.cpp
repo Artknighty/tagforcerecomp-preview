@@ -89,9 +89,16 @@ int64_t pace_async_target(int64_t call_entry) {
     /* o jogo chega (p90), desenha os 3 intermediarios e a copia do real (~1 ms de CPU) e a GPU termina (g_as_gpu, aprendido com os atrasos) */
     const double alvo = std::max(1.5, std::min(pace_ms(step()) * 1.8, s[(n * 9) / 10] + 1.0 + g_as_gpu));
     if (alvo > g_as_off) g_as_off = alvo; else g_as_off = std::max(alvo, g_as_off - 0.1);   /* sobe na hora, desce devagar (a malha de fase acompanha) */
-    return g_exit_qpc + (int64_t)(g_as_off * (double)g_freq.QuadPart / 1000.0);
+    const int64_t raw_target = g_exit_qpc + (int64_t)(g_as_off * (double)g_freq.QuadPart / 1000.0);
+    if (g_vb_lock && g_vb_period > 0) {
+        const int64_t P = g_vb_period;
+        const int64_t phase_target = (int64_t)(g_fase120 * (double)P);
+        int64_t k = (raw_target - g_vb_ref - phase_target + P - 1) / P;
+        return g_vb_ref + k * P + phase_target;
+    }
+    return raw_target;
 }
-void pace_async_late(bool late) { g_as_gpu = late ? std::min(15.0, g_as_gpu + 0.5) : std::max(1.5, g_as_gpu - 0.01); }
+void pace_async_late(bool late) { g_as_gpu = late ? std::min(8.0, g_as_gpu + 0.2) : std::max(1.0, g_as_gpu - 0.02); }
 void pace_monitor(int hz, bool allow) { g_mon_hz = hz; g_lock_allow = allow; if (!allow && g_vb_lock) { g_vb_poll = 0; vsync_poll(); } }
 /* 120 FPS (2026-10-15): com uma apresentacao por atualizacao do monitor o vkQueuePresentKHR (MAILBOX, driver NVIDIA; 3 ou 4 imagens dao o mesmo)
  * prende a thread ~3 ms. Medida no FIM da chamada, a malha punha o inicio na fase ~0,57 com espalhamento 0,31-0,83 e um terco das imagens so
@@ -207,7 +214,8 @@ void pace_work(double work_ms) {
      * ~33 ms (4 presents, 8.3 ms each) followed by a near-zero call. With the budget at exactly 16.7 ms the lag was a reflected random walk and
      * crossed the threshold on its own (title screen idle: 5-7 suspensions in 2 min, each ~2.5-10 s at 30 FPS; Leo's session 20261021_202449).
      * The budget now has 8 ms of slack and the threshold is 1.5 vblanks: only calls sustained above ~25 ms (3 heavy calls in a row) suspend. */
-    g_lag_ms = std::min(250.0, std::max(0.0, g_lag_ms + std::min(work_ms, 2000.0 / 60.0) - (1000.0 / 60.0 + 8.0)));
+    const double budget = g_sub >= 2 ? (1000.0 / 60.0 + 14.0) : (1000.0 / 60.0 + 8.0);
+    g_lag_ms = std::min(250.0, std::max(0.0, g_lag_ms + std::min(work_ms, 2000.0 / 60.0) - budget));
     static const bool nosusp = getenv("TF_INTERP_NOSUSP") != nullptr;   /* testes: replays escondidos sem limitador (apresentar numa janela oculta bloqueia ~8 ms e disparava a suspensao) */
     if (g_lag_ms > 1500.0 / 60.0 && g_skip_mid == 0 && !nosusp) {
         g_skip_mid = susp_len(150); g_lag_ms = 0; g_susp_n++;
@@ -338,9 +346,9 @@ void pace_set_sub(int n) { g_sub = n >= 2 ? 2 : 1; }
 static bool quarter_ok(double typ) {
     if (g_mon_hz > 0 && g_mon_hz < 100) return false;
     const double half = pace_ms(step()) / 2.0;
-    if (typ > half + 0.5) {
-        if (g_quarter_off == 0) { g_quarter_falls++; if (g_dbg || g_quarter_falls <= 20) fprintf(stderr, "[ritmo] 120 FPS: fase tipica %.1f ms nao cabe em meio passo (%.1f ms): ~3 s no ritmo de 60 (%u vez(es))%c", typ, half, g_quarter_falls, 10); }
-        g_quarter_off = 90; return false;
+    if (typ > half + 2.0) {
+        if (g_quarter_off == 0) { g_quarter_falls++; if (g_dbg || g_quarter_falls <= 20) fprintf(stderr, "[ritmo] 120 FPS: fase tipica %.1f ms nao cabe em meio passo (%.1f ms): ~0.5 s no ritmo de 60 (%u vez(es))%c", typ, half, g_quarter_falls, 10); }
+        g_quarter_off = 15; return false;
     }
     if (g_quarter_off > 0) { g_quarter_off--; return false; }
     return true;

@@ -11,7 +11,7 @@ using namespace field;
 /* ---- FUN_091cc4f0(bytes): allocates from the module's shared heap ---- */
 void swap_Allocate(SwapCtx &x) {
     const uint32_t heap = *view<uint32_t>(x, kFieldHeapHandle);
-    x.callNid(ehsys::nid::Alloc, heap, x.arg(0));
+    x.ret(x.callNid(ehsys::nid::Alloc, heap, x.arg(0)));
 }
 SwapReg reg_Allocate({"libfield.Allocate", MODULE, offsetOf(0x091CC4F0), swap_Allocate});
 

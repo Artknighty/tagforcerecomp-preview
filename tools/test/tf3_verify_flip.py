@@ -24,11 +24,12 @@ def main():
     with open(os.path.join(pack, 'ported.txt'), encoding='utf-8') as f:
         gids = {int(r[1]): int(r[0]) for line in f if (r := line.split(' ', 3)) and len(r) == 4}
     try:
-        tf.duelo([])
+        tf.duelo(['--lento'])
+        tf.run('w300'); tf.send('nodraw 1'); tf.RAPIDO = True
         probe = Probe()
         expected = {5769: 1, 4009: 0, gids[7545]: 1, gids[7892]: 0, gids[7809]: 0}
         kinds = {cid: probe.flip_kind(cid) for cid in expected}
-        tf.run('w300 O w60 DOWN w40 DOWN w40')
+        tf.run('DOWN w40 DOWN w40')
         hand = state()['hand']
         tf.run(' '.join(['LEFT w30'] * (hand - 1)) + ' X w60 shot:card_menu DOWN w30 X w100 shot:set')
         before = state()

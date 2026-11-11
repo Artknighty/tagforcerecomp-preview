@@ -15,7 +15,7 @@ for m in $LIST; do
   if [ -n "$srcs" ]; then
     # -static: o plugin nao depende de DLLs do MSYS2 na maquina do jogador
     # -Wno-misleading-indentation: 'if (a) x; if (b) y;' na mesma linha e o estilo do projeto (igual ao build.sh)
-    g++ -std=c++17 -O2 -Wall -Wno-misleading-indentation -shared -static -s -Iplugins/sdk -o "$out/plugin.dll" $srcs -lwinhttp -lws2_32
+    g++ -std=c++17 -O2 -Wall -Wno-misleading-indentation -shared -s -Iplugins/sdk -o "$out/plugin.dll" $srcs -Wl,-Bstatic -lstdc++ -lpthread -static-libgcc -static-libstdc++ -Wl,-Bdynamic -lwinhttp -lws2_32
     echo "plugin: $out/plugin.dll"
   fi
 done

@@ -1,216 +1,5713 @@
 {
- "4998": {"like": 4998, "name": "Obelisk the Tormentor", "note": "TF1's engine still has Obelisk's own record (ignition: Tribute 2 monsters, destroy all the opponent's monsters)"},
- "5611": {"like": 5611, "name": "Metalsilver Armor", "note": "TF1's engine still has its record (no id chains): equips"},
- "7749": {
-  "like": 4310,
-  "trigger_like": 5091,
-  "trigger_record_like": 5091,
-  "trigger_condition": {"from_deck": true}
- },
- "7309": {
-  "like": 4310,
-  "trigger_like": 5724,
-  "trigger_record_like": 5724,
-  "trigger_condition": {"equipped_to_deck": true}
- },
- "7152": {
-  "like": 4308,
-  "trigger_like": 5724,
-  "trigger_record_like": 5724,
-  "trigger_condition": {"equipped_tributed": true}
- },
- "7125": {
-  "like": 4310,
-  "trigger_like": 4317,
-  "trigger_record_like": 6502,
-  "trigger_condition": {"destroyed": true, "by_effect": true, "opponent_effect": true, "face_up": true},
-  "draw": {"self": 1}
- },
- "6842": {
-  "like": 4317,
-  "trigger_like": 4317,
-  "trigger_condition": {"destroyed": true},
-  "lp": {"opp": -600}
- },
- "7220": {
-  "like": 5328,
-  "zone": "deck",
-  "filter": {
-   "monster": true,
-   "normal": true,
-   "level_min": 5
-  }
- },
- "7460": {
-  "like": 5328,
-  "zone": "deck",
-  "filter": {
-   "monster": true,
-   "level_max": 4,
-   "name_has": "Gladiator Beast"
-  }
- },
- "6935": {
-  "like": 5330,
-  "zone": "grave",
-  "filter": {
-   "monster": true,
-   "name_has": "Ancient Gear"
-  }
- },
- "7013": {
-  "like": 4989,
-  "zone": "grave_summon",
-  "filter": {
-   "monster": true,
-   "normal": true
-  }
- },
- "7754": {
-  "like": 4989,
-  "zone": "grave_summon",
-  "filter": {
-   "monster": true,
-   "level_max": 2
-  }
- },
- "7902": {
-  "like": 6572,
-  "zone": "hand",
-  "filter": {
-   "monster": true,
-   "level_max": 2,
-   "type": "plant"
-  }
- },
- "6995": {
-  "like": 6572,
-  "zone": "hand",
-  "filter": {
-   "monster": true,
-   "normal": true,
-   "level_min": 5
-  }
- },
- "7892": {
-  "like": 4054,
-  "trigger_like": 4054,
-  "zone": "deck",
-  "filter": {
-   "monster": true,
-   "type": "plant",
-   "def_max": 1000
-  }
- },
- "7234": {
-  "like": 4353,
-  "lp": {
-   "opp": 3000
+  "3720": {
+    "draw": {
+      "self": 2
+    },
+    "like": 4330,
+    "name": "Fallen Paradise"
   },
-  "name": "Gift Card"
- },
- "7235": {
-  "like": 4844,
-  "draw": {
-   "opp": 2
+  "3721": {
+    "draw": {
+      "self": 1
+    },
+    "like": 4330,
+    "name": "Slash Draw"
   },
-  "name": "The Gift of Greed"
- },
- "6899": {
-  "like": 4343,
-  "destroy": {
-   "side": "opp",
-   "zones": "monster",
-   "cond": {
-    "kind": "opp_monsters_full"
-   }
-  }
- },
- "6911": {
-  "like": 4342,
-  "destroy": {
-   "side": "opp",
-   "zones": "st",
-   "cond": {
-    "kind": "opp_st_full"
-   }
-  }
- },
- "7629": {
-  "like": 4342,
-  "destroy": {
-   "side": "opp",
-   "zones": "all",
-   "cond": {
-    "kind": "controls",
-    "n": 3,
+  "3722": {
+    "like": 5408,
+    "lp": {
+      "opp": -700
+    },
+    "trigger_event": "battle",
+    "trigger_like": 5408
+  },
+  "3723": {
+    "like": 4145,
+    "name": "Infinite Fiend Mirror"
+  },
+  "3724": {
+    "like": 4518,
+    "name": "Arcana Force XII - The Hanged Man"
+  },
+  "3727": {
+    "like": 4518,
+    "name": "Arcana Force VIII - The Strength"
+  },
+  "3730": {
+    "like": 4145,
+    "name": "The Sky Lord"
+  },
+  "3731": {
+    "like": 4145,
+    "name": "The Material Lord"
+  },
+  "3732": {
+    "like": 4145,
+    "name": "The Spiritual Lord"
+  },
+  "3737": {
+    "destroy": {
+      "cond": {
+        "kind": "target_all"
+      },
+      "side": "both",
+      "zones": "monster"
+    },
+    "like": 4342,
+    "name": "Jurassic Impact"
+  },
+  "3738": {
+    "destroy": {
+      "cond": {
+        "kind": "target_all"
+      },
+      "side": "opp",
+      "zones": "monster"
+    },
+    "like": 4343,
+    "name": "Last Machine Acid Virus"
+  },
+  "3739": {
+    "like": 4518,
+    "name": "Toy Soldier"
+  },
+  "3740": {
     "filter": {
-     "monster": true,
-     "name_has": "Batteryman"
+      "category_in": [
+        14
+      ]
+    },
+    "like": 5328,
+    "name": "Toy Emperor",
+    "zone": "deck"
+  },
+  "3741": {
+    "like": 4145,
+    "name": "Crowning of the Emperor"
+  },
+  "3742": {
+    "like": 4145,
+    "name": "White Veil"
+  },
+  "3744": {
+    "like": 4507,
+    "name": "Efflorescent Knight"
+  },
+  "3745": {
+    "cannot_special_summon": true,
+    "like": 4145,
+    "name": "Cenozoic Fossil Knight - Skullger"
+  },
+  "3746": {
+    "cannot_special_summon": true,
+    "like": 4145,
+    "name": "Mesozoic Fossil Knight - Skullknight"
+  },
+  "3747": {
+    "like": 4145,
+    "name": "Time Stream"
+  },
+  "3748": {
+    "like": 4145,
+    "name": "Fossil Fusion"
+  },
+  "3749": {
+    "filter": {
+      "name_is": "B.E.S. Assault Core"
+    },
+    "like": 6572,
+    "name": "B.E.S. Assault Core",
+    "zone": "hand"
+  },
+  "3750": {
+    "like": 4145,
+    "name": "Shield Recovery"
+  },
+  "3752": {
+    "like": 4145,
+    "name": "Miracle Contact"
+  },
+  "3753": {
+    "like": 4145,
+    "name": "The Rival's Name"
+  },
+  "3754": {
+    "destroy": {
+      "cond": {
+        "kind": "target_all"
+      },
+      "side": "both",
+      "zones": "all"
+    },
+    "like": 4342,
+    "name": "Burst Impact"
+  },
+  "3755": {
+    "like": 4145,
+    "name": "Battle Fusion"
+  },
+  "3756": {
+    "like": 4145,
+    "name": "Final Fusion"
+  },
+  "3757": {
+    "like": 4145,
+    "name": "Advanced Dark"
+  },
+  "3758": {
+    "like": 4145,
+    "name": "Crystal Slicer"
+  },
+  "3759": {
+    "like": 4145,
+    "name": "Destiny Mind"
+  },
+  "3760": {
+    "like": 4145,
+    "lp": {
+      "self": -1000
+    },
+    "name": "Ojamandala"
+  },
+  "3761": {
+    "like": 4145,
+    "lp": {
+      "opp": -500
+    },
+    "name": "Pride Shout"
+  },
+  "3762": {
+    "like": 4804,
+    "name": "Kiteroid"
+  },
+  "3763": {
+    "cannot_special_summon": true,
+    "like": 4518,
+    "name": "Plasma Warrior Eitom"
+  },
+  "3764": {
+    "like": 4145,
+    "name": "Declaration of Rebirth"
+  },
+  "3765": {
+    "like": 4518,
+    "name": "Lord of Dark Summons"
+  },
+  "3766": {
+    "like": 5137,
+    "name": "Zero Sprite"
+  },
+  "3767": {
+    "like": 4145,
+    "name": "Fog Palace"
+  },
+  "3768": {
+    "like": 4145,
+    "name": "Sacred Protective Barrier"
+  },
+  "3769": {
+    "like": 4518,
+    "name": "Dark Archetype"
+  },
+  "3770": {
+    "like": 4518,
+    "name": "Dark Psycho Eye"
+  },
+  "3771": {
+    "like": 4145,
+    "name": "Flame Wall"
+  },
+  "3772": {
+    "like": 4145,
+    "lp": {
+      "opp": -500
+    },
+    "name": "Volcanic Wall"
+  },
+  "3773": {
+    "destroy": {
+      "cond": {
+        "kind": "target"
+      },
+      "side": "opp",
+      "zones": "monster"
+    },
+    "like": 4507,
+    "name": "The Unchosen One"
+  },
+  "3774": {
+    "like": 4518,
+    "name": "Clear Cube"
+  },
+  "3775": {
+    "like": 4518,
+    "name": "Clear Phantom"
+  },
+  "3776": {
+    "like": 4518,
+    "lp": {
+      "opp": -1000
+    },
+    "name": "Clear Rage Golem"
+  },
+  "3777": {
+    "like": 4518,
+    "name": "Clear Vicious Knight"
+  },
+  "3778": {
+    "like": 4518,
+    "name": "Clear Vice Dragon"
+  },
+  "3779": {
+    "like": 4145,
+    "name": "Clear World"
+  },
+  "3780": {
+    "like": 4145,
+    "name": "Clear Wall"
+  },
+  "3781": {
+    "like": 4145,
+    "name": "Attribute Mastery"
+  },
+  "3782": {
+    "like": 4145,
+    "lp": {
+      "opp": -1000
+    },
+    "name": "Attribute Bomb"
+  },
+  "3783": {
+    "like": 4145,
+    "name": "Attribute Gravity"
+  },
+  "3784": {
+    "like": 4145,
+    "name": "Attribute Chameleon"
+  },
+  "3785": {
+    "like": 4518,
+    "name": "Cyril, Monk of Dark World"
+  },
+  "3786": {
+    "like": 4518,
+    "name": "Amphibian Angel - Frog-hael"
+  },
+  "3787": {
+    "like": 5142,
+    "name": "Satellite Laser X-06S, Balsam"
+  },
+  "3788": {
+    "like": 4145,
+    "name": "Power Zone"
+  },
+  "3789": {
+    "like": 4145,
+    "name": "Toon Kingdom"
+  },
+  "3790": {
+    "like": 4145,
+    "name": "Berserker Soul"
+  },
+  "4696": {
+    "like": 4145,
+    "name": "Fake Trap"
+  },
+  "4822": {
+    "like": 4145,
+    "name": "Black Magic Revival Casket"
+  },
+  "4826": {
+    "like": 4145,
+    "name": "Mystical Refpanel"
+  },
+  "4998": {
+    "like": 4998,
+    "name": "Obelisk the Tormentor",
+    "note": "TF1's engine still has Obelisk's own record (ignition: Tribute 2 monsters, destroy all the opponent's monsters)"
+  },
+  "5000": {
+    "like": 4518,
+    "name": "The Winged Dragon of Ra"
+  },
+  "5097": {
+    "cannot_special_summon": true,
+    "like": 4518,
+    "name": "Masked Beast Des Guardius"
+  },
+  "5098": {
+    "like": 4145,
+    "name": "Mask of Remnant"
+  },
+  "5362": {
+    "like": 4145,
+    "name": "Null and Void"
+  },
+  "5399": {
+    "like": 4145,
+    "lp": {
+      "self": -800
+    },
+    "name": "Royal Oppression"
+  },
+  "5447": {
+    "like": 4145,
+    "name": "Pyro Clock of Destiny"
+  },
+  "5449": {
+    "draw": {
+      "self": 1
+    },
+    "like": 4330,
+    "name": "Pharaoh's Treasure"
+  },
+  "5494": {
+    "like": 4145,
+    "name": "Question"
+  },
+  "5545": {
+    "like": 4145,
+    "name": "Narrow Pass"
+  },
+  "5595": {
+    "like": 4518,
+    "name": "Neko Mane King"
+  },
+  "5611": {
+    "like": 5611,
+    "name": "Metalsilver Armor",
+    "note": "TF1's engine still has its record (no id chains): equips"
+  },
+  "5622": {
+    "like": 4145,
+    "name": "Rivalry of Warlords"
+  },
+  "5629": {
+    "like": 4145,
+    "name": "Double Spell"
+  },
+  "5682": {
+    "like": 4145,
+    "name": "Remove Brainwashing"
+  },
+  "5696": {
+    "like": 4145,
+    "name": "Different Dimension Dragon"
+  },
+  "5734": {
+    "like": 4145,
+    "name": "Morale Boost"
+  },
+  "5924": {
+    "like": 4518,
+    "name": "Winged Rhynos"
+  },
+  "5926": {
+    "like": 4145,
+    "name": "Brain Crusher"
+  },
+  "6065": {
+    "like": 4145,
+    "name": "Judgment of the Desert"
+  },
+  "6075": {
+    "like": 4507,
+    "name": "Necroface"
+  },
+  "6161": {
+    "like": 4145,
+    "name": "Gold Sarcophagus"
+  },
+  "6363": {
+    "like": 4145,
+    "name": "Grave Lure"
+  },
+  "6367": {
+    "like": 4145,
+    "name": "Lone Wolf"
+  },
+  "6373": {
+    "like": 4518,
+    "name": "Mutant Mindmaster"
+  },
+  "6453": {
+    "like": 4145,
+    "lp": {
+      "self": -1000
+    },
+    "name": "Trap of Darkness"
+  },
+  "6525": {
+    "like": 4518,
+    "name": "Tualatin"
+  },
+  "6555": {
+    "like": 5655,
+    "name": "Dark Red Enchanter"
+  },
+  "6558": {
+    "like": 4518,
+    "name": "Gorz the Emissary of Darkness"
+  },
+  "6579": {
+    "like": 4804,
+    "name": "Super Junior Confrontation"
+  },
+  "6723": {
+    "like": 4518,
+    "name": "Puppet King"
+  },
+  "6727": {
+    "filter": {
+      "name_is": "Cyber Dinosaur"
+    },
+    "like": 6572,
+    "name": "Cyber Dinosaur",
+    "zone": "hand"
+  },
+  "6728": {
+    "filter": {
+      "name_is": "Polymerization"
+    },
+    "like": 5328,
+    "name": "Elemental Hero Woodsman",
+    "zone": "deck"
+  },
+  "6731": {
+    "cannot_special_summon": true,
+    "like": 4145,
+    "name": "Elemental Hero Terra Firma"
+  },
+  "6733": {
+    "filter": {
+      "monster": true,
+      "name_has": "Hero"
+    },
+    "like": 5330,
+    "name": "Elemental Hero Ocean",
+    "zone": "grave"
+  },
+  "6735": {
+    "count": 2,
+    "filter": {
+      "monster": true,
+      "name_has": "roid"
+    },
+    "like": 5330,
+    "name": "Expressroid",
+    "zone": "grave"
+  },
+  "6741": {
+    "destroy": {
+      "cond": {
+        "kind": "target"
+      },
+      "side": "both",
+      "zones": "st"
+    },
+    "like": 4507,
+    "name": "Stealthroid"
+  },
+  "6743": {
+    "like": 4145,
+    "name": "Truckroid"
+  },
+  "6769": {
+    "like": 4518,
+    "lp": {
+      "self": 500
+    },
+    "name": "Neo-Spacian Air Hummingbird"
+  },
+  "6770": {
+    "like": 5719,
+    "name": "Neo-Spacian Grand Mole"
+  },
+  "6771": {
+    "like": 4518,
+    "name": "Neo-Spacian Glow Moss"
+  },
+  "6784": {
+    "destroy": {
+      "cond": {
+        "kind": "target"
+      },
+      "side": "opp",
+      "zones": "st"
+    },
+    "like": 4507,
+    "name": "Elemental Hero Stratos"
+  },
+  "6785": {
+    "filter": {
+      "monster": true,
+      "name_has": "Hero"
+    },
+    "like": 6572,
+    "name": "Hero's Bond",
+    "zone": "hand"
+  },
+  "6790": {
+    "like": 4145,
+    "name": "Dragonic Knight"
+  },
+  "6794": {
+    "like": 4518,
+    "name": "Zeta Reticulant"
+  },
+  "6801": {
+    "like": 4518,
+    "name": "Alien Mars"
+  },
+  "6813": {
+    "like": 4145,
+    "lp": {
+      "opp": -1000
+    },
+    "name": "Royal Writ of Taxation"
+  },
+  "6821": {
+    "cannot_special_summon": true,
+    "destroy": {
+      "side": "own",
+      "zones": "all"
+    },
+    "like": 4989,
+    "name": "Light and Darkness Dragon",
+    "trigger_condition": {
+      "destroyed": true
+    },
+    "trigger_like": 5483
+  },
+  "6830": {
+    "like": 5142,
+    "name": "Cyberdark Horn"
+  },
+  "6831": {
+    "like": 4428,
+    "name": "Cyberdark Edge"
+  },
+  "6832": {
+    "like": 5408,
+    "lp": {
+      "opp": -300
+    },
+    "name": "Cyberdark Keel",
+    "trigger_event": "battle",
+    "trigger_like": 5408
+  },
+  "6833": {
+    "cannot_special_summon": true,
+    "like": 4145,
+    "name": "Cyberdark Dragon"
+  },
+  "6834": {
+    "like": 4145,
+    "name": "Power Wall"
+  },
+  "6835": {
+    "like": 5142,
+    "name": "Super Vehicroid - Stealth Union"
+  },
+  "6841": {
+    "like": 6317,
+    "name": "Ancient Gear Engineer"
+  },
+  "6842": {
+    "like": 4317,
+    "lp": {
+      "opp": -600
+    },
+    "trigger_condition": {
+      "destroyed": true
+    },
+    "trigger_like": 4317
+  },
+  "6843": {
+    "destroy": {
+      "cond": {
+        "kind": "target"
+      },
+      "side": "both",
+      "zones": "monster"
+    },
+    "like": 4507,
+    "name": "Ancient Gear Explosive"
+  },
+  "6844": {
+    "like": 4145,
+    "name": "Ancient Gear Fist"
+  },
+  "6845": {
+    "like": 5408,
+    "lp": {
+      "opp": "destroyed_def"
+    },
+    "name": "Cyber Angel - Benten",
+    "trigger_event": "battle",
+    "trigger_like": 5408
+  },
+  "6846": {
+    "filter": {
+      "category_in": [
+        13
+      ]
+    },
+    "like": 4434,
+    "name": "Cyber Angel - Idaten",
+    "trigger_event": "summon",
+    "trigger_like": 5883,
+    "trigger_record_like": 4434,
+    "zone": "grave"
+  },
+  "6847": {
+    "destroy": {
+      "cond": {
+        "kind": "target"
+      },
+      "side": "opp",
+      "zones": "monster"
+    },
+    "like": 4507,
+    "name": "Cyber Angel - Dakini",
+    "trigger_event": "summon",
+    "trigger_like": 4507
+  },
+  "6850": {
+    "like": 4676,
+    "name": "Machine Angel Ritual",
+    "ritual": {
+      "exact": true,
+      "level": "monster",
+      "monsters": [
+        6845,
+        6846,
+        6847
+      ]
     }
-   }
+  },
+  "6854": {
+    "like": 4507,
+    "name": "Cyber Ogre"
+  },
+  "6855": {
+    "like": 4518,
+    "name": "Cyber Esper"
+  },
+  "6856": {
+    "like": 4507,
+    "name": "Cyber Ogre 2"
+  },
+  "6858": {
+    "like": 4145,
+    "name": "Cyber Shadow Gardna"
+  },
+  "6859": {
+    "filter": {
+      "monster": true,
+      "name_has": "Cyber Ogre"
+    },
+    "like": 6356,
+    "zone": "hand"
+  },
+  "6860": {
+    "like": 4145,
+    "lp": {
+      "opp": -1000
+    },
+    "name": "Trojan Blast"
+  },
+  "6863": {
+    "like": 4428,
+    "name": "Elemental Hero Knospe"
+  },
+  "6865": {
+    "filter": {
+      "name_is": "Elemental Hero Poison Rose"
+    },
+    "like": 6572,
+    "name": "Rose Bud",
+    "zone": "hand"
+  },
+  "6866": {
+    "cannot_special_summon": true,
+    "like": 4518,
+    "name": "Elemental Hero Poison Rose"
+  },
+  "6869": {
+    "like": 4507,
+    "name": "Greed Quasar"
+  },
+  "6870": {
+    "like": 4145,
+    "name": "Allure Queen LV3"
+  },
+  "6871": {
+    "like": 4145,
+    "name": "Allure Queen LV5"
+  },
+  "6872": {
+    "like": 4145,
+    "name": "Allure Queen LV7"
+  },
+  "6876": {
+    "like": 4518,
+    "name": "Dark Lucius LV4"
+  },
+  "6877": {
+    "like": 4518,
+    "name": "Dark Lucius LV6"
+  },
+  "6878": {
+    "like": 4518,
+    "name": "Dark Lucius LV8"
+  },
+  "6879": {
+    "destroy": {
+      "cond": {
+        "kind": "target"
+      },
+      "side": "both",
+      "zones": "all"
+    },
+    "like": 4507,
+    "name": "Snipe Hunter"
+  },
+  "6880": {
+    "like": 4865,
+    "lp": {
+      "opp": -500
+    },
+    "name": "Blast Asmodian"
+  },
+  "6881": {
+    "cannot_special_summon": true,
+    "like": 0,
+    "name": "Vanity's Fiend",
+    "special_summon_lock": "both"
+  },
+  "6882": {
+    "like": 0,
+    "name": "Barrier Statue of the Abyss",
+    "special_summon_except": "dark"
+  },
+  "6883": {
+    "like": 0,
+    "name": "Barrier Statue of the Torrent",
+    "special_summon_except": "water"
+  },
+  "6884": {
+    "like": 0,
+    "name": "Barrier Statue of the Inferno",
+    "special_summon_except": "fire"
+  },
+  "6885": {
+    "like": 0,
+    "name": "Barrier Statue of the Stormwinds",
+    "special_summon_except": "wind"
+  },
+  "6886": {
+    "like": 0,
+    "name": "Barrier Statue of the Drought",
+    "special_summon_except": "earth"
+  },
+  "6887": {
+    "like": 0,
+    "name": "Barrier Statue of the Heavens",
+    "special_summon_except": "light"
+  },
+  "6888": {
+    "cannot_special_summon": true,
+    "like": 0,
+    "name": "Vanity's Ruler",
+    "special_summon_lock": "opponent"
+  },
+  "6889": {
+    "draw": {
+      "self": 1
+    },
+    "like": 5210,
+    "name": "Iris, the Earth Mother"
+  },
+  "6890": {
+    "destroy": {
+      "cond": {
+        "kind": "target"
+      },
+      "side": "opp",
+      "zones": "all"
+    },
+    "like": 4507,
+    "name": "Lightning Punisher"
+  },
+  "6891": {
+    "like": 4518,
+    "name": "Queen's Bodyguard"
+  },
+  "6892": {
+    "like": 5137,
+    "name": "Combo Fighter"
+  },
+  "6893": {
+    "like": 5137,
+    "name": "Combo Master"
+  },
+  "6894": {
+    "like": 4507,
+    "name": "Man Beast of Ares"
+  },
+  "6896": {
+    "like": 4518,
+    "name": "Storm Shooter"
+  },
+  "6897": {
+    "like": 4428,
+    "name": "Alien Infiltrator"
+  },
+  "6898": {
+    "like": 4145,
+    "name": "Corruption Cell \"A\""
+  },
+  "6899": {
+    "destroy": {
+      "cond": {
+        "kind": "opp_monsters_full"
+      },
+      "side": "opp",
+      "zones": "monster"
+    },
+    "like": 4343
+  },
+  "6900": {
+    "like": 4145,
+    "lp": {
+      "self": -1000
+    },
+    "name": "Ritual Foregone"
+  },
+  "6901": {
+    "like": 4145,
+    "lp": {
+      "self": -1000
+    },
+    "name": "Instant Fusion"
+  },
+  "6902": {
+    "like": 4145,
+    "lp": {
+      "self": -500
+    },
+    "name": "Counter Cleaner"
+  },
+  "6903": {
+    "like": 4145,
+    "lp": {
+      "opp": -800
+    },
+    "name": "Linear Accelerator Cannon"
+  },
+  "6904": {
+    "like": 4145,
+    "lp": {
+      "opp": -400
+    },
+    "name": "Chain Strike"
+  },
+  "6905": {
+    "like": 4842
+  },
+  "6906": {
+    "destroy": {
+      "cond": {
+        "kind": "target"
+      },
+      "side": "both",
+      "zones": "st"
+    },
+    "like": 4507,
+    "name": "Mystical Wind Typhoon"
+  },
+  "6907": {
+    "like": 4145,
+    "name": "Level Down!?"
+  },
+  "6908": {
+    "like": 4145,
+    "lp": {
+      "self": -500
+    },
+    "name": "Degenerate Circuit"
+  },
+  "6909": {
+    "like": 4145,
+    "name": "Senet Switch"
+  },
+  "6910": {
+    "destroy": {
+      "cond": {
+        "kind": "target_all"
+      },
+      "side": "both",
+      "zones": "all"
+    },
+    "like": 4891,
+    "name": "Blasting Fuse"
+  },
+  "6911": {
+    "destroy": {
+      "cond": {
+        "kind": "opp_st_full"
+      },
+      "side": "opp",
+      "zones": "st"
+    },
+    "like": 4342
+  },
+  "6912": {
+    "destroy": {
+      "cond": {
+        "filter": {
+          "normal": true
+        },
+        "kind": "target_all_not"
+      },
+      "side": "both",
+      "zones": "monster"
+    },
+    "like": 4887,
+    "name": "Justi-Break"
+  },
+  "6913": {
+    "like": 4145,
+    "name": "Dimensional Inversion"
+  },
+  "6914": {
+    "like": 4353,
+    "lp": {
+      "self": 500
+    }
+  },
+  "6915": {
+    "like": 4865,
+    "lp": {
+      "opp": -500
+    }
+  },
+  "6916": {
+    "draw": {
+      "self": 2
+    },
+    "like": 5210,
+    "name": "Accumulated Fortune"
+  },
+  "6917": {
+    "like": 5263,
+    "lp": {
+      "self": -1000
+    },
+    "name": "Vanity's Call"
+  },
+  "6918": {
+    "like": 5853,
+    "name": "Black Horn of Heaven"
+  },
+  "6920": {
+    "filter": {
+      "name_is": "Goka, the Pyre of Malice"
+    },
+    "like": 6572,
+    "name": "Goka, the Pyre of Malice",
+    "zone": "hand"
+  },
+  "6922": {
+    "like": 4145,
+    "name": "Terra Firma Gravity"
+  },
+  "6928": {
+    "like": 4507,
+    "name": "Cold Enchanter"
+  },
+  "6932": {
+    "like": 6315,
+    "name": "Ancient Gear Gadjiltron Dragon"
+  },
+  "6933": {
+    "like": 5408,
+    "lp": {
+      "opp": -500
+    },
+    "name": "Ancient Gear Gadjiltron Chimera"
+  },
+  "6935": {
+    "filter": {
+      "monster": true,
+      "name_has": "Ancient Gear"
+    },
+    "like": 5330,
+    "zone": "grave"
+  },
+  "6936": {
+    "like": 4317,
+    "lp": {
+      "opp": 800,
+      "self": 800
+    },
+    "trigger_condition": {
+      "destroyed": true
+    },
+    "trigger_like": 4317
+  },
+  "6938": {
+    "draw": {
+      "self": 1
+    },
+    "like": 5883,
+    "name": "Flame Ogre",
+    "trigger_event": "summon",
+    "trigger_like": 6151
+  },
+  "6939": {
+    "draw": {
+      "self": 1
+    },
+    "like": 5408,
+    "name": "Card Trooper",
+    "trigger_event": "battle",
+    "trigger_like": 5408
+  },
+  "6940": {
+    "like": 4145,
+    "name": "Light Laser"
+  },
+  "6941": {
+    "like": 4145,
+    "name": "Burial from a Different Dimension"
+  },
+  "6942": {
+    "destroy": {
+      "cond": {
+        "kind": "target"
+      },
+      "side": "opp",
+      "zones": "monster"
+    },
+    "like": 4507,
+    "name": "Edge Hammer"
+  },
+  "6943": {
+    "filter": {
+      "monster": true,
+      "name_has": "Elemental Hero"
+    },
+    "like": 5328,
+    "name": "Kid Guard",
+    "zone": "deck"
+  },
+  "6944": {
+    "like": 4145,
+    "name": "Infernal Dragon"
+  },
+  "6945": {
+    "like": 4145,
+    "name": "Ruthless Denial"
+  },
+  "6946": {
+    "like": 4145,
+    "name": "Return Soul"
+  },
+  "6947": {
+    "draw": {
+      "opp": 1,
+      "self": 1
+    },
+    "like": 4844,
+    "name": "Damage Polarizer"
+  },
+  "6948": {
+    "like": 5263,
+    "name": "Fusion Guard"
+  },
+  "6949": {
+    "like": 4518,
+    "name": "Destiny Hero - Malicious"
+  },
+  "6950": {
+    "draw": {
+      "discard": {
+        "count": 1,
+        "filter": {
+          "name_has": "Destiny Hero"
+        }
+      },
+      "self": 2
+    },
+    "like": 4844,
+    "name": "Destiny Draw"
+  },
+  "6951": {
+    "filter": {
+      "monster": true,
+      "name_has": "Destiny Hero"
+    },
+    "like": 5328,
+    "name": "Over Destiny",
+    "zone": "deck"
+  },
+  "6952": {
+    "like": 4842,
+    "name": "D - Counter"
+  },
+  "6953": {
+    "like": 4145,
+    "name": "Eternal Dread"
+  },
+  "6958": {
+    "cannot_special_summon": true,
+    "like": 0,
+    "lord_tribute": "spellcaster",
+    "name": "Testament of the Arcane Lords"
+  },
+  "6959": {
+    "cannot_special_summon": true,
+    "like": 0,
+    "lord_tribute": "warrior",
+    "name": "Armament of the Lethal Lords"
+  },
+  "6963": {
+    "like": 4428,
+    "name": "The Six Samurai - Yariza"
+  },
+  "6964": {
+    "like": 5137,
+    "name": "The Six Samurai - Nisashi"
+  },
+  "6965": {
+    "like": 5137,
+    "name": "The Six Samurai - Nisashi"
+  },
+  "6966": {
+    "destroy": {
+      "cond": {
+        "kind": "target"
+      },
+      "side": "opp",
+      "zones": "st"
+    },
+    "like": 6600,
+    "name": "The Six Samurai - Yaichi"
+  },
+  "6967": {
+    "destroy": {
+      "cond": {
+        "kind": "target"
+      },
+      "side": "opp",
+      "zones": "st"
+    },
+    "like": 6600,
+    "name": "The Six Samurai - Kamon"
+  },
+  "6968": {
+    "destroy": {
+      "cond": {
+        "kind": "target"
+      },
+      "side": "opp",
+      "zones": "monster"
+    },
+    "like": 5521,
+    "name": "The Six Samurai - Irou"
+  },
+  "6969": {
+    "like": 5412,
+    "name": "The Six Samurai - Irou"
+  },
+  "6971": {
+    "like": 4145,
+    "name": "Sage of Silence"
+  },
+  "6972": {
+    "like": 4145,
+    "name": "Sage of Stillness"
+  },
+  "6973": {
+    "destroy": {
+      "cond": {
+        "kind": "target_all"
+      },
+      "side": "opp",
+      "zones": "all"
+    },
+    "like": 4891,
+    "name": "Reign-Beaux, Overlord of Dark World"
+  },
+  "6974": {
+    "destroy": {
+      "cond": {
+        "kind": "target"
+      },
+      "side": "both",
+      "zones": "monster"
+    },
+    "like": 6505,
+    "name": "Kahkki, Guerilla of Dark World"
+  },
+  "6975": {
+    "destroy": {
+      "cond": {
+        "kind": "target"
+      },
+      "side": "both",
+      "zones": "st"
+    },
+    "like": 6505,
+    "name": "Gren, Tactician of Dark World"
+  },
+  "6976": {
+    "like": 4518,
+    "name": "Fusion Devourer"
+  },
+  "6977": {
+    "like": 4518,
+    "name": "Electric Virus"
+  },
+  "6978": {
+    "like": 4518,
+    "name": "Puppet Plant"
+  },
+  "6979": {
+    "like": 4518,
+    "name": "Marionette Mite"
+  },
+  "6980": {
+    "like": 4518,
+    "name": "D.D. Crow"
+  },
+  "6981": {
+    "destroy": {
+      "cond": {
+        "filter": {
+          "attribute": "earth",
+          "monster": true
+        },
+        "kind": "target_all_not"
+      },
+      "side": "both",
+      "zones": "monster"
+    },
+    "like": 5484,
+    "name": "Raging Earth",
+    "trigger_like": 5484
+  },
+  "6982": {
+    "destroy": {
+      "cond": {
+        "filter": {
+          "attribute": "water",
+          "monster": true
+        },
+        "kind": "target_all_not"
+      },
+      "side": "both",
+      "zones": "monster"
+    },
+    "like": 5484,
+    "name": "Silent Abyss",
+    "trigger_like": 5484
+  },
+  "6983": {
+    "destroy": {
+      "cond": {
+        "filter": {
+          "attribute": "fire",
+          "monster": true
+        },
+        "kind": "target_all_not"
+      },
+      "side": "both",
+      "zones": "monster"
+    },
+    "like": 5484,
+    "name": "Firestorm Prominence",
+    "trigger_like": 5484
+  },
+  "6984": {
+    "destroy": {
+      "cond": {
+        "filter": {
+          "attribute": "wind",
+          "monster": true
+        },
+        "kind": "target_all_not"
+      },
+      "side": "both",
+      "zones": "monster"
+    },
+    "like": 5484,
+    "name": "Destruction Cyclone",
+    "trigger_like": 5484
+  },
+  "6985": {
+    "destroy": {
+      "cond": {
+        "filter": {
+          "attribute": "dark",
+          "monster": true
+        },
+        "kind": "target_all_not"
+      },
+      "side": "both",
+      "zones": "monster"
+    },
+    "like": 5484,
+    "name": "Umbral Soul",
+    "trigger_like": 5484
+  },
+  "6986": {
+    "destroy": {
+      "cond": {
+        "filter": {
+          "attribute": "light",
+          "monster": true
+        },
+        "kind": "target_all_not"
+      },
+      "side": "both",
+      "zones": "monster"
+    },
+    "like": 5484,
+    "name": "Radiant Spirit",
+    "trigger_like": 5484
+  },
+  "6987": {
+    "like": 4518,
+    "name": "Alien Psychic"
+  },
+  "6988": {
+    "destroy": {
+      "cond": {
+        "kind": "target"
+      },
+      "side": "opp",
+      "zones": "all"
+    },
+    "like": 4507,
+    "name": "Elemental Hero Glow Neos"
+  },
+  "6989": {
+    "like": 4507,
+    "name": "Elemental Hero Air Neos"
+  },
+  "6990": {
+    "like": 4145,
+    "name": "Elemental Hero Grand Neos"
+  },
+  "6991": {
+    "like": 5408,
+    "lp": {
+      "opp": -200
+    },
+    "name": "Lycanthrope"
+  },
+  "6992": {
+    "like": 5250,
+    "name": "Cú Chulainn the Awakened"
+  },
+  "6994": {
+    "destroy": {
+      "cond": {
+        "kind": "target"
+      },
+      "side": "both",
+      "zones": "monster"
+    },
+    "like": 4507,
+    "name": "\"A\" Cell Scatter Burst"
+  },
+  "6995": {
+    "filter": {
+      "level_min": 5,
+      "monster": true,
+      "normal": true
+    },
+    "like": 6572,
+    "zone": "hand"
+  },
+  "6996": {
+    "like": 4145,
+    "name": "Advanced Ritual Art"
+  },
+  "6997": {
+    "like": 4676,
+    "name": "Synthesis Spell",
+    "ritual": {
+      "level": 6,
+      "monster": 6991
+    }
+  },
+  "6998": {
+    "like": 4676,
+    "name": "Emblem of the Awakening",
+    "ritual": {
+      "level": 4,
+      "monster": 6992
+    }
+  },
+  "6999": {
+    "like": 4909
+  },
+  "7001": {
+    "draw": {
+      "discard": {
+        "count": 1,
+        "to": "deck"
+      },
+      "self": 1
+    },
+    "like": 4330,
+    "name": "Card Trader"
+  },
+  "7002": {
+    "draw": {
+      "discard": {
+        "both": true,
+        "count": 1
+      },
+      "opp": 1,
+      "self": 1
+    },
+    "like": 4330,
+    "name": "Dark World Dealings"
+  },
+  "7003": {
+    "like": 4145,
+    "name": "Shien's Castle of Mist"
+  },
+  "7004": {
+    "filter": {
+      "monster": true,
+      "name_has": "Elemental Hero"
+    },
+    "like": 4989,
+    "name": "Skyscraper 2 - Hero City",
+    "zone": "grave_summon"
+  },
+  "7005": {
+    "like": 4145,
+    "lp": {
+      "opp": -1000
+    },
+    "name": "Change of Hero - Reflector Ray"
+  },
+  "7006": {
+    "draw": {
+      "self": 1
+    },
+    "like": 5210,
+    "name": "Hero Medal"
+  },
+  "7007": {
+    "filter": {
+      "monster": true,
+      "name_has": "Six Samurai"
+    },
+    "like": 4989,
+    "name": "Return of the Six Samurai",
+    "zone": "grave_summon"
+  },
+  "7008": {
+    "destroy": {
+      "cond": {
+        "kind": "target"
+      },
+      "side": "opp",
+      "zones": "monster"
+    },
+    "like": 5464,
+    "name": "Eliminating the League"
+  },
+  "7009": {
+    "like": 4145,
+    "name": "Flashbang"
+  },
+  "7010": {
+    "like": 4145,
+    "name": "The Transmigration Prophecy"
+  },
+  "7011": {
+    "destroy": {
+      "cond": {
+        "filter": {
+          "category_in": [
+            2,
+            3
+          ],
+          "monster": true
+        },
+        "kind": "target"
+      },
+      "side": "both",
+      "zones": "monster"
+    },
+    "like": 4342,
+    "name": "Anti-Fusion Device"
+  },
+  "7012": {
+    "destroy": {
+      "cond": {
+        "filter": {
+          "category_in": [
+            4,
+            5
+          ],
+          "monster": true
+        },
+        "kind": "target"
+      },
+      "side": "both",
+      "zones": "monster"
+    },
+    "like": 4342,
+    "name": "Ritual Sealing"
+  },
+  "7013": {
+    "filter": {
+      "monster": true,
+      "normal": true
+    },
+    "like": 4989,
+    "zone": "grave_summon"
+  },
+  "7014": {
+    "like": 4145,
+    "name": "Swift Samurai Storm!"
+  },
+  "7015": {
+    "like": 4145,
+    "name": "Cloak and Dagger"
+  },
+  "7016": {
+    "like": 6217,
+    "name": "Pulling the Rug"
+  },
+  "7017": {
+    "like": 4145,
+    "name": "Blizzard Dragon"
+  },
+  "7018": {
+    "like": 5655,
+    "name": "Metal Shooter"
+  },
+  "7019": {
+    "like": 4507,
+    "name": "Des Mosquito"
+  },
+  "7024": {
+    "like": 5974,
+    "lp": {
+      "opp": -200
+    },
+    "name": "Elemental Hero Lady Heat"
+  },
+  "7025": {
+    "destroy": {
+      "cond": {
+        "kind": "target_all"
+      },
+      "side": "both",
+      "zones": "monster"
+    },
+    "like": 4342,
+    "name": "Ice Master"
+  },
+  "7026": {
+    "like": 4507,
+    "name": "Elemental Hero Inferno"
+  },
+  "7035": {
+    "like": 4518,
+    "name": "Angel O7"
+  },
+  "7039": {
+    "like": 5408,
+    "lp": {
+      "opp": -2000
+    },
+    "trigger_event": "battle",
+    "trigger_like": 5408
+  },
+  "7046": {
+    "like": 5023,
+    "name": "Neo-Parshath, the Sky Paladin"
+  },
+  "7047": {
+    "like": 4865,
+    "lp": {
+      "self": 1000
+    },
+    "name": "Meltiel, Sage of the Sky"
+  },
+  "7048": {
+    "like": 4145,
+    "name": "Harvest Angel of Wisdom"
+  },
+  "7050": {
+    "filter": {
+      "atk_max": 1500,
+      "attribute": "light",
+      "monster": true,
+      "type": "fairy"
+    },
+    "like": 5423,
+    "trigger_like": 5423,
+    "zone": "deck"
+  },
+  "7051": {
+    "like": 5408,
+    "lp": {
+      "self": 1000
+    },
+    "name": "Radiant Jeral"
+  },
+  "7053": {
+    "like": 4353,
+    "lp": {
+      "self": 3000
+    }
+  },
+  "7056": {
+    "like": 4145,
+    "name": "Carrierroid"
+  },
+  "7057": {
+    "destroy": {
+      "cond": {
+        "kind": "target_all"
+      },
+      "side": "opp",
+      "zones": "st"
+    },
+    "like": 4891,
+    "name": "Armoroid Gaidengo"
+  },
+  "7058": {
+    "like": 4518,
+    "name": "Elemental Hero Voltic"
+  },
+  "7064": {
+    "like": 4518,
+    "name": "Mosaic Manticore"
+  },
+  "7068": {
+    "like": 4518,
+    "name": "Belial - Marquis of Darkness"
+  },
+  "7071": {
+    "like": 4428,
+    "name": "Crystal Beast Amethyst Cat"
+  },
+  "7072": {
+    "like": 4518,
+    "name": "Crystal Beast Amber Mammoth"
+  },
+  "7073": {
+    "filter": {
+      "monster": true,
+      "name_has": "Crystal Beast"
+    },
+    "like": 5328,
+    "name": "Crystal Beacon",
+    "zone": "deck"
+  },
+  "7074": {
+    "like": 4518,
+    "name": "Crystal Beast Ruby Carbuncle"
+  },
+  "7075": {
+    "like": 4518,
+    "name": "Crystal Beast Emerald Tortoise"
+  },
+  "7077": {
+    "like": 4518,
+    "name": "Crystal Beast Cobalt Eagle"
+  },
+  "7078": {
+    "like": 4518,
+    "name": "Crystal Beast Sapphire Pegasus"
+  },
+  "7079": {
+    "like": 4145,
+    "name": "Ancient City - Rainbow Ruins"
+  },
+  "7080": {
+    "draw": {
+      "self": 2
+    },
+    "like": 4330,
+    "name": "Rare Value"
+  },
+  "7081": {
+    "draw": {
+      "opp": 1
+    },
+    "like": 5210,
+    "name": "Last Resort"
+  },
+  "7082": {
+    "like": 4145,
+    "lp": {
+      "self": -500
+    },
+    "name": "Volcanic Shell"
+  },
+  "7083": {
+    "like": 5408,
+    "lp": {
+      "opp": -500
+    },
+    "name": "Volcanic Scattershot"
+  },
+  "7084": {
+    "like": 4145,
+    "name": "Triggered Summon"
+  },
+  "7085": {
+    "like": 4518,
+    "lp": {
+      "opp": -500
+    },
+    "name": "Volcanic Doomfire"
+  },
+  "7086": {
+    "destroy": {
+      "cond": {
+        "kind": "target"
+      },
+      "side": "opp",
+      "zones": "monster"
+    },
+    "like": 4507,
+    "name": "Blaze Accelerator"
+  },
+  "7087": {
+    "draw": {
+      "opp": 1
+    },
+    "like": 4330,
+    "name": "Soul of Fire"
+  },
+  "7088": {
+    "destroy": {
+      "cond": {
+        "kind": "target"
+      },
+      "side": "opp",
+      "zones": "monster"
+    },
+    "like": 4507,
+    "name": "Tri-Blaze Accelerator",
+    "lp": {
+      "opp": -500
+    }
+  },
+  "7089": {
+    "like": 4145,
+    "lp": {
+      "self": -500
+    },
+    "name": "Wild Fire"
+  },
+  "7090": {
+    "like": 4804,
+    "name": "Firewall"
+  },
+  "7091": {
+    "cannot_special_summon": true,
+    "like": 0,
+    "lord_tribute": "any",
+    "name": "The Wicked Avatar"
+  },
+  "7092": {
+    "cannot_special_summon": true,
+    "destroy": {
+      "side": "both",
+      "zones": "all"
+    },
+    "like": 4342,
+    "lord_tribute": "any",
+    "name": "The Wicked Eraser",
+    "trigger_condition": {
+      "destroyed": true
+    },
+    "trigger_like": 5483
+  },
+  "7093": {
+    "like": 4428,
+    "name": "Spell Striker"
+  },
+  "7094": {
+    "like": 5521,
+    "name": "Exploder Dragon",
+    "trigger_event": "battle",
+    "trigger_like": 5521
+  },
+  "7095": {
+    "draw": {
+      "self": 2
+    },
+    "like": 4434,
+    "name": "Destiny Hero - Disk Commander",
+    "trigger_event": "summon",
+    "trigger_like": 5883,
+    "trigger_record_like": 4434
+  },
+  "7096": {
+    "cannot_special_summon": true,
+    "like": 4518,
+    "name": "Destiny Hero - Plasma"
+  },
+  "7102": {
+    "like": 4145,
+    "name": "Volcanic Blaster"
+  },
+  "7103": {
+    "like": 4518,
+    "lp": {
+      "opp": -500
+    },
+    "name": "Volcanic Slicer"
+  },
+  "7104": {
+    "like": 4518,
+    "lp": {
+      "opp": -600
+    },
+    "name": "Volcanic Hammerer"
+  },
+  "7105": {
+    "filter": {
+      "name_is": "Skyscraper"
+    },
+    "like": 6044,
+    "name": "Elemental Hero Captain Gold",
+    "zone": "deck_field_required"
+  },
+  "7106": {
+    "filter": {
+      "name_is": "Necrovalley"
+    },
+    "like": 6044,
+    "name": "Gravekeeper's Commandant",
+    "zone": "deck"
+  },
+  "7107": {
+    "filter": {
+      "name_is": "A Legendary Ocean"
+    },
+    "like": 6044,
+    "name": "Warrior of Atlantis",
+    "zone": "deck"
+  },
+  "7108": {
+    "filter": {
+      "name_is": "Jurassic World"
+    },
+    "like": 6044,
+    "name": "Destroyersaurus",
+    "zone": "deck"
+  },
+  "7109": {
+    "filter": {
+      "name_is": "The Sanctuary in the Sky"
+    },
+    "like": 6044,
+    "name": "Zeradias, Herald of Heaven",
+    "zone": "deck_field_required"
+  },
+  "7110": {
+    "filter": {
+      "name_is": "Pandemonium"
+    },
+    "like": 6044,
+    "name": "Archfiend General",
+    "zone": "deck_field_required"
+  },
+  "7111": {
+    "filter": {
+      "name_is": "Harpies' Hunting Ground"
+    },
+    "like": 6044,
+    "name": "Harpie Queen",
+    "zone": "deck"
+  },
+  "7112": {
+    "cannot_special_summon": true,
+    "like": 5835,
+    "name": "Sky Scourge Enrise"
+  },
+  "7113": {
+    "like": 5860,
+    "lp": {
+      "self": -1000
+    },
+    "name": "Sky Scourge Norleras"
+  },
+  "7114": {
+    "cannot_special_summon": true,
+    "like": 0,
+    "name": "Sky Scourge Invicil"
+  },
+  "7115": {
+    "like": 4072,
+    "name": "Goe Goe the Gallant Ninja"
+  },
+  "7116": {
+    "destroy": {
+      "cond": {
+        "kind": "target"
+      },
+      "side": "both",
+      "zones": "st"
+    },
+    "like": 5378,
+    "name": "Mei-Kou, Master of Barriers"
+  },
+  "7117": {
+    "destroy": {
+      "cond": {
+        "kind": "target"
+      },
+      "side": "opp",
+      "zones": "all"
+    },
+    "like": 5965,
+    "name": "Raiza the Storm Monarch"
+  },
+  "7118": {
+    "like": 4518,
+    "lp": {
+      "opp": -500
+    },
+    "name": "Seismic Crasher"
+  },
+  "7120": {
+    "destroy": {
+      "cond": {
+        "kind": "target"
+      },
+      "side": "opp",
+      "zones": "st"
+    },
+    "like": 4507,
+    "name": "Magna-Slash Dragon"
+  },
+  "7121": {
+    "destroy": {
+      "cond": {
+        "kind": "target"
+      },
+      "side": "opp",
+      "zones": "monster"
+    },
+    "like": 4507,
+    "name": "Gravi-Crush Dragon"
+  },
+  "7122": {
+    "count": 2,
+    "filter": {
+      "monster": true,
+      "name_has": "Crystal Beast"
+    },
+    "like": 5330,
+    "name": "Crystal Blessing",
+    "zone": "grave"
+  },
+  "7123": {
+    "like": 4145,
+    "name": "Crystal Abundance"
+  },
+  "7124": {
+    "filter": {
+      "monster": true,
+      "name_has": "Crystal Beast"
+    },
+    "like": 4989,
+    "name": "Crystal Promise",
+    "zone": "grave_summon"
+  },
+  "7125": {
+    "draw": {
+      "self": 1
+    },
+    "like": 4310,
+    "trigger_condition": {
+      "by_effect": true,
+      "destroyed": true,
+      "face_up": true,
+      "opponent_effect": true
+    },
+    "trigger_like": 4317,
+    "trigger_record_like": 6502
+  },
+  "7126": {
+    "destroy": {
+      "cond": {
+        "kind": "target"
+      },
+      "side": "opp",
+      "zones": "st"
+    },
+    "like": 4876,
+    "name": "Tornado"
+  },
+  "7127": {
+    "like": 4145,
+    "name": "Field Barrier"
+  },
+  "7128": {
+    "like": 4145,
+    "name": "\"A\" Cell Breeding Device"
+  },
+  "7129": {
+    "like": 4145,
+    "name": "Otherworld - The \"A\" Zone"
+  },
+  "7130": {
+    "destroy": {
+      "cond": {
+        "kind": "target"
+      },
+      "side": "opp",
+      "zones": "all"
+    },
+    "like": 4507,
+    "name": "Crystal Raigeki"
+  },
+  "7131": {
+    "count": 3,
+    "filter": {
+      "monster": true,
+      "name_has": "Volcanic"
+    },
+    "like": 5330,
+    "name": "Volcanic Recharge",
+    "to": "deck",
+    "zone": "grave"
+  },
+  "7132": {
+    "like": 4145,
+    "lp": {
+      "self": -1000
+    },
+    "name": "Terrible Deal"
+  },
+  "7133": {
+    "like": 4145,
+    "name": "Breakthrough!"
+  },
+  "7134": {
+    "like": 4145,
+    "lp": {
+      "self": -1000
+    },
+    "name": "Backs to the Wall"
+  },
+  "7135": {
+    "like": 4145,
+    "name": "Introduction to Gallantry"
+  },
+  "7136": {
+    "like": 4145,
+    "name": "Secrets of the Gallant"
+  },
+  "7137": {
+    "destroy": {
+      "cond": {
+        "kind": "opp_attack_monsters",
+        "n": 3
+      },
+      "side": "opp",
+      "zones": "monster"
+    },
+    "like": 4887
+  },
+  "7138": {
+    "like": 4145,
+    "name": "Hard-sellin' Goblin"
+  },
+  "7139": {
+    "like": 4145,
+    "name": "Hard-sellin' Zombie"
+  },
+  "7140": {
+    "like": 4145,
+    "name": "Mass Hypnosis"
+  },
+  "7141": {
+    "like": 4145,
+    "lp": {
+      "opp": -500
+    },
+    "name": "Gem Flash Energy"
+  },
+  "7142": {
+    "like": 4518,
+    "name": "Voltic Kong"
+  },
+  "7144": {
+    "like": 4518,
+    "name": "Gravity Behemoth"
+  },
+  "7145": {
+    "filter": {
+      "monster": true,
+      "name_has": "Six Samurai"
+    },
+    "like": 5330,
+    "name": "Grandmaster of the Six Samurai",
+    "trigger_condition": {
+      "by_effect": true,
+      "destroyed": true,
+      "opponent_effect": true
+    },
+    "trigger_like": 5483,
+    "zone": "grave"
+  },
+  "7146": {
+    "cannot_special_summon": true,
+    "like": 0,
+    "name": "Diabolos, King of the Abyss"
+  },
+  "7147": {
+    "like": 4518,
+    "name": "Lich Lord, King of the Underworld"
+  },
+  "7148": {
+    "like": 5250,
+    "name": "Prometheus, King of the Shadows"
+  },
+  "7149": {
+    "like": 4145,
+    "name": "Mist Archfiend"
+  },
+  "7150": {
+    "like": 4145,
+    "name": "Plague Wolf"
+  },
+  "7151": {
+    "count": 2,
+    "filter": {
+      "attribute": "dark",
+      "def_max": 0,
+      "def_min": 0,
+      "monster": true
+    },
+    "like": 5330,
+    "name": "Recurring Nightmare",
+    "zone": "grave"
+  },
+  "7152": {
+    "like": 4308,
+    "trigger_condition": {
+      "equipped_tributed": true
+    },
+    "trigger_like": 5724,
+    "trigger_record_like": 5724
+  },
+  "7153": {
+    "destroy": {
+      "cond": {
+        "kind": "target_all"
+      },
+      "side": "opp",
+      "zones": "st"
+    },
+    "like": 4891,
+    "name": "Eradicator Epidemic Virus"
+  },
+  "7154": {
+    "filter": {
+      "monster": true,
+      "name_has": "Chrysalis"
+    },
+    "like": 5328,
+    "name": "Cocoon Party",
+    "zone": "deck"
+  },
+  "7155": {
+    "filter": {
+      "name_is": "Neo-Spacian Air Hummingbird"
+    },
+    "like": 6764,
+    "name": "Chrysalis Chicky",
+    "zone": "hand_deck_summon"
+  },
+  "7156": {
+    "filter": {
+      "name_is": "Neo-Spacian Dark Panther"
+    },
+    "like": 6764,
+    "name": "Chrysalis Pantail",
+    "zone": "hand_deck_summon"
+  },
+  "7157": {
+    "filter": {
+      "name_is": "Neo-Spacian Glow Moss"
+    },
+    "like": 6764,
+    "name": "Chrysalis Pinny",
+    "zone": "hand_deck_summon"
+  },
+  "7158": {
+    "like": 4145,
+    "name": "Cocoon Veil"
+  },
+  "7159": {
+    "draw": {
+      "self": 2
+    },
+    "like": 4330,
+    "name": "Convert Contact"
+  },
+  "7160": {
+    "destroy": {
+      "cond": {
+        "kind": "target"
+      },
+      "side": "opp",
+      "zones": "monster"
+    },
+    "like": 4507,
+    "name": "Hero Counterattack"
+  },
+  "7161": {
+    "draw": {
+      "self": 2
+    },
+    "like": 4330,
+    "name": "Fifth Hope"
+  },
+  "7162": {
+    "like": 4145,
+    "name": "NEX"
+  },
+  "7163": {
+    "like": 4145,
+    "name": "Reverse of Neos"
+  },
+  "7164": {
+    "like": 4145,
+    "name": "Venom Swamp"
+  },
+  "7165": {
+    "filter": {
+      "level_max": 4,
+      "monster": true,
+      "type": "reptile"
+    },
+    "like": 6356,
+    "zone": "deck"
+  },
+  "7166": {
+    "draw": {
+      "discard": {
+        "count": 1
+      },
+      "mill": {
+        "count": 4,
+        "filter": {
+          "monster": true,
+          "type": "reptile"
+        }
+      },
+      "self": 0
+    },
+    "like": 4844,
+    "name": "Snake Rain"
+  },
+  "7167": {
+    "like": 4145,
+    "name": "Damage = Reptile"
+  },
+  "7168": {
+    "like": 4862,
+    "name": "Snake Deity's Command"
+  },
+  "7169": {
+    "like": 4145,
+    "name": "Rise of the Snake Deity"
+  },
+  "7170": {
+    "like": 4886,
+    "name": "Mirror Gate"
+  },
+  "7171": {
+    "cannot_special_summon": true,
+    "like": 4518,
+    "name": "Rainbow Dragon"
+  },
+  "7172": {
+    "filter": {
+      "name_is": "Neo-Spacian Flare Scarab"
+    },
+    "like": 6764,
+    "name": "Chrysalis Larva",
+    "zone": "hand_deck_summon"
+  },
+  "7173": {
+    "filter": {
+      "name_is": "Neo-Spacian Grand Mole"
+    },
+    "like": 6764,
+    "name": "Chrysalis Mole",
+    "zone": "hand_deck_summon"
+  },
+  "7174": {
+    "like": 4518,
+    "lp": {
+      "opp": -500
+    },
+    "name": "Neo-Spacian Marine Dolphin"
+  },
+  "7175": {
+    "like": 4507,
+    "name": "Elemental Hero Marine Neos"
+  },
+  "7176": {
+    "like": 5142,
+    "name": "Elemental Hero Darkbright"
+  },
+  "7177": {
+    "like": 4507,
+    "name": "Elemental Hero Magma Neos"
+  },
+  "7178": {
+    "like": 4518,
+    "name": "Necro Gardna"
+  },
+  "7179": {
+    "like": 4145,
+    "name": "Ojama Knight"
+  },
+  "7180": {
+    "like": 4518,
+    "name": "Venom Snake"
+  },
+  "7181": {
+    "like": 4518,
+    "name": "Venom Boa"
+  },
+  "7182": {
+    "like": 4518,
+    "name": "Venom Serpent"
+  },
+  "7188": {
+    "like": 4518,
+    "name": "Ritual Raven"
+  },
+  "7189": {
+    "like": 4145,
+    "name": "Venom Shot"
+  },
+  "7195": {
+    "like": 4518,
+    "name": "Elemental Hero Neos Alius"
+  },
+  "7196": {
+    "like": 5137,
+    "name": "Chthonian Emperor Dragon"
+  },
+  "7197": {
+    "like": 4518,
+    "name": "Aquarian Alessa"
+  },
+  "7198": {
+    "draw": {
+      "self": 1
+    },
+    "like": 5408,
+    "name": "Lucky Pied Piper",
+    "trigger_event": "battle",
+    "trigger_like": 5408
+  },
+  "7199": {
+    "like": 5381,
+    "name": "Grasschopper"
+  },
+  "7200": {
+    "like": 4518,
+    "name": "Goggle Golem"
+  },
+  "7201": {
+    "like": 4518,
+    "name": "Dawnbreak Gardna"
+  },
+  "7202": {
+    "filter": {
+      "monster": true,
+      "type": "fiend"
+    },
+    "like": 4989,
+    "name": "Doom Shaman",
+    "zone": "grave_summon"
+  },
+  "7203": {
+    "like": 4518,
+    "lp": {
+      "opp": -1000
+    },
+    "name": "King Pyron"
+  },
+  "7204": {
+    "like": 4518,
+    "name": "Shadow Delver"
+  },
+  "7205": {
+    "like": 4518,
+    "name": "Flint Lock"
+  },
+  "7206": {
+    "like": 5769,
+    "name": "Gravitic Orb",
+    "trigger_event": "summon",
+    "trigger_like": 5769,
+    "trigger_record_kind": 0,
+    "trigger_record_like": 5001
+  },
+  "7207": {
+    "like": 4547,
+    "name": "Phantom Cricket"
+  },
+  "7208": {
+    "draw": {
+      "self": 1
+    },
+    "like": 4518,
+    "name": "Crystal Seer"
+  },
+  "7209": {
+    "filter": {
+      "name_is": "Neo Space"
+    },
+    "like": 5328,
+    "name": "Neo Space Pathfinder",
+    "zone": "deck"
+  },
+  "7210": {
+    "destroy": {
+      "cond": {
+        "kind": "target"
+      },
+      "side": "both",
+      "zones": "monster"
+    },
+    "like": 6893,
+    "name": "Frost and Flame Dragon"
+  },
+  "7211": {
+    "destroy": {
+      "cond": {
+        "kind": "target"
+      },
+      "side": "both",
+      "zones": "st"
+    },
+    "like": 5810,
+    "name": "Desert Twister"
+  },
+  "7212": {
+    "destroy": {
+      "cond": {
+        "kind": "target"
+      },
+      "side": "opp",
+      "zones": "monster"
+    },
+    "like": 5521,
+    "name": "Razor Lizard"
+  },
+  "7213": {
+    "double_tribute_normal": "light",
+    "like": 0,
+    "name": "Light Effigy"
+  },
+  "7214": {
+    "double_tribute_normal": "dark",
+    "like": 0,
+    "name": "Dark Effigy"
+  },
+  "7215": {
+    "filter": {
+      "level_max": 4,
+      "monster": true,
+      "type": "zombie"
+    },
+    "like": 4989,
+    "name": "Zombie Master",
+    "zone": "grave_summon"
+  },
+  "7216": {
+    "like": 4145,
+    "name": "Cocoon Rebirth"
+  },
+  "7217": {
+    "like": 4145,
+    "name": "Cyberdark Impact!"
+  },
+  "7218": {
+    "destroy": {
+      "cond": {
+        "kind": "target"
+      },
+      "side": "both",
+      "zones": "monster"
+    },
+    "like": 4507,
+    "name": "Flint Missile"
+  },
+  "7219": {
+    "like": 4145,
+    "name": "Double Summon"
+  },
+  "7220": {
+    "filter": {
+      "level_min": 5,
+      "monster": true,
+      "normal": true
+    },
+    "like": 5328,
+    "zone": "deck"
+  },
+  "7221": {
+    "like": 4145,
+    "name": "Creature Seizure"
+  },
+  "7222": {
+    "like": 4145,
+    "name": "Phalanx Pike"
+  },
+  "7223": {
+    "filter": {
+      "monster": true
+    },
+    "like": 4989,
+    "name": "Symbols of Duty",
+    "zone": "grave_summon"
+  },
+  "7224": {
+    "like": 4145,
+    "name": "Amulet of Ambition"
+  },
+  "7225": {
+    "like": 4310,
+    "name": "Broken Bamboo Sword"
+  },
+  "7226": {
+    "like": 4804,
+    "name": "Ambush Fangs"
+  },
+  "7227": {
+    "like": 4145,
+    "lp": {
+      "opp": -700
+    },
+    "name": "Venom Burn"
+  },
+  "7228": {
+    "draw": {
+      "self": 2
+    },
+    "like": 4330,
+    "name": "Common Charity"
+  },
+  "7229": {
+    "draw": {
+      "self": 1
+    },
+    "like": 4330,
+    "name": "Destructive Draw",
+    "lp": {
+      "self": -3000
+    }
+  },
+  "7230": {
+    "like": 4145,
+    "name": "Shield Spear"
+  },
+  "7231": {
+    "like": 5142,
+    "name": "Strike Slash"
+  },
+  "7232": {
+    "like": 4145,
+    "name": "Spell Reclamation"
+  },
+  "7233": {
+    "like": 4145,
+    "name": "Trap Reclamation"
+  },
+  "7234": {
+    "like": 4353,
+    "lp": {
+      "opp": 3000
+    },
+    "name": "Gift Card"
+  },
+  "7235": {
+    "draw": {
+      "opp": 2
+    },
+    "like": 4844,
+    "name": "The Gift of Greed"
+  },
+  "7236": {
+    "like": 5263,
+    "name": "Counter Counter"
+  },
+  "7243": {
+    "filter": {
+      "name_has": "Blaze Accelerator"
+    },
+    "like": 5328,
+    "name": "Volcanic Rocket",
+    "zone": "deck"
+  },
+  "7244": {
+    "cannot_special_summon": true,
+    "like": 4518,
+    "name": "Felgrand Dragon"
+  },
+  "7245": {
+    "like": 5408,
+    "lp": {
+      "opp": "destroyed_atk"
+    },
+    "trigger_event": "battle",
+    "trigger_like": 5408
+  },
+  "7246": {
+    "filter": {
+      "level_min": 7,
+      "monster": true
+    },
+    "like": 5330,
+    "name": "Herald of Creation",
+    "zone": "grave"
+  },
+  "7247": {
+    "like": 4518,
+    "name": "Decoy Dragon"
+  },
+  "7248": {
+    "draw": {
+      "discard": {
+        "count": 1,
+        "filter": {
+          "level_max": 8,
+          "level_min": 8,
+          "monster": true
+        }
+      },
+      "self": 2
+    },
+    "like": 4844,
+    "name": "Trade-In"
+  },
+  "7251": {
+    "like": 4145,
+    "lp": {
+      "self": -1000
+    },
+    "name": "The Big Saturn"
+  },
+  "7252": {
+    "like": 5142,
+    "name": "Elemental Hero Plasma Vice"
+  },
+  "7253": {
+    "like": 5142,
+    "name": "Paleozoic Fossil Knight - Skullking"
+  },
+  "7254": {
+    "like": 4145,
+    "lp": {
+      "self": -500
+    },
+    "name": "Over Limit"
+  },
+  "7255": {
+    "like": 4145,
+    "name": "Contact Out"
+  },
+  "7256": {
+    "filter": {
+      "monster": true,
+      "normal": true
+    },
+    "like": 4989,
+    "name": "Swing of Memories",
+    "zone": "grave_summon"
+  },
+  "7257": {
+    "like": 5142,
+    "name": "Evil Hero Inferno Wing"
+  },
+  "7258": {
+    "like": 5142,
+    "name": "Evil Hero Malicious Edge"
+  },
+  "7259": {
+    "like": 5137,
+    "name": "Evil Hero Infernal Gainer"
+  },
+  "7260": {
+    "destroy": {
+      "cond": {
+        "kind": "target"
+      },
+      "side": "both",
+      "zones": "monster"
+    },
+    "like": 4507,
+    "name": "Evil Hero Lightning Golem"
+  },
+  "7261": {
+    "cannot_special_summon": true,
+    "like": 4145,
+    "name": "Evil Hero Dark Gaia"
+  },
+  "7262": {
+    "like": 4145,
+    "name": "Dark Fusion"
+  },
+  "7263": {
+    "like": 5142,
+    "name": "Paleozoic Fossil Dragon - Skullgeoth"
+  },
+  "7265": {
+    "cannot_special_summon": true,
+    "like": 0,
+    "name": "Cloudian - Ghost Fog"
+  },
+  "7267": {
+    "like": 4518,
+    "name": "Cloudian - Sheep Cloud"
+  },
+  "7268": {
+    "like": 5408,
+    "lp": {
+      "opp": -800
+    },
+    "name": "Cloudian - Poison Cloud",
+    "trigger_event": "battle",
+    "trigger_like": 5408
+  },
+  "7269": {
+    "draw": {
+      "self": 1
+    },
+    "like": 4330,
+    "name": "Diamond-Dust Cyclone"
+  },
+  "7270": {
+    "filter": {
+      "level_max": 4,
+      "monster": true,
+      "name_has": "Cloudian"
+    },
+    "like": 6572,
+    "name": "Summon Cloud",
+    "zone": "hand"
+  },
+  "7271": {
+    "draw": {
+      "self": 2
+    },
+    "like": 4330,
+    "name": "Lucky Cloud"
+  },
+  "7272": {
+    "like": 4865,
+    "lp": {
+      "opp": -500
+    },
+    "name": "Natural Disaster"
+  },
+  "7273": {
+    "destroy": {
+      "cond": {
+        "kind": "target"
+      },
+      "side": "both",
+      "zones": "st"
+    },
+    "like": 4242,
+    "name": "Rain Storm"
+  },
+  "7275": {
+    "like": 4507,
+    "name": "Elemental Hero Chaos Neos"
+  },
+  "7282": {
+    "cannot_special_summon": true,
+    "like": 4518,
+    "name": "Gladiator Beast Alexander"
+  },
+  "7283": {
+    "cannot_special_summon": true,
+    "like": 4518,
+    "name": "Gladiator Beast Spartacus"
+  },
+  "7284": {
+    "destroy": {
+      "cond": {
+        "kind": "target"
+      },
+      "side": "opp",
+      "zones": "monster"
+    },
+    "like": 4507,
+    "name": "Gladiator Beast Murmillo"
+  },
+  "7285": {
+    "destroy": {
+      "cond": {
+        "kind": "target"
+      },
+      "side": "both",
+      "zones": "st"
+    },
+    "like": 4507,
+    "name": "Gladiator Beast Bestiari"
+  },
+  "7286": {
+    "like": 4507,
+    "name": "Gladiator Beast Laquari"
+  },
+  "7287": {
+    "like": 4507,
+    "name": "Gladiator Beast Hoplomus"
+  },
+  "7288": {
+    "like": 5137,
+    "name": "Gladiator Beast Dimacari"
+  },
+  "7289": {
+    "like": 4518,
+    "name": "Gladiator Beast Secutor"
+  },
+  "7291": {
+    "like": 4865,
+    "lp": {
+      "opp": -500
+    },
+    "name": "Witch Doctor of Sparta"
+  },
+  "7292": {
+    "like": 4518,
+    "name": "Infinity Dark"
+  },
+  "7293": {
+    "like": 4518,
+    "name": "Magical Reflect Slime"
+  },
+  "7294": {
+    "like": 4518,
+    "name": "Ancient Gear Knight"
+  },
+  "7295": {
+    "like": 4428,
+    "name": "Goblin Black Ops"
+  },
+  "7296": {
+    "destroy": {
+      "cond": {
+        "kind": "target_all"
+      },
+      "side": "opp",
+      "zones": "monster"
+    },
+    "like": 4343,
+    "name": "Gambler of Legend"
+  },
+  "7297": {
+    "destroy": {
+      "cond": {
+        "kind": "target"
+      },
+      "side": "both",
+      "zones": "monster"
+    },
+    "like": 4507,
+    "name": "Enishi, Shien's Chancellor"
+  },
+  "7298": {
+    "like": 4507,
+    "name": "Spirit of the Six Samurai"
+  },
+  "7299": {
+    "destroy": {
+      "cond": {
+        "kind": "target"
+      },
+      "side": "both",
+      "zones": "st"
+    },
+    "like": 4507,
+    "name": "Alien Telepath"
+  },
+  "7300": {
+    "like": 4518,
+    "name": "Alien Hypno"
+  },
+  "7301": {
+    "like": 4507,
+    "name": "Superalloy Beast Raptinus"
+  },
+  "7302": {
+    "like": 4507,
+    "name": "Gladiator Beast Gaiodiaz"
+  },
+  "7303": {
+    "like": 4648,
+    "name": "Gladiator Beast Heraklinos"
+  },
+  "7304": {
+    "like": 4145,
+    "name": "Fog Control"
+  },
+  "7305": {
+    "like": 4145,
+    "name": "Cloudian Squall"
+  },
+  "7306": {
+    "like": 4145,
+    "name": "Super Double Summon"
+  },
+  "7307": {
+    "like": 4145,
+    "name": "Colosseum - Cage of the Gladiator Beasts"
+  },
+  "7308": {
+    "like": 4145,
+    "name": "Gladiator Beast's Battle Halberd"
+  },
+  "7309": {
+    "like": 4310,
+    "trigger_condition": {
+      "equipped_to_deck": true
+    },
+    "trigger_like": 5724,
+    "trigger_record_like": 5724
+  },
+  "7310": {
+    "like": 4145,
+    "name": "Gladiator Beast's Battle Manica"
+  },
+  "7311": {
+    "draw": {
+      "discard": {
+        "count": 2,
+        "filter": {
+          "name_has": "Gladiator Beast"
+        },
+        "to": "deck"
+      },
+      "self": 3
+    },
+    "like": 4844,
+    "name": "Gladiator Beast's Respite"
+  },
+  "7312": {
+    "count": 3,
+    "filter": {
+      "monster": true,
+      "name_has": "Gladiator Beast"
+    },
+    "like": 5330,
+    "name": "Gladiator's Return",
+    "then_draw": 1,
+    "to": "deck",
+    "zone": "grave"
+  },
+  "7313": {
+    "like": 4145,
+    "name": "Soul Devouring Bamboo Sword"
+  },
+  "7314": {
+    "like": 4145,
+    "name": "Cunning of the Six Samurai"
+  },
+  "7315": {
+    "like": 4145,
+    "name": "\"A\" Cell Incubator"
+  },
+  "7316": {
+    "like": 4145,
+    "lp": {
+      "opp": -300
+    },
+    "name": "Updraft"
+  },
+  "7317": {
+    "like": 4145,
+    "name": "Release from Stone"
+  },
+  "7318": {
+    "like": 4145,
+    "name": "Light-Imprisoning Mirror"
+  },
+  "7319": {
+    "like": 4145,
+    "name": "Shadow-Imprisoning Mirror"
+  },
+  "7320": {
+    "like": 4862,
+    "name": "Disarm"
+  },
+  "7321": {
+    "like": 4863,
+    "name": "Parry"
+  },
+  "7322": {
+    "like": 4145,
+    "name": "Swiftstrike Armor"
+  },
+  "7323": {
+    "filter": {
+      "monster": true,
+      "name_has": "Six Samurai"
+    },
+    "like": 4989,
+    "name": "Double-Edged Sword Technique",
+    "zone": "grave_summon"
+  },
+  "7324": {
+    "like": 4145,
+    "lp": {
+      "self": 1000
+    },
+    "name": "Energy-Absorbing Monolith"
+  },
+  "7325": {
+    "destroy": {
+      "cond": {
+        "kind": "target_all"
+      },
+      "side": "opp",
+      "zones": "monster"
+    },
+    "like": 4343,
+    "name": "Cell Explosion Virus"
+  },
+  "7326": {
+    "like": 4145,
+    "lp": {
+      "opp": -1000
+    },
+    "name": "Detonator Circle \"A\""
+  },
+  "7327": {
+    "like": 4145,
+    "name": "Interdimensional Warp"
+  },
+  "7328": {
+    "like": 4145,
+    "name": "Foolish Revival"
+  },
+  "7329": {
+    "like": 4145,
+    "name": "An Unfortunate Report"
+  },
+  "7331": {
+    "like": 4518,
+    "name": "Fiendish Engine Ω"
+  },
+  "7332": {
+    "like": 4145,
+    "lp": {
+      "self": -500
+    },
+    "name": "Gemini Summoner"
+  },
+  "7333": {
+    "like": 5142,
+    "name": "Ocean's Keeper"
+  },
+  "7334": {
+    "cannot_special_summon": true,
+    "like": 4145,
+    "name": "Thousand-Eyes Jellyfish"
+  },
+  "7335": {
+    "destroy": {
+      "cond": {
+        "kind": "target"
+      },
+      "side": "both",
+      "zones": "monster"
+    },
+    "like": 4507,
+    "name": "Cranium Fish"
+  },
+  "7336": {
+    "like": 4518,
+    "name": "Abyssal Kingshark"
+  },
+  "7337": {
+    "destroy": {
+      "cond": {
+        "kind": "target_all"
+      },
+      "side": "both",
+      "zones": "monster"
+    },
+    "like": 4342,
+    "name": "Mormolith"
+  },
+  "7338": {
+    "like": 5408,
+    "lp": {
+      "opp": -400
+    },
+    "trigger_event": "battle",
+    "trigger_like": 5408
+  },
+  "7339": {
+    "like": 4518,
+    "name": "Phantom Dragonray Bronto"
+  },
+  "7340": {
+    "filter": {
+      "monster": true,
+      "type": "zombie"
+    },
+    "like": 4989,
+    "name": "Il Blud",
+    "zone": "grave_summon"
+  },
+  "7341": {
+    "like": 4518,
+    "name": "Blazewing Butterfly"
+  },
+  "7342": {
+    "cannot_special_summon": true,
+    "like": 4145,
+    "name": "Armityle the Chaos Phantom"
+  },
+  "7343": {
+    "like": 4648,
+    "name": "White Night Dragon"
+  },
+  "7344": {
+    "cannot_special_summon": true,
+    "like": 4518,
+    "name": "Arcana Force Ex - The Light Ruler"
+  },
+  "7345": {
+    "like": 4507,
+    "name": "Card Blocker"
+  },
+  "7346": {
+    "destroy": {
+      "cond": {
+        "kind": "target_all"
+      },
+      "side": "opp",
+      "zones": "all"
+    },
+    "like": 4891,
+    "name": "Beast King Barbaros"
+  },
+  "7348": {
+    "draw": {
+      "discard": {
+        "count": 2
+      },
+      "self": 2
+    },
+    "like": 6102,
+    "name": "Mad Reloader",
+    "trigger_like": 6102
+  },
+  "7349": {
+    "like": 5263,
+    "name": "Dark Bribe"
+  },
+  "7350": {
+    "like": 4886,
+    "lp": {
+      "opp": -1000
+    },
+    "name": "Chaos Burst"
+  },
+  "7351": {
+    "like": 4518,
+    "name": "Phantom of Chaos"
+  },
+  "7352": {
+    "like": 4518,
+    "lp": {
+      "opp": -1000
+    },
+    "name": "Nurse Reficule the Fallen One"
+  },
+  "7353": {
+    "like": 4145,
+    "lp": {
+      "self": 1000
+    },
+    "name": "Dark Cure"
+  },
+  "7354": {
+    "like": 4145,
+    "name": "Brutal Potion"
+  },
+  "7359": {
+    "filter": {
+      "monster": true,
+      "type": "zombie"
+    },
+    "like": 4989,
+    "name": "Mezuki",
+    "zone": "grave_summon"
+  },
+  "7367": {
+    "double_tribute_normal": "earth",
+    "like": 0,
+    "name": "Earth Effigy"
+  },
+  "7368": {
+    "double_tribute_normal": "wind",
+    "like": 0,
+    "name": "Wind Effigy"
+  },
+  "7369": {
+    "like": 5142,
+    "name": "Gemini Lancer"
+  },
+  "7370": {
+    "like": 4518,
+    "lp": {
+      "self": -1000
+    },
+    "name": "Imprisoned Queen Archfiend"
+  },
+  "7374": {
+    "cannot_special_summon": true,
+    "like": 0,
+    "lord_tribute": "beast",
+    "name": "Chimaera, the Master of Beasts"
+  },
+  "7375": {
+    "cannot_special_summon": true,
+    "like": 0,
+    "lord_tribute": "thunder",
+    "name": "Emperor of Lightning"
+  },
+  "7376": {
+    "draw": {
+      "self": 1
+    },
+    "like": 4518,
+    "name": "Evil Hero Infernal Prodigy"
+  },
+  "7377": {
+    "destroy": {
+      "cond": {
+        "kind": "target"
+      },
+      "side": "both",
+      "zones": "st"
+    },
+    "like": 4507,
+    "name": "Armor Breaker"
+  },
+  "7378": {
+    "cannot_special_summon": true,
+    "like": 4145,
+    "name": "Evil Hero Wild Cyclone"
+  },
+  "7379": {
+    "like": 4518,
+    "lp": {
+      "opp": -1000
+    },
+    "name": "Evil Hero Infernal Sniper"
+  },
+  "7380": {
+    "cannot_special_summon": true,
+    "like": 4145,
+    "name": "Evil Hero Malicious Fiend"
+  },
+  "7381": {
+    "like": 4145,
+    "name": "Dark Calling"
+  },
+  "7382": {
+    "like": 4145,
+    "name": "Revoke Fusion"
+  },
+  "7383": {
+    "like": 5263,
+    "name": "Hero's Rule 2"
+  },
+  "7384": {
+    "like": 4518,
+    "lp": {
+      "opp": -300
+    },
+    "name": "Phantom Skyblaster"
+  },
+  "7385": {
+    "destroy": {
+      "cond": {
+        "filter": {
+          "monster": true
+        },
+        "kind": "target"
+      },
+      "side": "both",
+      "zones": "all"
+    },
+    "like": 5484,
+    "name": "Grave Squirmer",
+    "trigger_like": 5484
+  },
+  "7386": {
+    "cannot_special_summon": true,
+    "like": 4518,
+    "name": "Grinder Golem"
+  },
+  "7387": {
+    "like": 4145,
+    "name": "Crystal Counter"
+  },
+  "7388": {
+    "like": 4145,
+    "name": "Crystal Pair"
+  },
+  "7389": {
+    "draw": {
+      "discard": {
+        "both": true,
+        "count": 2
+      },
+      "opp": 2,
+      "self": 2
+    },
+    "like": 4844,
+    "name": "Hand Destruction"
+  },
+  "7391": {
+    "like": 4145,
+    "name": "Crystal Tree"
+  },
+  "7392": {
+    "cannot_special_summon": true,
+    "like": 4518,
+    "name": "Exodius the Ultimate Forbidden Lord"
+  },
+  "7397": {
+    "like": 4145,
+    "name": "Thunder King Rai-Oh",
+    "special_summon_lock": "both"
+  },
+  "7398": {
+    "like": 4518,
+    "name": "Deep Diver"
+  },
+  "7400": {
+    "like": 4886,
+    "name": "Dimensional Prison"
+  },
+  "7401": {
+    "draw": {
+      "self": 2
+    },
+    "like": 4330,
+    "name": "Vortex Trooper"
+  },
+  "7403": {
+    "cannot_special_summon": true,
+    "like": 4507,
+    "name": "Chimeratech Fortress Dragon"
+  },
+  "7404": {
+    "like": 4518,
+    "name": "Fog King"
+  },
+  "7405": {
+    "like": 4145,
+    "name": "Fossil Dyna Pachycephalo",
+    "special_summon_lock": "both"
+  },
+  "7406": {
+    "cannot_special_summon": true,
+    "like": 4518,
+    "name": "Rainbow Dark Dragon"
+  },
+  "7407": {
+    "like": 4518,
+    "name": "Samsara Lotus"
+  },
+  "7408": {
+    "like": 4518,
+    "name": "Regenerating Rose"
+  },
+  "7412": {
+    "like": 4518,
+    "name": "Armored Cybern"
+  },
+  "7413": {
+    "like": 4518,
+    "name": "Cyber Valley"
+  },
+  "7414": {
+    "draw": {
+      "self": 1
+    },
+    "like": 4330,
+    "name": "Cyber Ouroboros"
+  },
+  "7415": {
+    "like": 4145,
+    "lp": {
+      "opp": -1000
+    },
+    "name": "Volcanic Counter"
+  },
+  "7416": {
+    "like": 4518,
+    "lp": {
+      "opp": -500
+    },
+    "name": "Destiny Hero - Dunker"
+  },
+  "7417": {
+    "like": 4518,
+    "name": "Destiny Hero - Departed"
+  },
+  "7418": {
+    "like": 4518,
+    "name": "Dark Horus"
+  },
+  "7419": {
+    "cannot_special_summon": true,
+    "like": 4518,
+    "name": "The Dark Creator"
+  },
+  "7420": {
+    "destroy": {
+      "cond": {
+        "kind": "target"
+      },
+      "side": "both",
+      "zones": "st"
+    },
+    "like": 4507,
+    "name": "Dark Nephthys"
+  },
+  "7421": {
+    "destroy": {
+      "cond": {
+        "kind": "target"
+      },
+      "side": "both",
+      "zones": "all"
+    },
+    "like": 4507,
+    "name": "Dark Armed Dragon"
+  },
+  "7422": {
+    "like": 4507,
+    "name": "Dark Crusader"
+  },
+  "7423": {
+    "like": 4518,
+    "name": "Armageddon Knight"
+  },
+  "7424": {
+    "like": 4518,
+    "name": "Doomsday Horror"
+  },
+  "7425": {
+    "like": 4648,
+    "name": "Obsidian Dragon"
+  },
+  "7426": {
+    "like": 4518,
+    "lp": {
+      "opp": -800
+    }
+  },
+  "7427": {
+    "filter": {
+      "monster": true,
+      "type": "plant"
+    },
+    "like": 4989,
+    "name": "Gigaplant",
+    "zone": "grave_summon"
+  },
+  "7428": {
+    "like": 4518,
+    "name": "Future Samurai"
+  },
+  "7429": {
+    "draw": {
+      "self": 1
+    },
+    "like": 5408,
+    "name": "Vengeful Shinobi",
+    "trigger_event": "battle",
+    "trigger_like": 5408
+  },
+  "7430": {
+    "like": 4518,
+    "name": "The Immortal Bushi"
+  },
+  "7431": {
+    "like": 4518,
+    "name": "Field-Commander Rahz"
+  },
+  "7432": {
+    "filter": {
+      "monster": true,
+      "name_has": "Gladiator Beast"
+    },
+    "like": 4989,
+    "name": "Gladiator Beast Darius",
+    "zone": "grave_summon"
+  },
+  "7434": {
+    "like": 4648,
+    "name": "Superancient Deepsea King Coelacanth"
+  },
+  "7435": {
+    "like": 5195,
+    "lp": {
+      "opp": -1500
+    }
+  },
+  "7437": {
+    "like": 4518,
+    "name": "Sea Koala"
+  },
+  "7438": {
+    "like": 4145,
+    "name": "Blue Thunder T-45"
+  },
+  "7439": {
+    "destroy": {
+      "cond": {
+        "filter": {
+          "monster": true,
+          "type": "machine"
+        },
+        "kind": "target_all"
+      },
+      "side": "both",
+      "zones": "monster"
+    },
+    "like": 5139,
+    "name": "Magnetic Mosquito",
+    "trigger_event": "summon",
+    "trigger_like": 5139
+  },
+  "7441": {
+    "draw": {
+      "self": 1
+    },
+    "like": 5210,
+    "name": "Neo-Spacian Twinkle Moss"
+  },
+  "7442": {
+    "destroy": {
+      "cond": {
+        "kind": "target_all"
+      },
+      "side": "both",
+      "zones": "st"
+    },
+    "like": 4891,
+    "name": "Elemental Hero Storm Neos"
+  },
+  "7443": {
+    "cannot_special_summon": true,
+    "like": 4145,
+    "name": "Rainbow Neos"
+  },
+  "7444": {
+    "like": 4145,
+    "name": "Rainbow Veil"
+  },
+  "7445": {
+    "like": 4145,
+    "name": "Super Polymerization"
+  },
+  "7446": {
+    "like": 4310,
+    "name": "Vicious Claw"
+  },
+  "7447": {
+    "like": 4145,
+    "name": "Instant Neo Space"
+  },
+  "7448": {
+    "like": 4145,
+    "lp": {
+      "opp": -1000
+    },
+    "name": "Mirage Tube"
+  },
+  "7449": {
+    "like": 4145,
+    "name": "Spell Chronicle"
+  },
+  "7450": {
+    "like": 4145,
+    "name": "Dimension Explosion"
+  },
+  "7451": {
+    "like": 4145,
+    "name": "Cybernetic Zone"
+  },
+  "7452": {
+    "draw": {
+      "self": 3
+    },
+    "like": 4330,
+    "name": "The Beginning of the End"
+  },
+  "7454": {
+    "like": 4145,
+    "name": "Fires of Doomsday"
+  },
+  "7455": {
+    "like": 4145,
+    "name": "Unleash Your Power!"
+  },
+  "7456": {
+    "like": 4145,
+    "name": "Chain Summoning"
+  },
+  "7458": {
+    "draw": {
+      "self": 2
+    },
+    "like": 4844,
+    "name": "Six Samurai United"
+  },
+  "7459": {
+    "like": 4145,
+    "name": "Gladiator Beast's Battle Archfiend Shield"
+  },
+  "7460": {
+    "filter": {
+      "level_max": 4,
+      "monster": true,
+      "name_has": "Gladiator Beast"
+    },
+    "like": 5328,
+    "zone": "deck"
+  },
+  "7461": {
+    "like": 4145,
+    "name": "Dark World Grimoire"
+  },
+  "7462": {
+    "filter": {
+      "monster": true,
+      "name_has": "Rainbow"
+    },
+    "like": 5328,
+    "name": "Rainbow Path",
+    "zone": "deck"
+  },
+  "7463": {
+    "like": 4145,
+    "lp": {
+      "self": 1000
+    },
+    "name": "Rainbow Life"
+  },
+  "7464": {
+    "like": 4145,
+    "name": "Sinister Seeds"
+  },
+  "7465": {
+    "like": 4886,
+    "name": "Hate Buster"
+  },
+  "7466": {
+    "like": 4145,
+    "name": "Chain Material"
+  },
+  "7467": {
+    "draw": {
+      "self": 1
+    },
+    "like": 5210,
+    "name": "Alchemy Cycle"
+  },
+  "7468": {
+    "destroy": {
+      "cond": {
+        "kind": "target"
+      },
+      "side": "opp",
+      "zones": "monster"
+    },
+    "like": 5776,
+    "name": "Cybernetic Hidden Technology"
+  },
+  "7469": {
+    "draw": {
+      "self": 2
+    },
+    "like": 4330,
+    "name": "Dark Spirit Art - Greed"
+  },
+  "7470": {
+    "like": 5263,
+    "name": "Dark Illusion"
+  },
+  "7471": {
+    "like": 4145,
+    "name": "Escape from the Dark Dimension"
+  },
+  "7472": {
+    "destroy": {
+      "cond": {
+        "kind": "target_all"
+      },
+      "side": "both",
+      "zones": "monster"
+    },
+    "like": 4342,
+    "name": "Gemini Trap Hole"
+  },
+  "7473": {
+    "like": 5263,
+    "name": "Drastic Drop Off"
+  },
+  "7474": {
+    "like": 4145,
+    "name": "All-Out Attacks"
+  },
+  "7475": {
+    "filter": {
+      "level_max": 4,
+      "monster": true,
+      "name_has": "Gladiator Beast"
+    },
+    "like": 6572,
+    "name": "Double Tag Team",
+    "zone": "hand"
+  },
+  "7476": {
+    "destroy": {
+      "cond": {
+        "kind": "target"
+      },
+      "side": "opp",
+      "zones": "all"
+    },
+    "like": 6709,
+    "name": "Offering to the Snake Deity"
+  },
+  "7477": {
+    "like": 4145,
+    "name": "Cry Havoc!"
+  },
+  "7478": {
+    "like": 4145,
+    "name": "Transmigration Break"
+  },
+  "7479": {
+    "draw": {
+      "discard": {
+        "count": 2
+      },
+      "self": 0
+    },
+    "like": 5210,
+    "name": "Fine"
+  },
+  "7480": {
+    "destroy": {
+      "cond": {
+        "kind": "target"
+      },
+      "side": "both",
+      "zones": "st"
+    },
+    "like": 4507,
+    "name": "Gladiator Beast Octavius"
+  },
+  "7481": {
+    "draw": {
+      "self": 1
+    },
+    "like": 4330,
+    "name": "Gladiator Beast Torax"
+  },
+  "7482": {
+    "like": 4518,
+    "name": "Test Tiger"
+  },
+  "7483": {
+    "like": 4145,
+    "name": "Defensive Tactics"
+  },
+  "7484": {
+    "filter": {
+      "name_is": "Dragon Ice"
+    },
+    "like": 6572,
+    "name": "Dragon Ice",
+    "zone": "hand"
+  },
+  "7485": {
+    "draw": {
+      "self": 2
+    },
+    "like": 4330,
+    "name": "Tongue Twister"
+  },
+  "7486": {
+    "like": 4518,
+    "name": "Skreech"
+  },
+  "7487": {
+    "draw": {
+      "self": 2
+    },
+    "like": 4330,
+    "name": "Royal Firestorm Guards"
+  },
+  "7488": {
+    "like": 4145,
+    "name": "Veil of Darkness"
+  },
+  "7489": {
+    "destroy": {
+      "cond": {
+        "kind": "target"
+      },
+      "side": "opp",
+      "zones": "monster"
+    },
+    "like": 4507,
+    "name": "Security Orb"
+  },
+  "7490": {
+    "like": 4518,
+    "lp": {
+      "opp": -1000
+    },
+    "name": "Fire Trooper"
+  },
+  "7491": {
+    "like": 4518,
+    "name": "Elemental Hero Prisma"
+  },
+  "7492": {
+    "like": 4518,
+    "name": "Card Ejector"
+  },
+  "7493": {
+    "like": 4145,
+    "name": "Arms Hole"
+  },
+  "7494": {
+    "like": 4310,
+    "name": "Assault Armor"
+  },
+  "7495": {
+    "like": 4145,
+    "name": "Evil Blast"
+  },
+  "7514": {
+    "like": 4518,
+    "name": "Gaap the Divine Soldier"
+  },
+  "7516": {
+    "like": 5965,
+    "lp": {
+      "opp": -1000
+    },
+    "name": "Caius the Shadow Monarch"
+  },
+  "7517": {
+    "like": 4507,
+    "name": "Dimensional Alchemist"
+  },
+  "7518": {
+    "like": 4518,
+    "name": "Samsara Kaiser"
+  },
+  "7519": {
+    "like": 4145,
+    "name": "D.D.R. - Different Dimension Reincarnation"
+  },
+  "7520": {
+    "like": 4145,
+    "name": "By Order of the Emperor"
+  },
+  "7522": {
+    "cannot_special_summon": true,
+    "like": 4518,
+    "name": "Evil Dragon Ananta"
+  },
+  "7526": {
+    "like": 4518,
+    "name": "Winged Kuriboh LV9"
+  },
+  "7528": {
+    "like": 4145,
+    "name": "Blizzard Warrior"
+  },
+  "7530": {
+    "like": 4518,
+    "name": "Thunder Bird of Mist Valley"
+  },
+  "7533": {
+    "like": 5408,
+    "lp": {
+      "opp": -500
+    },
+    "name": "Flamvell Dragnov",
+    "trigger_event": "battle",
+    "trigger_like": 5408
+  },
+  "7536": {
+    "draw": {
+      "self": 1
+    },
+    "like": 4518,
+    "name": "X-Saber Axel"
+  },
+  "7538": {
+    "like": 4145,
+    "name": "X-Saber Urz"
+  },
+  "7543": {
+    "destroy": {
+      "cond": {
+        "kind": "target"
+      },
+      "side": "both",
+      "zones": "st"
+    },
+    "like": 4507,
+    "name": "Worm Apocalypse",
+    "trigger_event": "summon",
+    "trigger_like": 4507
+  },
+  "7544": {
+    "like": 4518,
+    "name": "Worm Barses"
+  },
+  "7546": {
+    "like": 5769,
+    "name": "Worm Dimikles",
+    "trigger_event": "summon",
+    "trigger_like": 5769,
+    "trigger_record_like": 5037
+  },
+  "7547": {
+    "cannot_special_summon": true,
+    "like": 0,
+    "name": "Worm Erokin"
+  },
+  "7553": {
+    "destroy": {
+      "cond": {
+        "kind": "target_all"
+      },
+      "side": "both",
+      "zones": "all"
+    },
+    "like": 4891,
+    "name": "Wrath of Neos"
+  },
+  "7554": {
+    "destroy": {
+      "cond": {
+        "kind": "target"
+      },
+      "side": "opp",
+      "zones": "all"
+    },
+    "like": 4507,
+    "name": "Detonating"
+  },
+  "7555": {
+    "like": 4145,
+    "name": "Berserker Crush"
+  },
+  "7556": {
+    "destroy": {
+      "cond": {
+        "kind": "target"
+      },
+      "side": "opp",
+      "zones": "all"
+    },
+    "like": 4856,
+    "name": "Evolution Burst"
+  },
+  "7557": {
+    "filter": {
+      "monster": true,
+      "type": "dragon"
+    },
+    "like": 4989,
+    "name": "Red-Eyes Darkness Metal Dragon",
+    "zone": "grave_summon"
+  },
+  "7558": {
+    "like": 4518,
+    "name": "Earth Giant Gaia Plate"
+  },
+  "7559": {
+    "cannot_special_summon": true,
+    "like": 4518,
+    "name": "Saurobeast Brachion"
+  },
+  "7560": {
+    "like": 4518,
+    "name": "Tethys the Light Divine"
+  },
+  "7561": {
+    "filter": {
+      "name_is": "Dark Grepher"
+    },
+    "like": 6572,
+    "name": "Dark Grepher",
+    "zone": "hand"
+  },
+  "7562": {
+    "destroy": {
+      "cond": {
+        "kind": "target_all"
+      },
+      "side": "opp",
+      "zones": "monster"
+    },
+    "like": 4343,
+    "name": "Darklord Zerato"
+  },
+  "7563": {
+    "like": 5023,
+    "name": "Darknight Parshath"
+  },
+  "7564": {
+    "like": 4507,
+    "name": "Deepsea Macrotrema"
+  },
+  "7565": {
+    "like": 4518,
+    "name": "Metabo Globster"
+  },
+  "7566": {
+    "destroy": {
+      "cond": {
+        "kind": "target"
+      },
+      "side": "both",
+      "zones": "all"
+    },
+    "like": 5378,
+    "name": "Golden Flying Fish"
+  },
+  "7567": {
+    "like": 4648,
+    "name": "Prime Material Dragon"
+  },
+  "7568": {
+    "filter": {
+      "monster": true,
+      "type": "plant"
+    },
+    "like": 5328,
+    "name": "Lonefire Blossom",
+    "zone": "deck"
+  },
+  "7569": {
+    "cannot_special_summon": true,
+    "like": 4518,
+    "name": "Aztekipede, the Worm Warrior"
+  },
+  "7570": {
+    "draw": {
+      "self": 2
+    },
+    "like": 4330,
+    "name": "Allure of Darkness"
+  },
+  "7571": {
+    "like": 4865,
+    "lp": {
+      "opp": -600
+    },
+    "name": "Athena"
+  },
+  "7572": {
+    "filter": {
+      "name_is": "Valhalla, Hall of the Fallen"
+    },
+    "like": 6044,
+    "name": "Hecatrice",
+    "zone": "deck"
+  },
+  "7573": {
+    "filter": {
+      "monster": true,
+      "type": "fairy"
+    },
+    "like": 6572,
+    "name": "Valhalla, Hall of the Fallen",
+    "zone": "hand"
+  },
+  "7574": {
+    "like": 4518,
+    "name": "Honest"
+  },
+  "7575": {
+    "like": 4518,
+    "name": "Cross Porter"
+  },
+  "7576": {
+    "like": 4518,
+    "name": "Miracle Flipper"
+  },
+  "7577": {
+    "like": 4518,
+    "name": "Destiny Hero - Dread Servant"
+  },
+  "7578": {
+    "like": 4518,
+    "lp": {
+      "opp": -1000
+    },
+    "name": "Volcanic Queen"
+  },
+  "7579": {
+    "like": 4428,
+    "name": "Jinzo - Returner"
+  },
+  "7580": {
+    "like": 4518,
+    "lp": {
+      "opp": -300
+    },
+    "name": "Jinzo - Lord"
+  },
+  "7582": {
+    "like": 4518,
+    "name": "Arcana Force I - The Magician"
+  },
+  "7583": {
+    "like": 4518,
+    "name": "Arcana Force III - The Empress"
+  },
+  "7584": {
+    "like": 4518,
+    "name": "Arcana Force IV - The Emperor"
+  },
+  "7585": {
+    "like": 4518,
+    "name": "Arcana Force VI - The Lovers"
+  },
+  "7586": {
+    "like": 4518,
+    "name": "Arcana Force VII - The Chariot"
+  },
+  "7587": {
+    "like": 4518,
+    "name": "Arcana Force XIV - Temperance"
+  },
+  "7588": {
+    "like": 4518,
+    "name": "Arcana Force XVIII - The Moon"
+  },
+  "7589": {
+    "like": 4518,
+    "name": "Arcana Force XXI - The World"
+  },
+  "7590": {
+    "cannot_special_summon": true,
+    "like": 4518,
+    "name": "Arcana Force EX - The Dark Ruler"
+  },
+  "7592": {
+    "destroy": {
+      "cond": {
+        "kind": "target"
+      },
+      "side": "opp",
+      "zones": "st"
+    },
+    "like": 4507,
+    "name": "Lyla, Lightsworn Sorceress"
+  },
+  "7593": {
+    "draw": {
+      "self": 1
+    },
+    "like": 4518,
+    "name": "Garoth, Lightsworn Warrior"
+  },
+  "7594": {
+    "filter": {
+      "level_max": 4,
+      "monster": true,
+      "name_has": "Lightsworn"
+    },
+    "like": 4989,
+    "name": "Lumina, Lightsworn Summoner",
+    "zone": "grave_summon"
+  },
+  "7595": {
+    "destroy": {
+      "cond": {
+        "kind": "target"
+      },
+      "side": "both",
+      "zones": "all"
+    },
+    "like": 4507,
+    "name": "Ryko, Lightsworn Hunter"
+  },
+  "7596": {
+    "filter": {
+      "name_is": "Wulf, Lightsworn Beast"
+    },
+    "like": 4989,
+    "name": "Wulf, Lightsworn Beast",
+    "zone": "grave_summon"
+  },
+  "7597": {
+    "destroy": {
+      "cond": {
+        "kind": "target"
+      },
+      "side": "opp",
+      "zones": "all"
+    },
+    "like": 6114,
+    "name": "Celestia, Lightsworn Angel"
+  },
+  "7599": {
+    "like": 4145,
+    "lp": {
+      "self": -1000
+    },
+    "name": "Judgment Dragon"
+  },
+  "7600": {
+    "like": 4507,
+    "name": "Dark Valkyria"
+  },
+  "7602": {
+    "like": 4428,
+    "name": "Unifrog"
+  },
+  "7604": {
+    "destroy": {
+      "cond": {
+        "kind": "target"
+      },
+      "side": "both",
+      "zones": "all"
+    },
+    "like": 4507,
+    "name": "Batteryman Industrial Strength"
+  },
+  "7605": {
+    "draw": {
+      "self": 1
+    },
+    "like": 4518,
+    "name": "Batteryman Micro-Cell"
+  },
+  "7606": {
+    "like": 4428,
+    "name": "Goblin Recon Squad"
+  },
+  "7607": {
+    "like": 4518,
+    "name": "Interplanetary Invader \"A\""
+  },
+  "7608": {
+    "like": 5250,
+    "name": "Diskblade Rider"
+  },
+  "7609": {
+    "like": 4317,
+    "lp": {
+      "self": 500
+    },
+    "name": "Golden Ladybug"
+  },
+  "7610": {
+    "filter": {
+      "level_max": 4,
+      "level_min": 4,
+      "monster": true
+    },
+    "like": 4434,
+    "name": "DUCKER Mobile Cannon",
+    "trigger_like": 4434,
+    "zone": "grave"
+  },
+  "7611": {
+    "like": 4518,
+    "name": "The Lady in Wight"
+  },
+  "7612": {
+    "like": 4518,
+    "name": "Simorgh, Bird of Ancestry"
+  },
+  "7614": {
+    "filter": {
+      "name_is": "Phantom Dragon"
+    },
+    "like": 6572,
+    "name": "Phantom Dragon",
+    "zone": "hand"
+  },
+  "7615": {
+    "destroy": {
+      "cond": {
+        "kind": "target"
+      },
+      "side": "opp",
+      "zones": "monster"
+    },
+    "like": 4507,
+    "name": "Destiny End Dragoon"
+  },
+  "7616": {
+    "like": 5142,
+    "name": "Ultimate Ancient Gear Golem"
+  },
+  "7617": {
+    "destroy": {
+      "cond": {
+        "kind": "target"
+      },
+      "side": "opp",
+      "zones": "all"
+    },
+    "like": 4507,
+    "name": "Gladiator Beast Gyzarus"
+  },
+  "7618": {
+    "like": 4145,
+    "name": "Hero Mask"
+  },
+  "7619": {
+    "draw": {
+      "per": {
+        "distinct": true,
+        "filter": {
+          "monster": true,
+          "name_has": "Neo-Spacian"
+        },
+        "side": "own"
+      },
+      "self": 1
+    },
+    "like": 4844,
+    "name": "Space Gift"
+  },
+  "7620": {
+    "like": 4145,
+    "name": "Demise of the Land"
+  },
+  "7621": {
+    "like": 4145,
+    "name": "D - Formation"
+  },
+  "7622": {
+    "destroy": {
+      "cond": {
+        "kind": "target"
+      },
+      "side": "both",
+      "zones": "all"
+    },
+    "like": 4507,
+    "name": "Spell Gear"
+  },
+  "7623": {
+    "draw": {
+      "self": 2
+    },
+    "like": 4844,
+    "name": "Cup of Ace"
+  },
+  "7624": {
+    "like": 4145,
+    "name": "Light Barrier"
+  },
+  "7625": {
+    "draw": {
+      "discard": {
+        "count": 1,
+        "filter": {
+          "monster": true,
+          "name_has": "Lightsworn"
+        }
+      },
+      "mill": {
+        "count": 2
+      },
+      "self": 2
+    },
+    "like": 4844,
+    "name": "Solar Recharge"
+  },
+  "7626": {
+    "like": 4145,
+    "name": "Realm of Light"
+  },
+  "7628": {
+    "count": 2,
+    "filter": {
+      "level_max": 4,
+      "monster": true,
+      "name_has": "Batteryman"
+    },
+    "like": 5330,
+    "name": "Quick Charger",
+    "zone": "grave"
+  },
+  "7629": {
+    "destroy": {
+      "cond": {
+        "filter": {
+          "monster": true,
+          "name_has": "Batteryman"
+        },
+        "kind": "controls",
+        "n": 3
+      },
+      "side": "opp",
+      "zones": "all"
+    },
+    "like": 4342
+  },
+  "7630": {
+    "like": 4145,
+    "lp": {
+      "self": -800
+    },
+    "name": "Light of Redemption"
+  },
+  "7631": {
+    "draw": {
+      "self": 2
+    },
+    "like": 4330,
+    "name": "Mystical Cards of Light"
+  },
+  "7632": {
+    "like": 4145,
+    "name": "Level Tuning"
+  },
+  "7633": {
+    "like": 4145,
+    "name": "Deck Lockdown",
+    "special_summon_lock": "both"
+  },
+  "7634": {
+    "filter": {
+      "monster": true
+    },
+    "like": 4989,
+    "name": "Ribbon of Rebirth",
+    "zone": "grave_summon"
+  },
+  "7635": {
+    "draw": {
+      "self": 2
+    },
+    "like": 4844,
+    "name": "Golden Bamboo Sword"
+  },
+  "7636": {
+    "filter": {
+      "atk_max": 1000,
+      "monster": true
+    },
+    "like": 4989,
+    "name": "Limit Reverse",
+    "zone": "grave_summon"
+  },
+  "7637": {
+    "destroy": {
+      "cond": {
+        "kind": "target"
+      },
+      "side": "opp",
+      "zones": "monster"
+    },
+    "like": 4507,
+    "name": "Hero Blast"
+  },
+  "7638": {
+    "like": 4145,
+    "name": "Rainbow Gravity"
+  },
+  "7639": {
+    "like": 4145,
+    "name": "D - Fortune"
+  },
+  "7640": {
+    "like": 4145,
+    "name": "Reversal of Fate"
+  },
+  "7641": {
+    "like": 4145,
+    "name": "Tour of Doom"
+  },
+  "7642": {
+    "like": 4145,
+    "name": "Arcana Call"
+  },
+  "7643": {
+    "like": 4145,
+    "name": "Light Spiral"
+  },
+  "7644": {
+    "filter": {
+      "monster": true,
+      "name_has": "Lightsworn"
+    },
+    "like": 4989,
+    "name": "Glorious Illusion",
+    "zone": "grave_summon"
+  },
+  "7645": {
+    "like": 5263,
+    "name": "Destruction Jammer"
+  },
+  "7646": {
+    "destroy": {
+      "cond": {
+        "kind": "target_all"
+      },
+      "side": "opp",
+      "zones": "monster"
+    },
+    "like": 4343,
+    "name": "Froggy Forcefield"
+  },
+  "7647": {
+    "count": 2,
+    "filter": {
+      "monster": true,
+      "name_has": "Batteryman"
+    },
+    "like": 4989,
+    "name": "Portable Battery Pack",
+    "zone": "grave_summon"
+  },
+  "7648": {
+    "like": 4145,
+    "name": "Gladiator Lash"
+  },
+  "7649": {
+    "like": 4145,
+    "name": "Raging Cloudian"
+  },
+  "7650": {
+    "like": 4145,
+    "name": "Sanguine Swamp"
+  },
+  "7651": {
+    "draw": {
+      "self": 1
+    },
+    "like": 5210,
+    "name": "Lucky Chance"
+  },
+  "7652": {
+    "like": 4145,
+    "name": "Summon Limit"
+  },
+  "7653": {
+    "like": 5263,
+    "name": "Dice Try!"
+  },
+  "7658": {
+    "like": 4518,
+    "name": "Emperor Setem"
+  },
+  "7659": {
+    "destroy": {
+      "cond": {
+        "kind": "target"
+      },
+      "side": "both",
+      "zones": "all"
+    },
+    "like": 5965,
+    "name": "Kuraz the Light Monarch"
+  },
+  "7663": {
+    "like": 4518,
+    "name": "Oyster Meister"
+  },
+  "7664": {
+    "like": 6335,
+    "name": "Dharc the Dark Charmer",
+    "trigger_event": "summon",
+    "trigger_like": 6335
+  },
+  "7666": {
+    "like": 4507,
+    "name": "Gigantic Cephalotus"
+  },
+  "7669": {
+    "like": 4518,
+    "name": "Horseytail"
+  },
+  "7670": {
+    "like": 4145,
+    "name": "Cursed Fig"
+  },
+  "7671": {
+    "filter": {
+      "monster": true,
+      "type": "plant"
+    },
+    "like": 4989,
+    "name": "Miracle Fertilizer",
+    "zone": "grave_summon"
+  },
+  "7672": {
+    "destroy": {
+      "cond": {
+        "kind": "target_all"
+      },
+      "side": "both",
+      "zones": "monster"
+    },
+    "like": 4342,
+    "name": "Overworked"
+  },
+  "7675": {
+    "destroy": {
+      "cond": {
+        "kind": "target"
+      },
+      "side": "opp",
+      "zones": "all"
+    },
+    "like": 6045,
+    "name": "Twin-Barrel Dragon"
+  },
+  "7676": {
+    "filter": {
+      "name_is": "Izanagi"
+    },
+    "like": 6572,
+    "name": "Izanagi",
+    "zone": "hand"
+  },
+  "7680": {
+    "like": 5142,
+    "name": "Sword of Kusanagi"
+  },
+  "7681": {
+    "like": 4145,
+    "name": "Orb of Yasaka"
+  },
+  "7682": {
+    "like": 4145,
+    "name": "Mirror of Yata"
+  },
+  "7683": {
+    "like": 4145,
+    "name": "Geartown"
+  },
+  "7688": {
+    "like": 4518,
+    "name": "Speed Warrior"
+  },
+  "7692": {
+    "destroy": {
+      "cond": {
+        "kind": "target"
+      },
+      "side": "opp",
+      "zones": "monster"
+    },
+    "like": 4507,
+    "name": "Synchro Blast Wave"
+  },
+  "7693": {
+    "like": 4145,
+    "lp": {
+      "opp": -500
+    },
+    "name": "Synchronized Realm"
+  },
+  "7694": {
+    "like": 4804,
+    "name": "Scrap-Iron Scarecrow"
+  },
+  "7695": {
+    "like": 4145,
+    "name": "Miniaturize"
+  },
+  "7699": {
+    "destroy": {
+      "cond": {
+        "kind": "target"
+      },
+      "side": "opp",
+      "zones": "monster"
+    },
+    "like": 4507,
+    "name": "Turbo Booster"
+  },
+  "7701": {
+    "filter": {
+      "name_is": "Quillbolt Hedgehog"
+    },
+    "like": 4989,
+    "name": "Quillbolt Hedgehog",
+    "zone": "grave_summon"
+  },
+  "7702": {
+    "like": 4518,
+    "name": "Ghost Gardna"
+  },
+  "7703": {
+    "like": 4886,
+    "name": "Shield Warrior"
+  },
+  "7704": {
+    "filter": {
+      "name_is": "Medium Piece Golem"
+    },
+    "like": 6572,
+    "name": "Small Piece Golem",
+    "zone": "hand"
+  },
+  "7705": {
+    "filter": {
+      "name_is": "Small Piece Golem"
+    },
+    "like": 6572,
+    "name": "Medium Piece Golem",
+    "zone": "hand"
+  },
+  "7706": {
+    "like": 4518,
+    "name": "Big Piece Golem"
+  },
+  "7709": {
+    "like": 4145,
+    "name": "Twin-Shield Defender"
+  },
+  "7711": {
+    "like": 4518,
+    "name": "Handcuffs Dragon"
+  },
+  "7712": {
+    "cannot_special_summon": true,
+    "like": 4145,
+    "name": "Montage Dragon"
+  },
+  "7713": {
+    "like": 4518,
+    "name": "Gonogo"
+  },
+  "7715": {
+    "like": 4145,
+    "lp": {
+      "self": -800
+    },
+    "name": "Doctor Cranium"
+  },
+  "7717": {
+    "like": 4145,
+    "lp": {
+      "self": -500
+    },
+    "name": "Mind Protector"
+  },
+  "7719": {
+    "like": 4145,
+    "lp": {
+      "self": -800
+    },
+    "name": "Psychic Snail"
+  },
+  "7720": {
+    "like": 4145,
+    "lp": {
+      "self": -500
+    },
+    "name": "Telekinetic Shocker"
+  },
+  "7721": {
+    "like": 4145,
+    "lp": {
+      "self": -1000
+    },
+    "name": "Destructotron"
+  },
+  "7722": {
+    "filter": {
+      "name_has": "Gladiator Beast"
+    },
+    "like": 5330,
+    "name": "Gladiator Beast Equeste",
+    "zone": "grave"
+  },
+  "7723": {
+    "like": 4317,
+    "lp": {
+      "opp": -500,
+      "self": 500
+    },
+    "name": "Jenis, Lightsworn Mender"
+  },
+  "7724": {
+    "like": 4518,
+    "lp": {
+      "opp": -500
+    },
+    "name": "Mecha Bunny"
+  },
+  "7725": {
+    "like": 4518,
+    "name": "Kunoichi"
+  },
+  "7726": {
+    "filter": {
+      "level_max": 4,
+      "monster": true,
+      "type": "zombie"
+    },
+    "like": 4989,
+    "name": "Beast of the Pharaoh",
+    "zone": "grave_summon"
+  },
+  "7727": {
+    "destroy": {
+      "cond": {
+        "kind": "target_all"
+      },
+      "side": "opp",
+      "zones": "monster"
+    },
+    "like": 4343,
+    "name": "Dark Hunter"
+  },
+  "7728": {
+    "cannot_special_summon": true,
+    "like": 0,
+    "name": "Kinka-byo"
+  },
+  "7729": {
+    "cannot_special_summon": true,
+    "like": 4145,
+    "name": "Yamato-no-Kami"
+  },
+  "7730": {
+    "like": 4518,
+    "name": "Silent Strider"
+  },
+  "7731": {
+    "like": 4518,
+    "name": "Noisy Gnat"
+  },
+  "7732": {
+    "like": 4507,
+    "name": "Multiple Piece Golem"
+  },
+  "7739": {
+    "like": 4310,
+    "name": "Fighting Spirit"
+  },
+  "7740": {
+    "destroy": {
+      "cond": {
+        "kind": "target"
+      },
+      "side": "both",
+      "zones": "monster"
+    },
+    "like": 4507,
+    "name": "Domino Effect"
+  },
+  "7741": {
+    "like": 4145,
+    "lp": {
+      "opp": -500
+    },
+    "name": "Junk Barrage"
+  },
+  "7742": {
+    "like": 4145,
+    "name": "Battle Tuned"
+  },
+  "7743": {
+    "like": 4145,
+    "name": "De-Synchro"
+  },
+  "7744": {
+    "like": 4145,
+    "name": "Lightwave Tuning"
+  },
+  "7745": {
+    "like": 4145,
+    "lp": {
+      "self": -500
+    },
+    "name": "Psi-Station"
+  },
+  "7746": {
+    "draw": {
+      "opp": 3
+    },
+    "like": 4330,
+    "name": "Psi-Impulse"
+  },
+  "7747": {
+    "filter": {
+      "level_max": 3,
+      "monster": true,
+      "type": "psychic"
+    },
+    "like": 6572,
+    "name": "Emergency Teleport",
+    "zone": "hand"
+  },
+  "7749": {
+    "like": 4310,
+    "trigger_condition": {
+      "from_deck": true
+    },
+    "trigger_like": 5091,
+    "trigger_record_like": 5091
+  },
+  "7750": {
+    "like": 4145,
+    "name": "Unstable Evolution"
+  },
+  "7751": {
+    "count": 2,
+    "filter": {
+      "atk_max": 1500,
+      "monster": true,
+      "type": "thunder"
+    },
+    "like": 5330,
+    "name": "Recycling Batteries",
+    "zone": "grave"
+  },
+  "7752": {
+    "like": 4145,
+    "name": "Book of Eclipse"
+  },
+  "7753": {
+    "like": 4145,
+    "name": "Equip Shot"
+  },
+  "7754": {
+    "filter": {
+      "level_max": 2,
+      "monster": true
+    },
+    "like": 4989,
+    "zone": "grave_summon"
+  },
+  "7755": {
+    "draw": {
+      "self": 1
+    },
+    "like": 5210,
+    "name": "Defense Draw"
+  },
+  "7756": {
+    "like": 5263,
+    "name": "Remote Revenge"
+  },
+  "7757": {
+    "like": 4145,
+    "name": "Spacegate"
+  },
+  "7758": {
+    "like": 4886,
+    "name": "Synchro Deflector"
+  },
+  "7759": {
+    "like": 4145,
+    "name": "Broken Blocker"
+  },
+  "7760": {
+    "like": 5381,
+    "name": "Machine Lord Ür"
+  },
+  "7761": {
+    "like": 4145,
+    "name": "Telepathic Power"
+  },
+  "7762": {
+    "like": 5263,
+    "name": "Mind Over Matter"
+  },
+  "7763": {
+    "like": 6217,
+    "name": "Gladiator Beast War Chariot"
+  },
+  "7764": {
+    "like": 4804,
+    "name": "Lightsworn Barrier"
+  },
+  "7765": {
+    "like": 5263,
+    "name": "Intercept"
+  },
+  "7766": {
+    "destroy": {
+      "cond": {
+        "kind": "target"
+      },
+      "side": "opp",
+      "zones": "all"
+    },
+    "like": 4507,
+    "name": "Judgment of Thunder"
+  },
+  "7767": {
+    "like": 4986,
+    "lp": {
+      "per": {
+        "filter": {
+          "monster": true,
+          "type": "psychic"
+        },
+        "side": "own"
+      },
+      "self": 1000
+    },
+    "name": "Psychic Rejuvenation"
+  },
+  "7768": {
+    "draw": {
+      "self": 1
+    },
+    "like": 4330,
+    "name": "Fish Depth Charge"
+  },
+  "7769": {
+    "draw": {
+      "mill": {
+        "count": 5
+      },
+      "self": 0
+    },
+    "like": 5210,
+    "name": "Needlebug Nest"
+  },
+  "7770": {
+    "filter": {
+      "name_is": "Dark Simorgh"
+    },
+    "like": 6572,
+    "name": "Dark Simorgh",
+    "zone": "hand"
+  },
+  "7782": {
+    "filter": {
+      "name_is": "Divine Fowl King Alector"
+    },
+    "like": 6572,
+    "name": "Divine Fowl King Alector",
+    "zone": "hand"
+  },
+  "7787": {
+    "like": 4145,
+    "name": "Power Filter"
+  },
+  "7789": {
+    "count": 3,
+    "filter": {
+      "monster": true,
+      "type": "psychic"
+    },
+    "like": 5330,
+    "name": "Psychic Overload",
+    "then_draw": 2,
+    "to": "deck",
+    "zone": "grave"
+  },
+  "7790": {
+    "filter": {
+      "name_is": "Beast Machine King Barbaros Ür"
+    },
+    "like": 6572,
+    "name": "Beast Machine King Barbaros Ür",
+    "zone": "hand"
+  },
+  "7804": {
+    "like": 4518,
+    "name": "Red Ogre"
+  },
+  "7805": {
+    "cannot_special_summon": true,
+    "like": 4518,
+    "name": "Neos Wiseman"
+  },
+  "7806": {
+    "cannot_special_summon": true,
+    "like": 4145,
+    "name": "Elemental Hero Divine Neos"
+  },
+  "7808": {
+    "filter": {
+      "name_is": "Genex Controller"
+    },
+    "like": 5328,
+    "name": "Genex Undine",
+    "zone": "deck"
+  },
+  "7810": {
+    "filter": {
+      "atk_max": 1500,
+      "monster": true,
+      "name_has": "Genex"
+    },
+    "like": 5423,
+    "trigger_like": 5423,
+    "zone": "deck"
+  },
+  "7811": {
+    "filter": {
+      "monster": true,
+      "name_has": "Genex"
+    },
+    "like": 6572,
+    "name": "Genex Worker",
+    "zone": "hand"
+  },
+  "7813": {
+    "like": 4518,
+    "name": "Royal Knight of the Ice Barrier"
+  },
+  "7814": {
+    "like": 4518,
+    "name": "Intoxicated Bug of the Ice Barrier"
+  },
+  "7816": {
+    "filter": {
+      "name_is": "Mist Condor"
+    },
+    "like": 6572,
+    "name": "Mist Condor",
+    "zone": "hand"
+  },
+  "7820": {
+    "like": 4518,
+    "name": "Flamvell Fiend"
+  },
+  "7825": {
+    "destroy": {
+      "cond": {
+        "kind": "target"
+      },
+      "side": "both",
+      "zones": "all"
+    },
+    "like": 4507,
+    "name": "Ally Bomb"
+  },
+  "7826": {
+    "like": 5381,
+    "name": "Ally of Justice - Thousand Arms"
+  },
+  "7827": {
+    "like": 4518,
+    "name": "Ally of Justice - Unknown Crusher"
+  },
+  "7828": {
+    "like": 4507,
+    "name": "Worm Falco"
+  },
+  "7829": {
+    "like": 4507,
+    "name": "Worm Gurus"
+  },
+  "7830": {
+    "draw": {
+      "self": 1
+    },
+    "like": 4330,
+    "name": "Worm Hope"
+  },
+  "7831": {
+    "destroy": {
+      "cond": {
+        "kind": "target"
+      },
+      "side": "both",
+      "zones": "all"
+    },
+    "like": 4507,
+    "name": "Worm Illidan"
+  },
+  "7832": {
+    "like": 4518,
+    "name": "Worm Jeetrikups"
+  },
+  "7833": {
+    "destroy": {
+      "cond": {
+        "kind": "target"
+      },
+      "side": "opp",
+      "zones": "all"
+    },
+    "like": 4507,
+    "name": "Worm King"
+  },
+  "7839": {
+    "filter": {
+      "monster": true,
+      "type": "machine"
+    },
+    "like": 5328,
+    "name": "Genex Neutron",
+    "zone": "deck"
+  },
+  "7842": {
+    "after_attack_defense": true,
+    "like": 4226,
+    "trigger_event": "battle",
+    "trigger_like": 4226
+  },
+  "7843": {
+    "filter": {
+      "atk_max": 1200,
+      "monster": true,
+      "type": "machine"
+    },
+    "like": 5328,
+    "name": "Jade Knight",
+    "zone": "deck"
+  },
+  "7846": {
+    "like": 4518,
+    "lp": {
+      "opp": -1000
+    },
+    "name": "Zombie Mammoth"
+  },
+  "7850": {
+    "filter": {
+      "monster": true,
+      "name_has": "Blue-Eyes White Dragon"
+    },
+    "like": 4054,
+    "trigger_like": 4054,
+    "zone": "deck"
+  },
+  "7854": {
+    "filter": {
+      "monster": true,
+      "type": "zombie"
+    },
+    "like": 4989,
+    "name": "Red-Eyes Zombie Dragon",
+    "zone": "grave_summon"
+  },
+  "7855": {
+    "like": 4518,
+    "name": "Malevolent Mech - Goku En"
+  },
+  "7856": {
+    "filter": {
+      "level_max": 4,
+      "monster": true,
+      "type": "zombie"
+    },
+    "like": 4989,
+    "name": "Paladin of the Cursed Dragon",
+    "zone": "grave_summon"
+  },
+  "7857": {
+    "like": 4145,
+    "name": "Zombie World"
+  },
+  "7858": {
+    "like": 4145,
+    "name": "Imperial Iron Wall"
+  },
+  "7869": {
+    "like": 4518,
+    "lp": {
+      "self": 1000
+    },
+    "name": "Healing Wave Generator"
+  },
+  "7871": {
+    "like": 5142,
+    "name": "Mad Archfiend"
+  },
+  "7872": {
+    "like": 4518,
+    "name": "Wall of Ivy"
+  },
+  "7874": {
+    "filter": {
+      "level_max": 4,
+      "monster": true,
+      "name_has": "Morphtronic"
+    },
+    "like": 5328,
+    "name": "Morphtronic Celfon",
+    "zone": "deck"
+  },
+  "7875": {
+    "like": 4518,
+    "name": "Morphtronic Magnen"
+  },
+  "7876": {
+    "like": 4518,
+    "lp": {
+      "opp": -600
+    },
+    "name": "Morphtronic Datatron"
+  },
+  "7877": {
+    "like": 5137,
+    "name": "Morphtronic Boomboxen"
+  },
+  "7878": {
+    "like": 4518,
+    "name": "Morphtronic Cameran"
+  },
+  "7879": {
+    "like": 5379,
+    "name": "Morphtronic Radion"
+  },
+  "7880": {
+    "like": 4518,
+    "lp": {
+      "opp": -1000
+    },
+    "name": "Morphtronic Clocken"
+  },
+  "7881": {
+    "like": 4518,
+    "name": "Gadget Hauler"
+  },
+  "7882": {
+    "like": 4518,
+    "name": "Gadget Driver"
+  },
+  "7883": {
+    "destroy": {
+      "cond": {
+        "kind": "target"
+      },
+      "side": "opp",
+      "zones": "monster"
+    },
+    "like": 5521,
+    "name": "Search Striker"
+  },
+  "7884": {
+    "like": 5408,
+    "lp": {
+      "opp": -500
+    },
+    "name": "Pursuit Chaser",
+    "trigger_event": "battle",
+    "trigger_like": 5408
+  },
+  "7885": {
+    "like": 5408,
+    "lp": {
+      "opp": -300
+    },
+    "trigger_event": "battle",
+    "trigger_like": 5408
+  },
+  "7887": {
+    "like": 4518,
+    "lp": {
+      "opp": -800
+    },
+    "name": "Iron Chain Blaster"
+  },
+  "7889": {
+    "like": 4507,
+    "name": "Power Injector"
+  },
+  "7890": {
+    "like": 4518,
+    "name": "Storm Caller"
+  },
+  "7892": {
+    "filter": {
+      "def_max": 1000,
+      "monster": true,
+      "type": "plant"
+    },
+    "like": 4054,
+    "trigger_like": 4054,
+    "zone": "deck"
+  },
+  "7893": {
+    "like": 4648,
+    "name": "Tytannial, Princess of Camellias"
+  },
+  "7896": {
+    "destroy": {
+      "cond": {
+        "kind": "target"
+      },
+      "side": "opp",
+      "zones": "st"
+    },
+    "like": 6114,
+    "name": "Tiger Dragon"
+  },
+  "7901": {
+    "like": 4145,
+    "name": "Card Rotator"
+  },
+  "7902": {
+    "filter": {
+      "level_max": 2,
+      "monster": true,
+      "type": "plant"
+    },
+    "like": 6572,
+    "zone": "hand"
+  },
+  "7903": {
+    "like": 4145,
+    "name": "Mark of the Rose"
+  },
+  "7904": {
+    "like": 4145,
+    "name": "Black Garden"
+  },
+  "7905": {
+    "like": 4145,
+    "name": "Factory of 100 Machines"
+  },
+  "7906": {
+    "draw": {
+      "self": 1
+    },
+    "like": 4330,
+    "name": "Morphtronic Accelerator"
+  },
+  "7907": {
+    "like": 4145,
+    "name": "Morphtronic Cord"
+  },
+  "7908": {
+    "like": 4145,
+    "name": "Morphtronic Engine"
+  },
+  "7909": {
+    "like": 4145,
+    "name": "Poison Chain"
+  },
+  "7910": {
+    "like": 4865,
+    "lp": {
+      "opp": -300
+    },
+    "name": "Paralyzing Chain"
+  },
+  "7911": {
+    "like": 4145,
+    "lp": {
+      "self": -800
+    },
+    "name": "Teleport"
+  },
+  "7912": {
+    "like": 4145,
+    "lp": {
+      "self": -1000
+    },
+    "name": "Psychokinesis"
+  },
+  "7913": {
+    "draw": {
+      "self": 1
+    },
+    "like": 4330,
+    "name": "Fragrance Storm"
+  },
+  "7914": {
+    "like": 4145,
+    "name": "The World Tree"
+  },
+  "7915": {
+    "like": 4865,
+    "lp": {
+      "opp": -800
+    },
+    "name": "Everliving Underworld Cannon"
+  },
+  "7916": {
+    "like": 4145,
+    "name": "Secret Village of the Spellcasters"
+  },
+  "7917": {
+    "like": 4145,
+    "name": "Omega Goggles"
+  },
+  "7918": {
+    "like": 4145,
+    "name": "Battle Mania"
+  },
+  "7919": {
+    "like": 4145,
+    "name": "Confusion Chaff"
+  },
+  "7920": {
+    "like": 4145,
+    "name": "Urgent Tuning"
+  },
+  "7921": {
+    "like": 4145,
+    "name": "Synchro Strike"
+  },
+  "7922": {
+    "like": 4145,
+    "lp": {
+      "self": -1000
+    },
+    "name": "Prideful Roar"
+  },
+  "7923": {
+    "like": 4145,
+    "name": "Revival Gift"
+  },
+  "7924": {
+    "like": 4145,
+    "name": "Lineage of Destruction"
+  },
+  "7925": {
+    "like": 4145,
+    "lp": {
+      "opp": -1000
+    },
+    "name": "Doppelganger"
+  },
+  "7926": {
+    "like": 4804,
+    "name": "Morphtransition"
+  },
+  "7927": {
+    "like": 4145,
+    "name": "Morphtronic Monitron"
+  },
+  "7928": {
+    "draw": {
+      "self": 2
+    },
+    "like": 4330,
+    "name": "Psychic Trigger"
+  },
+  "7929": {
+    "like": 5263,
+    "name": "Pollinosis"
+  },
+  "7930": {
+    "like": 4145,
+    "name": "Bamboo Scrap"
+  },
+  "7931": {
+    "like": 4145,
+    "name": "Plant Food Chain"
+  },
+  "7932": {
+    "destroy": {
+      "cond": {
+        "kind": "target"
+      },
+      "side": "both",
+      "zones": "all"
+    },
+    "like": 4507,
+    "name": "Trap of the Imperial Tomb"
+  },
+  "7933": {
+    "draw": {
+      "self": 2
+    },
+    "like": 4330,
+    "name": "DNA Checkup"
+  },
+  "7934": {
+    "like": 4145,
+    "name": "Gozen Match"
+  },
+  "7935": {
+    "destroy": {
+      "side": "both",
+      "zones": "monster"
+    },
+    "like": 4342,
+    "name": "Giant Trap Hole"
+  },
+  "7981": {
+    "like": 4518,
+    "lp": {
+      "opp": -500
+    },
+    "name": "Gallis the Star Beast"
+  },
+  "7982": {
+    "filter": {
+      "monster": true,
+      "name_has": "Red-Eyes"
+    },
+    "like": 4989,
+    "name": "Red-Eyes Wyvern",
+    "zone": "grave_summon"
+  },
+  "7983": {
+    "cannot_special_summon": true,
+    "like": 0,
+    "name": "Darkness Destroyer"
+  },
+  "7984": {
+    "cannot_special_summon": true,
+    "like": 0,
+    "name": "White Night Queen"
+  },
+  "7992": {
+    "cannot_special_summon": true,
+    "like": 0,
+    "lord_tribute": "fairy",
+    "name": "Tyr, the Vanquishing Warlord"
+  },
+  "7993": {
+    "cannot_special_summon": true,
+    "like": 0,
+    "lord_tribute": "machine",
+    "name": "Lorelei, the Symphonic Arsenal"
   }
- },
- "7137": {
-  "like": 4887,
-  "destroy": {
-   "side": "opp",
-   "zones": "monster",
-   "cond": {
-    "kind": "opp_attack_monsters",
-    "n": 3
-   }
-  }
- },
- "7842": {
-  "like": 4226,
-  "trigger_like": 4226,
-  "trigger_event": "battle",
-  "after_attack_defense": true
- },
- "7619": {
-  "like": 4844,
-  "draw": {"self": 1, "per": {"side": "own", "filter": {"monster": true, "name_has": "Neo-Spacian"}, "distinct": true}},
-  "name": "Space Gift"
- },
- "7151": {"like": 5330, "zone": "grave", "count": 2, "filter": {"monster": true, "attribute": "dark", "def_min": 0, "def_max": 0}, "name": "Recurring Nightmare"},
- "7751": {"like": 5330, "zone": "grave", "count": 2, "filter": {"monster": true, "type": "thunder", "atk_max": 1500}, "name": "Recycling Batteries"},
- "7628": {"like": 5330, "zone": "grave", "count": 2, "filter": {"monster": true, "name_has": "Batteryman", "level_max": 4}, "name": "Quick Charger"},
- "7011": {"like": 4342, "destroy": {"side": "both", "zones": "monster", "cond": {"kind": "target", "filter": {"monster": true, "category_in": [2, 3]}}}, "name": "Anti-Fusion Device"},
- "7012": {"like": 4342, "destroy": {"side": "both", "zones": "monster", "cond": {"kind": "target", "filter": {"monster": true, "category_in": [4, 5]}}}, "name": "Ritual Sealing"},
- "7739": {"like": 4310, "name": "Fighting Spirit"},
- "7494": {"like": 4310, "name": "Assault Armor"},
- "7312": {"like": 5330, "zone": "grave", "count": 3, "to": "deck", "then_draw": 1, "filter": {"monster": true, "name_has": "Gladiator Beast"}, "name": "Gladiator's Return"},
- "7789": {"like": 5330, "zone": "grave", "count": 3, "to": "deck", "then_draw": 2, "filter": {"monster": true, "type": "psychic"}, "name": "Psychic Overload"},
- "7131": {"like": 5330, "zone": "grave", "count": 3, "to": "deck", "filter": {"monster": true, "name_has": "Volcanic"}, "name": "Volcanic Recharge"},
- "7767": {"like": 4986, "lp": {"self": 1000, "per": {"side": "own", "filter": {"monster": true, "type": "psychic"}}}, "name": "Psychic Rejuvenation"},
- "7248": {"like": 4844, "draw": {"self": 2, "discard": {"count": 1, "filter": {"monster": true, "level_min": 8, "level_max": 8}}}, "name": "Trade-In"},
- "6950": {"like": 4844, "draw": {"self": 2, "discard": {"count": 1, "filter": {"name_has": "Destiny Hero"}}}, "name": "Destiny Draw"},
- "7311": {"like": 4844, "draw": {"self": 3, "discard": {"count": 2, "to": "deck", "filter": {"name_has": "Gladiator Beast"}}}, "name": "Gladiator Beast's Respite"},
- "7625": {"like": 4844, "draw": {"self": 2, "discard": {"count": 1, "filter": {"monster": true, "name_has": "Lightsworn"}}, "mill": {"count": 2}}, "name": "Solar Recharge"},
- "7166": {"like": 4844, "draw": {"self": 0, "discard": {"count": 1}, "mill": {"count": 4, "filter": {"monster": true, "type": "reptile"}}}, "name": "Snake Rain"},
- "7385": {"like": 5484, "trigger_like": 5484, "destroy": {"side": "both", "zones": "all", "cond": {"kind": "target", "filter": {"monster": true}}}, "name": "Grave Squirmer"},
- "7439": {"like": 5139, "trigger_like": 5139, "trigger_event": "summon", "destroy": {"side": "both", "zones": "monster", "cond": {"kind": "target_all", "filter": {"monster": true, "type": "machine"}}}, "name": "Magnetic Mosquito"},
- "7389": {"like": 4844, "draw": {"self": 2, "opp": 2, "discard": {"count": 2, "both": true}}, "name": "Hand Destruction"},
- "7769": {"like": 5210, "draw": {"self": 0, "mill": {"count": 5}}, "name": "Needlebug Nest"},
- "7479": {"like": 5210, "draw": {"self": 0, "discard": {"count": 2}}, "name": "Fine"},
- "6981": {"like": 5484, "trigger_like": 5484, "destroy": {"side": "both", "zones": "monster", "cond": {"kind": "target_all_not", "filter": {"monster": true, "attribute": "earth"}}}, "name": "Raging Earth"},
- "6982": {"like": 5484, "trigger_like": 5484, "destroy": {"side": "both", "zones": "monster", "cond": {"kind": "target_all_not", "filter": {"monster": true, "attribute": "water"}}}, "name": "Silent Abyss"},
- "6983": {"like": 5484, "trigger_like": 5484, "destroy": {"side": "both", "zones": "monster", "cond": {"kind": "target_all_not", "filter": {"monster": true, "attribute": "fire"}}}, "name": "Firestorm Prominence"},
- "6984": {"like": 5484, "trigger_like": 5484, "destroy": {"side": "both", "zones": "monster", "cond": {"kind": "target_all_not", "filter": {"monster": true, "attribute": "wind"}}}, "name": "Destruction Cyclone"},
- "6985": {"like": 5484, "trigger_like": 5484, "destroy": {"side": "both", "zones": "monster", "cond": {"kind": "target_all_not", "filter": {"monster": true, "attribute": "dark"}}}, "name": "Umbral Soul"},
- "6986": {"like": 5484, "trigger_like": 5484, "destroy": {"side": "both", "zones": "monster", "cond": {"kind": "target_all_not", "filter": {"monster": true, "attribute": "light"}}}, "name": "Radiant Spirit"},
- "7348": {"like": 6102, "trigger_like": 6102, "draw": {"self": 2, "discard": {"count": 2}}, "name": "Mad Reloader"},
- "7610": {"like": 4434, "trigger_like": 4434, "zone": "grave", "filter": {"monster": true, "level_min": 4, "level_max": 4}, "name": "DUCKER Mobile Cannon"},
- "7338": {"like": 5408, "trigger_like": 5408, "trigger_event": "battle", "lp": {"opp": -400}},
- "7039": {"like": 5408, "trigger_like": 5408, "trigger_event": "battle", "lp": {"opp": -2000}},
- "7850": {"like": 4054, "trigger_like": 4054, "zone": "deck", "filter": {"monster": true, "name_has": "Blue-Eyes White Dragon"}},
- "7050": {"like": 5423, "trigger_like": 5423, "zone": "deck", "filter": {"monster": true, "attribute": "light", "type": "fairy", "atk_max": 1500}},
- "7810": {"like": 5423, "trigger_like": 5423, "zone": "deck", "filter": {"monster": true, "name_has": "Genex", "atk_max": 1500}},
- "6905": {"like": 4842},
- "7165": {"like": 6356, "zone": "deck", "filter": {"monster": true, "type": "reptile", "level_max": 4}},
- "6859": {"like": 6356, "zone": "hand", "filter": {"monster": true, "name_has": "Cyber Ogre"}},
- "7053": {"like": 4353, "lp": {"self": 3000}},
- "6914": {"like": 4353, "lp": {"self": 500}},
- "6999": {"like": 4909}
 }

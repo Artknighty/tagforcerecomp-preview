@@ -19,8 +19,9 @@ def main():
     os.environ.update(TF3_TEST_PROBE='1', TF3_TEST_ACTIONS='1',
                       TF3_FORCE_COPIES='3', TF3_FORCE_CARDS='7276,7000', TF_PRIMEIRO='0', TF_DECK_J1='1')
     try:
-        tf.duelo([])
-        tf.run('w300 O w60 DOWN w40 DOWN w40')
+        tf.duelo(['--lento'])
+        tf.run('w300'); tf.send('nodraw 1'); tf.RAPIDO = True
+        tf.run('DOWN w40 DOWN w40')
         hand = int.from_bytes(bytes.fromhex(tf.send('peek 09f79cf8 4').split()[-1]), 'little')
         tf.run(' '.join(['LEFT w30'] * (hand - 1)) + ' X w60 X w200 shot:monster')
         probe = Probe()
@@ -55,7 +56,10 @@ def main():
                                      struct.pack('<I', before[equip][4] | 2).hex()))
         if args.case == 'natural':
             lp_before = int.from_bytes(bytes.fromhex(tf.send('peek 09f79cec 4').split()[-1]), 'little')
-            tf.run('O w60 RIGHT w20 RIGHT w20 RIGHT w20 X w1500 X w100 X w300 shot:natural_battle')
+            tf.run('O w60 RIGHT w20 RIGHT w20 RIGHT w20 X w1500 shot:damage_prompt')
+            # Decline optional hand effects (for example Kuriboh), then let the
+            # native battle and automatic Equip replacement finish completely.
+            tf.run('RIGHT w20 X w300 ' * 8 + 'shot:natural_battle')
             lp_after = int.from_bytes(bytes.fromhex(tf.send('peek 09f79cec 4').split()[-1]), 'little')
             result = 0
         else:

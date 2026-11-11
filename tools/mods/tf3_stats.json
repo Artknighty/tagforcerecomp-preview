@@ -1,145 +1,432 @@
 {
- "6927": {
-  "scope": "self",
-  "atk": 200,
-  "cond": {
-   "side": "own",
-   "filter": {
-    "monster": true,
-    "name_has": "Elemental Hero"
-   },
-   "per": true
-  }
- },
- "7143": {
-  "control_lock": true,
-  "scope": "self",
-  "atk": 300,
-  "cond": {
-   "side": "own",
-   "filter": {
-    "monster": true,
-    "type": "plant"
-   },
-   "per": true
-  }
- },
- "6934": {
-  "scope": "self",
-  "atk": 2000,
-  "cond": {
-   "side": "own",
-   "filter": {
-    "monster": true,
-    "name_has": "Gadget"
-   },
-   "excl": true
-  }
- },
- "7534": {
-  "scope": "self",
-  "atk": 400,
-  "cond": {
-   "side": "own",
-   "filter": {
-    "monster": true,
-    "name_has": "Ally of Justice"
-   },
-   "excl": true
-  }
- },
- "7539": {
-  "scope": "own",
-  "atk": 400,
-  "target": {
-   "monster": true,
-   "name_has": "Saber"
-  }
- },
- "7347": {
-  "scope": "all",
-  "atk": -500,
-  "def": -500,
-  "target": {
-   "monster": true,
-   "not": {
-    "type": "fairy"
-   }
-  }
- },
- "7895": {
-  "scope": "own",
-  "atk": 400,
-  "target": {
-   "monster": true,
-   "type": "warrior"
-  }
- },
- "7049": {
-  "attack_protect": {
-   "filter": {"monster": true, "type": "fairy"},
-   "exclude": "same_name"
+  "3743": {
+    "battle_guard": {
+      "stat": "atk",
+      "min": 1
+    }
   },
-  "scope": "own",
-  "atk": 400,
-  "def": 400,
-  "target": {
-   "monster": true,
-   "type": "fairy"
-  }
- },
- "7038": {
-  "attack_protect": {
-   "filter": {"monster": true, "attribute": "wind"},
-   "exclude": "self"
+  "4999": {
+    "atk": 1000,
+    "cond": {
+      "per": true,
+      "side": "own",
+      "zone": "hand"
+    },
+    "def": 1000,
+    "scope": "self",
+    "set": true
   },
-  "scope": "self",
-  "atk": 500,
-  "cond": {
-   "side": "own",
-   "filter": {
-    "monster": true,
-    "attribute": "wind"
-   },
-   "per": true
+  "6895": {
+    "battle_role_bonus": 500
+  },
+  "6927": {
+    "atk": 200,
+    "cond": {
+      "filter": {
+        "monster": true,
+        "name_has": "Elemental Hero"
+      },
+      "per": true,
+      "side": "own"
+    },
+    "scope": "self"
+  },
+  "6934": {
+    "atk": 2000,
+    "cond": {
+      "excl": true,
+      "filter": {
+        "monster": true,
+        "name_has": "Gadget"
+      },
+      "side": "own"
+    },
+    "scope": "self"
+  },
+  "6993": {
+    "scope": "equip",
+    "atk": 800
+  },
+  "7038": {
+    "atk": 500,
+    "attack_protect": {
+      "exclude": "self",
+      "filter": {
+        "attribute": "wind",
+        "monster": true
+      }
+    },
+    "cond": {
+      "filter": {
+        "attribute": "wind",
+        "monster": true
+      },
+      "per": true,
+      "side": "own"
+    },
+    "scope": "self"
+  },
+  "7049": {
+    "atk": 400,
+    "attack_protect": {
+      "exclude": "same_name",
+      "filter": {
+        "monster": true,
+        "type": "fairy"
+      }
+    },
+    "def": 400,
+    "scope": "own",
+    "target": {
+      "monster": true,
+      "type": "fairy"
+    }
+  },
+  "7052": {
+    "battle_guard": {
+      "min": 1,
+      "stat": "atk"
+    }
+  },
+  "7076": {
+    "battle_role_bonus": 400
+  },
+  "7092": {
+    "atk": 1000,
+    "cond": {
+      "per": true,
+      "side": "opp",
+      "zone": "controls"
+    },
+    "def": 1000,
+    "scope": "self",
+    "set": true
+  },
+  "7119": {
+    "scope": "self",
+    "atk": 300,
+    "cond": {
+      "side": "own",
+      "per": true,
+      "zone": "st",
+      "filter": {
+        "continuous": true
+      }
+    }
+  },
+  "7143": {
+    "atk": 300,
+    "cond": {
+      "filter": {
+        "monster": true,
+        "type": "plant"
+      },
+      "per": true,
+      "side": "own"
+    },
+    "control_lock": true,
+    "scope": "self"
+  },
+  "7183": {
+    "atk": 500,
+    "cond": {
+      "filter": {
+        "monster": true,
+        "type": "reptile"
+      },
+      "per": true,
+      "side": "own",
+      "zone": "grave"
+    },
+    "scope": "self"
+  },
+  "7184": {
+    "atk": 500,
+    "cond": {
+      "filter": {
+        "monster": true,
+        "type": "reptile"
+      },
+      "per": true,
+      "side": "own",
+      "zone": "grave"
+    },
+    "scope": "self"
+  },
+  "7264": {
+    "battle_guard": {
+      "min": 1,
+      "stat": "atk"
+    }
+  },
+  "7266": {
+    "battle_guard": {
+      "stat": "atk",
+      "min": 1
+    }
+  },
+  "7278": {
+    "battle_guard": {
+      "stat": "atk",
+      "min": 1
+    }
+  },
+  "7279": {
+    "battle_guard": {
+      "stat": "atk",
+      "min": 1
+    }
+  },
+  "7280": {
+    "battle_guard": {
+      "stat": "atk",
+      "min": 1
+    }
+  },
+  "7281": {
+    "battle_guard": {
+      "stat": "atk",
+      "min": 1
+    }
+  },
+  "7347": {
+    "atk": -500,
+    "def": -500,
+    "scope": "all",
+    "target": {
+      "monster": true,
+      "not": {
+        "type": "fairy"
+      }
+    }
+  },
+  "7399": {
+    "atk": -100,
+    "per_level": true,
+    "scope": "opp",
+    "source": "st",
+    "target": {
+      "monster": true
+    }
+  },
+  "7409": {
+    "battle_guard": {
+      "stat": "atk",
+      "min": 1
+    }
+  },
+  "7410": {
+    "battle_guard": {
+      "stat": "atk",
+      "min": 1
+    }
+  },
+  "7411": {
+    "battle_guard": {
+      "stat": "atk",
+      "min": 1
+    }
+  },
+  "7433": {
+    "battle_role_bonus": 400
+  },
+  "7436": {
+    "scope": "self",
+    "atk": 300,
+    "set": true,
+    "cond": {
+      "side": "own",
+      "per": true,
+      "sum_levels": true,
+      "filter": {
+        "monster": true
+      }
+    }
+  },
+  "7446": {
+    "atk": 300,
+    "def": 0,
+    "scope": "equip"
+  },
+  "7457": {
+    "atk": -500,
+    "def": 400,
+    "scope": "all",
+    "source": "st",
+    "target": {
+      "attribute": "earth",
+      "monster": true
+    }
+  },
+  "7494": {
+    "atk": 300,
+    "scope": "equip",
+    "target": {
+      "monster": true,
+      "type": "warrior"
+    }
+  },
+  "7534": {
+    "atk": 400,
+    "cond": {
+      "excl": true,
+      "filter": {
+        "monster": true,
+        "name_has": "Ally of Justice"
+      },
+      "side": "own"
+    },
+    "scope": "self"
+  },
+  "7539": {
+    "atk": 400,
+    "scope": "own",
+    "target": {
+      "monster": true,
+      "name_has": "Saber"
+    }
+  },
+  "7541": {
+    "battle_light_bonus": 200
+  },
+  "7542": {
+    "battle_light_bonus": 700
+  },
+  "7563": {
+    "atk": 100,
+    "cond": {
+      "filter": {
+        "attribute": "dark",
+        "monster": true
+      },
+      "per": true,
+      "side": "own",
+      "zone": "grave"
+    },
+    "scope": "self"
+  },
+  "7581": {
+    "battle_guard": {
+      "stat": "atk",
+      "min": 1
+    }
+  },
+  "7591": {
+    "battle_role_bonus": 300
+  },
+  "7598": {
+    "scope": "self",
+    "atk": 300,
+    "def": 300,
+    "cond": {
+      "side": "own",
+      "zone": "grave",
+      "per": true,
+      "filter": {
+        "monster": true,
+        "name_has": "Lightsworn"
+      }
+    }
+  },
+  "7601": {
+    "battle_guard": {
+      "min": 1,
+      "stat": "atk"
+    }
+  },
+  "7603": {
+    "atk": 300,
+    "cond": {
+      "filter": {
+        "monster": true,
+        "type": "thunder"
+      },
+      "per": true,
+      "side": "own"
+    },
+    "def": 300,
+    "scope": "self"
+  },
+  "7613": {
+    "battle_guard": {
+      "stat": "atk",
+      "min": 1
+    }
+  },
+  "7627": {
+    "atk": 1200,
+    "scope": "all",
+    "source": "st",
+    "target": {
+      "attribute": "water",
+      "level_max": 2,
+      "monster": true,
+      "type": "aqua"
+    }
+  },
+  "7686": {
+    "battle_guard": {
+      "min": 1900,
+      "stat": "atk"
+    }
+  },
+  "7698": {
+    "atk": 100,
+    "cond": {
+      "filter": {
+        "monster": true,
+        "type": "warrior"
+      },
+      "per": true,
+      "side": "any",
+      "zone": "grave"
+    },
+    "scope": "self"
+  },
+  "7739": {
+    "atk": 300,
+    "cond": {
+      "filter": {
+        "monster": true
+      },
+      "per": true,
+      "side": "opp"
+    },
+    "scope": "equip"
+  },
+  "7822": {
+    "battle_role_bonus": 300
+  },
+  "7836": {
+    "atk": 200,
+    "cond": {
+      "filter": {
+        "attribute": "light",
+        "monster": true
+      },
+      "per": true,
+      "side": "opp",
+      "zone": "grave"
+    },
+    "scope": "self"
+  },
+  "7838": {
+    "battle_guard": {
+      "min": 1,
+      "stat": "atk"
+    }
+  },
+  "7886": {
+    "scope": "equip",
+    "atk": -800,
+    "def": -800
+  },
+  "7895": {
+    "atk": 400,
+    "scope": "own",
+    "target": {
+      "monster": true,
+      "type": "warrior"
+    }
   }
- },
- "7399": {
-  "scope": "opp",
-  "source": "st",
-  "atk": -100,
-  "per_level": true,
-  "target": {
-   "monster": true
-  }
- },
- "7457": {
-  "scope": "all",
-  "source": "st",
-  "atk": -500,
-  "def": 400,
-  "target": {
-   "monster": true,
-   "attribute": "earth"
-  }
- },
- "7627": {
-  "scope": "all",
-  "source": "st",
-  "atk": 1200,
-  "target": {
-   "monster": true,
-   "type": "aqua",
-   "attribute": "water",
-   "level_max": 2
-  }
- },
- "7836": {"scope": "self", "atk": 200, "cond": {"side": "opp", "zone": "grave", "per": true, "filter": {"monster": true, "attribute": "light"}}},
- "7184": {"scope": "self", "atk": 500, "cond": {"side": "own", "zone": "grave", "per": true, "filter": {"monster": true, "type": "reptile"}}},
- "7183": {"scope": "self", "atk": 500, "cond": {"side": "own", "zone": "grave", "per": true, "filter": {"monster": true, "type": "reptile"}}},
- "7563": {"scope": "self", "atk": 100, "cond": {"side": "own", "zone": "grave", "per": true, "filter": {"monster": true, "attribute": "dark"}}},
- "7698": {"scope": "self", "atk": 100, "cond": {"side": "any", "zone": "grave", "per": true, "filter": {"monster": true, "type": "warrior"}}},
- "7739": {"scope": "equip", "atk": 300, "cond": {"side": "opp", "per": true, "filter": {"monster": true}}},
- "7494": {"scope": "equip", "atk": 300, "target": {"monster": true, "type": "warrior"}},
- "4999": {"scope": "self", "atk": 1000, "def": 1000, "set": true, "cond": {"side": "own", "zone": "hand", "per": true}}
 }

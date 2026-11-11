@@ -597,7 +597,7 @@ static void pres_thread(void) {
         PresJob j;
         { std::unique_lock<std::mutex> lk(g_pq_mu); g_pq_cv.wait(lk, [] { return !g_pq.empty(); }); j = g_pq.front(); }
         pres_wait(tm, j.due);
-        if (j.q1) pace_async_late(gpu_wait_kicked_for(0) < 0);   /* a GPU ainda desenhando os intermediarios: a fase sobe */
+        if (j.q1) { const double w = gpu_wait_kicked_for(2.5); pace_async_late(w < 0); }
         gpu_present_fb_tag(j.fb, j.tag);
         { std::lock_guard<std::mutex> lk(g_pq_mu); g_pq.pop_front(); }
         g_pq_cv.notify_all();
@@ -927,18 +927,30 @@ void display_present(void) {
                   if (bp && g_pq_started) { std::unique_lock<std::mutex> lk(g_pq_mu); g_pq_cv.wait(lk, [pend_ok] { return g_pq.size() <= pend_ok; }); }
                   const int64_t tb1 = pace_now();
                   extern void interp_use_scratch(int); extern int interp_take_fb(void); extern int interp_real_copy(int);
+                   extern uint64_t interp_pending_gap(uint64_t); extern uint64_t interp_last_gap(void);
                   const int64_t h = pace_step_ticks() / 2; int q[3] = {-1, -1, -1};
-                  interp_use_scratch(sb); const bool m1 = interp_prepare(gfb, g_frames, async_mid && allow, g_gfx.res, 0.25f); if (m1) q[0] = interp_take_fb();
+                  const uint64_t pending_gap = interp_pending_gap(g_frames);
+                  const bool is_60fps = (pending_gap == 1);
+                  const float t0 = is_60fps ? 0.5f : 0.25f;
+                  interp_use_scratch(sb);
+                  const bool m1 = interp_prepare(gfb, g_frames, async_mid && allow, g_gfx.res, t0);
+                  if (m1) q[0] = interp_take_fb();
                   const int64_t tm1 = pace_now();
                   const bool parado = m1 && interp_mid_static();
+                  const uint64_t real_gap = interp_last_gap();
+                  const bool native60 = (real_gap == 1);
+                  if (m1 && !parado && native60 != is_60fps) {
+                      interp_use_scratch(sb);
+                      if (interp_extra(native60 ? 0.5f : 0.25f, g_gfx.res)) q[0] = interp_take_fb();
+                  }
                   /* So em cena pesada (o custo do quadro novo, desde a saida anterior, passou de ~92% do passo em 1/4 dos ultimos 16 grupos; volta ao normal abaixo de 75%): em
                    * cena leve, desenhar os intermediarios depois deixava a thread do jogo disputando a trava da GPU com a apresentacao do 1o e as imagens saiam fora
                    * do ritmo (5-8% dos intervalos curtos/longos em alguns replays). TF_APRESENTADOR_TARDE=0 nunca adia, =2 sempre */
-                  static const int tarde_env = getenv("TF_APRESENTADOR_TARDE") ? atoi(getenv("TF_APRESENTADOR_TARDE")) : 1;
+                  static const int tarde_env = getenv("TF_APRESENTADOR_TARDE") ? atoi(getenv("TF_APRESENTADOR_TARDE")) : 0;
                   static bool tarde_on;
                   const bool tarde = tarde_env == 2 || (tarde_env == 1 && tarde_on);
-                  const bool later = m1 && !parado && tarde;   /* q[1], q[2] saem de async_flush na chamada seguinte */
-                  if (m1 && !parado && !later) {
+                  const bool later = !native60 && m1 && !parado && tarde;   /* q[1], q[2] saem de async_flush na chamada seguinte */
+                  if (!native60 && m1 && !parado && !later) {
                       interp_use_scratch(sb + 1); if (interp_extra(0.5f, g_gfx.res)) q[1] = interp_take_fb();
                       interp_use_scratch(sb + 2); if (interp_extra(0.75f, g_gfx.res)) q[2] = interp_take_fb();
                   }
@@ -946,7 +958,15 @@ void display_present(void) {
                   const int64_t tm2 = pace_now();
                   if (!m1) gpu_kick();   /* sem intermediario: solta o quadro real retido */
                   int rc = interp_real_copy(gfb); if (rc < 0) rc = gfb;   /* o jogo pode redesenhar o mesmo quadro sombra antes da hora do real */
-                  if (later) { pres_push(mid_target, q[0], 1, true); g_ap = {true, sb, mid_target, h, rc}; }
+                  if (native60) {
+                      if (m1 && !parado) {
+                          pres_push(mid_target, q[0], 1, true);
+                          pres_push(mid_target + h, rc, 0);
+                      } else {
+                          pres_push(mid_target, rc, 1, m1);
+                          pres_push(mid_target + h, rc, 0);
+                      }
+                  } else if (later) { pres_push(mid_target, q[0], 1, true); g_ap = {true, sb, mid_target, h, rc}; }
                   else if (m1 && !parado) { pres_push(mid_target, q[0], 1, true); for (int k = 1; k < 3; k++) if (q[k] >= 0) pres_push(mid_target + k * h, q[k], 1); pres_push(mid_target + 3 * h, rc, 0); }
                   else for (int k = 0; k < 4; k++) pres_push(mid_target + k * h, rc, k < 3, k == 0 && m1);   /* par parado ou cena trocou: a imagem real nas 4 horas (contador F3 e malha de fase seguem a 120) */
                   if (m1 && !parado && tarde_env == 1) {
@@ -991,7 +1011,9 @@ void display_present(void) {
               latch_buttons(); return;
           }
           if (early || quarter) {   /* o intermediario e desenhado e enviado a GPU ja; aparece na hora marcada, depois de a GPU terminar */
-              shown = interp_prepare(gfb, g_frames, allow, g_gfx.res, quarter ? 0.25f : 0.5f);
+              const uint64_t pending_gap = interp_pending_gap(g_frames);
+              const bool is_60fps = (pending_gap == 1);
+              shown = interp_prepare(gfb, g_frames, allow, g_gfx.res, (quarter && !is_60fps) ? 0.25f : 0.5f);
               int64_t t_gpu = 0;
               if (early) { pace_stat(PACE_STAT_PRESENT, pace_ms(pace_now() - t0)); if (shown && !interp_mid_static()) { gpu_wait_kicked(); pace_gpu_done(); } t_gpu = pace_now(); pace_wait_until(mid_target); }   /* par parado: nada foi para a GPU (e a fase da GPU nao aprende com ele) */
               q1 = pace_now(); interp_show();
@@ -1011,11 +1033,14 @@ void display_present(void) {
                   if (shown) interp_show(); else { gpu_present_fb(gfb); g_real_fb_shown = gfb; g_real_ver_shown = interp_fb_version(gfb); }
               }
           } else { shown = interp_present(gfb, g_frames, allow, g_gfx.res); pace_stat(PACE_STAT_PRESENT, pace_ms(pace_now() - t0)); }
-          if (shown && quarter) {   /* 120 FPS: o 2o intermediario meio passo depois do 1o; o 3o e o real saem na proxima chamada */
+          const bool native60_sync = interp_last_gap() == 1;
+          if (shown && quarter && !native60_sync) {   /* 120 FPS: o 2o intermediario meio passo depois do 1o; o 3o e o real saem na proxima chamada */
               const int64_t h = pace_step_ticks() / 2;
               if (interp_extra(0.5f, g_gfx.res)) { if (early) { pace_wait_until(pace_fit_call(q1 + h, q1 + h * 3 / 10)); gpu_wait_kicked(); } interp_show(); }
               g_q3_pending = true;   /* desenhar o 3o aqui atrasava a saida desta chamada (~0,5 ms de CPU) e o ciclo inteiro derivava em relacao ao monitor */
               if (early) pace_real_arm(gfb, work_start, q1 + 3 * h);
+          } else if (shown && quarter && native60_sync) {
+              if (early) pace_real_arm(gfb, work_start, q1 + pace_step_ticks() / 2);
           } else if (shown && (early || slot)) pace_real_arm(gfb, work_start, q1 + pace_step_ticks());
           else if (slot_deferred) {}   /* ja armado para a proxima chamada */   /* o real sai 1/60 s depois, no inicio da proxima chamada (a grade de saidas do jogo continua regular: o audio depende dela) */
           else if (!shown && !skip_repeat && !slot) { gpu_present_fb(gfb); g_real_fb_shown = gfb; g_real_ver_shown = interp_fb_version(gfb); }
